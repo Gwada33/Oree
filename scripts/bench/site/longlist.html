@@ -1,0 +1,13 @@
+<!doctype html><meta charset=utf-8><title>longlist</title>
+<style>body{margin:0;font:14px sans-serif}.c{display:flex;gap:12px;padding:12px;border-bottom:1px solid #eee}
+.t{width:240px;height:135px;border-radius:12px;flex:none;background:linear-gradient(135deg,hsl(var(--h),70%,60%),hsl(calc(var(--h) + 60),70%,40%));box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.m{flex:1}.m b{display:block;margin-bottom:6px}.m span{color:#666}.m p{margin:4px 0;color:#888}</style>
+<div id=root></div>
+<script>
+const root = document.getElementById('root'), f = document.createDocumentFragment();
+for (let i = 0; i < 6000; i++) { const d = document.createElement('div'); d.className = 'c';
+  d.innerHTML = `<div class=t style="--h:${i * 17 % 360}"></div><div class=m><b>Video title number ${i} with a fairly long headline to wrap</b><span>Channel ${i % 40} · ${i * 3}K views</span><p>Description line one for item ${i}, with some more words to make it look real.</p><p>Second line ${i}</p></div>`; f.appendChild(d); }
+root.appendChild(f);
+if (location.hash === '#cv') { const s = document.createElement('style'); s.textContent = '.c{content-visibility:auto;contain-intrinsic-size:auto 160px}'; document.head.appendChild(s); }
+window.__ready = true;
+</script>

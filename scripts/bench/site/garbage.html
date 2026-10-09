@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8><title>garbage</title>
+<script>
+// Allocates ~150 MB of short-lived objects, keeps ~20 MB, drops the rest: a tab whose heap is
+// bloated with dead objects, the situation a JavaScript garbage collection can fix.
+let junk = [];
+for (let i = 0; i < 1_500_000; i++) junk.push({ id: i, name: 'item ' + i, tags: [i, i + 1] });
+window.kept = junk.slice(0, 150_000);
+junk = null;
+</script><h1>garbage</h1>

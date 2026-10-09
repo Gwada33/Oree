@@ -1,0 +1,5 @@
+<!doctype html><meta charset=utf-8><title>timers</title>
+<script>
+// A "busy" page: 5 ms of work every 100 ms (about 5 % of a core when it runs unthrottled).
+setInterval(() => { const t = performance.now(); while (performance.now() - t < 5); }, 100);
+</script><h1>timers</h1>

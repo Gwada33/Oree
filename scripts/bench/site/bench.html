@@ -1,0 +1,31 @@
+<!doctype html><meta charset=utf-8><title>bench</title>
+<body style="font:13px sans-serif"><div id=root></div>
+<script>
+const id = new URLSearchParams(location.search).get('id') || '0';
+const send = (kind, data) => fetch('/beacon', {method: 'POST', body: JSON.stringify({id, kind, ...data})});
+const ms = (f) => { const t = performance.now(); const r = f(); return [performance.now() - t, r]; };
+
+// 1. DOM: a content-heavy page (~4000 nodes with styling)
+const [domMs] = ms(() => {
+  const root = document.getElementById('root'); const frag = document.createDocumentFragment();
+  for (let i = 0; i < 1500; i++) {
+    const d = document.createElement('div'); d.style.cssText = 'padding:4px;border-bottom:1px solid #ddd';
+    d.innerHTML = `<b>Item ${i}</b> <span>${'lorem ipsum dolor sit amet '.repeat(3)}</span><i>${i * 7 % 13}</i>`;
+    frag.appendChild(d);
+  }
+  root.appendChild(frag); return root.offsetHeight;   // forces layout
+});
+// 2. JS: compute-bound
+const fib = (n) => n < 2 ? n : fib(n - 1) + fib(n - 2);
+const [fibMs] = ms(() => fib(30));
+const [sortMs, data] = ms(() => { const a = Array.from({length: 300000}, () => Math.random()); a.sort((x, y) => x - y); return a; });
+const [jsonMs, objs] = ms(() => { const o = Array.from({length: 40000}, (_, i) => ({i, name: 'n' + i, tags: ['a', 'b', i % 5]})); return JSON.parse(JSON.stringify(o)); });
+const [strMs] = ms(() => { let s = ''; for (let i = 0; i < 200000; i++) s += String.fromCharCode(97 + i % 26); return s.replace(/[aeiou]/g, 'X').length; });
+// 3. Canvas 2D
+const [canvasMs] = ms(() => { const c = document.createElement('canvas'); c.width = 800; c.height = 600; const g = c.getContext('2d');
+  for (let i = 0; i < 4000; i++) { g.fillStyle = `hsl(${i % 360},70%,50%)`; g.fillRect(i % 800, i % 600, 40, 40); g.beginPath(); g.arc(i % 800, i % 600, 20, 0, 6.28); g.stroke(); }
+  return c.toDataURL().length; });
+window.keep = {data, objs};   // keep memory live like a real page would
+const total = domMs + fibMs + sortMs + jsonMs + strMs + canvasMs;
+send('done', {domMs, fibMs, sortMs, jsonMs, strMs, canvasMs, total, ua: navigator.userAgent});
+</script>

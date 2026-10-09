@@ -1,0 +1,17 @@
+<!doctype html><meta charset=utf-8><title>layers</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#fff}
+.l{position:absolute;width:420px;height:300px;border-radius:14px;will-change:transform;transform:translateZ(0);
+   background:linear-gradient(135deg,hsl(var(--h),70%,60%),hsl(calc(var(--h) + 50),70%,45%));box-shadow:0 4px 14px rgba(0,0,0,.25);
+   font:14px sans-serif;color:#fff;padding:12px;box-sizing:border-box}</style>
+<script>
+// A page that abuses compositing hints: 250 big overlapping cards, each forced onto its own GPU layer.
+if (location.hash === '#none') { const s = document.createElement('style'); s.textContent = '.l{will-change:auto !important; transform:none !important}'; document.documentElement.appendChild(s); }
+if (location.hash === '#off') { const s = document.createElement('style'); s.textContent = '*{will-change:auto !important}'; document.documentElement.appendChild(s); }
+addEventListener('DOMContentLoaded', () => {
+  const w = innerWidth, h = innerHeight;
+  for (let i = 0; i < 250; i++) { const d = document.createElement('div'); d.className = 'l';
+    d.style.cssText = `--h:${i * 29 % 360};left:${(i * 137) % Math.max(w - 420, 1)}px;top:${(i * 89) % Math.max(h - 300, 1)}px`;
+    d.textContent = 'card ' + i + ' — ' + 'lorem ipsum '.repeat(8); document.body.appendChild(d); }
+  window.__ready = true;
+});
+</script>

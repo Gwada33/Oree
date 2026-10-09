@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>beat</title>
+<script>
+// Stands in for a playing video: keeps doing work (and telling the server) while the page is alive.
+setInterval(() => fetch('/beacon', {method: 'POST', body: JSON.stringify({kind: 'beat'})}), 300);
+window.keep = new Array(2e6).fill(1.5);   // ~16 MB the process must release when the tab is closed
+</script><h1>beat</h1>

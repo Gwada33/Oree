@@ -1,0 +1,13 @@
+<!doctype html><meta charset=utf-8><title>churn</title>
+<script>
+// ~35 MB of live data, then 20 s of allocate-and-drop churn: how much garbage piles up between collections
+// depends on the JavaScript heap growth factors. Uses MessageChannel (timers are throttled when the page isn't in front).
+const live = []; for (let i = 0; i < 300000; i++) live.push({ a: i, b: [i, i + 1] });
+window.live = live; window.__ops = 0; window.__done = false;
+const start = performance.now(), channel = new MessageChannel();
+channel.port1.onmessage = () => {
+  for (let i = 0; i < 3000; i++) { const o = { x: i, y: [i, i + 1], s: 'k' + i }; window.__sink = o; window.__ops++; }
+  if (performance.now() - start < 20000) channel.port2.postMessage(0); else window.__done = true;
+};
+channel.port2.postMessage(0);
+</script><h1>churn</h1>

@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "HyperBrowser Test Extension",
+  "version": "1.0",
+  "description": "Petite extension de test : marque les pages example.com, affiche un badge et une fenêtre contextuelle.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://example.com/*"],
+  "content_scripts": [
+    { "matches": ["https://example.com/*"], "js": ["content.js"], "run_at": "document_end" }
+  ],
+  "action": {
+    "default_title": "Extension de test",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icon16.png", "32": "icon32.png" }
+  },
+  "background": { "service_worker": "background.js" },
+  "icons": { "16": "icon16.png", "32": "icon32.png", "48": "icon48.png" }
+}

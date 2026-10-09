@@ -1,0 +1,20 @@
+<!doctype html><meta charset=utf-8><title>scroll</title>
+<style>body{margin:0;font:14px sans-serif;background:#fff}.c{display:flex;gap:12px;padding:12px;border-bottom:1px solid #eee}
+.t{width:240px;height:135px;border-radius:12px;background:linear-gradient(135deg,hsl(var(--h),70%,60%),hsl(calc(var(--h) + 60),70%,40%));flex:none}
+.m{flex:1}.m b{display:block;margin-bottom:6px}.m span{color:#666}</style>
+<div id=root></div>
+<script>
+const root = document.getElementById('root'); const f = document.createDocumentFragment();
+for (let i = 0; i < 1200; i++) { const d = document.createElement('div'); d.className = 'c';
+  d.innerHTML = `<div class=t style="--h:${i * 17 % 360}"></div><div class=m><b>Video title number ${i} with a fairly long headline</b><span>Channel ${i % 40} · ${i * 3}K views · ${i % 11} days ago</span></div>`; f.appendChild(d); }
+root.appendChild(f);
+// Scroll steadily for `ms` and record frame times with requestAnimationFrame.
+window.measureScroll = (ms) => new Promise(resolve => {
+  const frames = []; let last = performance.now(); const start = last; let y = 0; window.scrollTo(0, 0);
+  const tick = (now) => { frames.push(now - last); last = now; y += 18; window.scrollTo(0, y);
+    if (now - start < ms) requestAnimationFrame(tick); else { frames.shift(); frames.sort((a, b) => a - b);
+      const mean = frames.reduce((a, b) => a + b, 0) / frames.length;
+      resolve({frames: frames.length, fps: +(1000 / mean).toFixed(1), meanMs: +mean.toFixed(2), p95Ms: +frames[Math.floor(frames.length * .95)].toFixed(2), maxMs: +frames[frames.length - 1].toFixed(2), over20: frames.filter(x => x > 20).length}); } };
+  requestAnimationFrame(tick); });
+window.runScroll = async (ms) => { window.__res = null; window.__res = await window.measureScroll(ms); };
+</script>
