@@ -4,13 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Orée — le navigateur Mac qui dort quand tu ne le regardes pas</title>
-<meta name="description" content="Orée est un navigateur natif pour Mac : onglets endormis, espaces, palette de commandes ⌘T, vie privée intégrée et zéro télémétrie. Gratuit, pour macOS 15.4 et plus.">
+<meta name="description" content="Orée est un navigateur natif pour Mac : onglets en pause puis endormis, réveil au survol, téléchargements plus rapides, espaces, palette ⌘T, vie privée intégrée, zéro télémétrie. Gratuit, macOS 15.4+.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:title" content="Orée — le navigateur Mac qui dort quand tu ne le regardes pas">
 <meta property="og:description" content="Onglets endormis, espaces, palette ⌘T, vie privée intégrée. Natif macOS, zéro télémétrie.">
 <meta property="og:image" content="assets/icon-512.png">
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="stylesheet" href="styles.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Orée","operatingSystem":"macOS 15.4+","applicationCategory":"BrowserApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"description":"Navigateur natif pour Mac : onglets qui s'endorment, téléchargements rapides, vie privée intégrée, zéro télémétrie."}</script>
 </head>
 <body>
 
@@ -36,6 +37,9 @@
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
     <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 13.500h6L10 21l8-10.500h-6z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.500-4M4 4v4h4M4 13a8 8 0 0 0 14.500 4M20 20v-4h-4"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
     <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20 4c-8 0-13 4-13 11l-3 5M20 4c0 8-4 12-11 12M13 11h5"/></symbol>
   </defs>
 </svg>
@@ -52,6 +56,7 @@
       <a href="#legerete">Veille</a>
       <a href="#interface">Palette</a>
       <a href="#prive">Vie privée</a>
+      <a href="#telechargements">Téléchargements</a>
       <a href="#faq">Questions</a>
     </nav>
     <div class="nav-actions">
@@ -77,6 +82,13 @@
       <a class="btn btn-ghost btn-lg" href="#legerete">Voir comment ça marche</a>
     </div>
     <p class="fine reveal">Gratuit · Apple silicon (M1 et suivants) · Aucune donnée d’usage envoyée</p>
+    <ul class="proof reveal" aria-label="En bref">
+      <li><svg class="ic" aria-hidden="true"><use href="#i-sleep"/></svg>Onglets en pause, puis endormis</li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg>Réveil dès le survol</li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Téléchargements en parallèle</li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Pubs et traceurs bloqués</li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Mises à jour intégrées</li>
+    </ul>
 
     <!-- App mock -->
     <div class="window reveal" id="mock" role="img" aria-label="Aperçu de la fenêtre Orée : barre latérale avec espaces et onglets, palette de commandes ouverte">
@@ -122,15 +134,21 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <p class="eyebrow">Ce qui change</p>
-      <h2>Quatre choses qu’on fait autrement.</h2>
+      <h2>Six choses qu’on fait autrement.</h2>
     </div>
 
     <!-- 1. Veille -->
     <article class="diff reveal" id="legerete">
       <div class="diff-copy">
         <span class="num">01</span>
-        <h3>Les onglets s’endorment vraiment.</h3>
-        <p>La page est déchargée de la RAM, pas juste mise en pause. Elle revient quand tu cliques.</p>
+        <h3>Les onglets s’endorment en deux temps.</h3>
+        <p>D’abord mis en pause : la page reste prête et reprend instantanément. Puis, si tu ne reviens pas, elle est vraiment déchargée de la RAM. Survole un onglet endormi : il se réveille avant ton clic.</p>
+        <ul class="tiers" aria-label="Les trois états d’un onglet">
+          <li><b>Actif</b><span>Tu le regardes.</span></li>
+          <li><b>En pause</b><span>Après 2 min cachée (réglable). Reprise immédiate.</span></li>
+          <li><b>Endormi</b><span>Après 45 min, ou si la mémoire manque. Seule l’image reste.</span></li>
+        </ul>
+        <p class="care"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Jamais déchargé : ce que tu es en train de saisir, ce qui joue du son, ta caméra ou ton micro, les messageries — et les sites que tu choisis.</p>
         <ul class="stats">
           <li><strong>−75 %</strong><span>de mémoire au lancement avec 8 onglets</span></li>
           <li><strong>≈ 0,4 s</strong><span>pour ouvrir la fenêtre</span></li>
@@ -198,7 +216,65 @@
       </ul>
     </article>
 
+    <!-- 5. Téléchargements -->
+    <article class="diff reveal" id="telechargements">
+      <div class="diff-copy">
+        <span class="num">05</span>
+        <h3>Les gros fichiers arrivent plus vite.</h3>
+        <p>Chaque téléchargement est découpé en segments reçus en parallèle, repris après une coupure, et Orée ajuste le nombre de connexions selon le serveur. Il ralentit tout seul quand tu navigues.</p>
+        <ul class="stats">
+          <li><strong>×1,7</strong><span>face à 4 connexions fixes (test de 640 Mo)</span></li>
+          <li><strong>à part</strong><span>un moteur séparé : la navigation ne rame pas</span></li>
+        </ul>
+      </div>
+      <div class="speed" aria-hidden="true">
+        <div class="speed-row"><span>4 connexions fixes</span><div class="bar"><i style="--w:59%"></i></div><b>29 Mo/s</b></div>
+        <div class="speed-row on"><span>Orée, adaptatif</span><div class="bar"><i style="--w:100%"></i></div><b>49 Mo/s</b></div>
+        <p class="mem-src">Fichier test de 640 Mo sur un serveur local. En vrai, le résultat dépend du serveur et de ta connexion.</p>
+      </div>
+    </article>
+
+    <!-- 6. Personnalisation -->
+    <article class="diff flip reveal" id="perso">
+      <div class="diff-copy">
+        <span class="num">06</span>
+        <h3>Un navigateur qui s’arrange à ta façon.</h3>
+        <p>Onglets sur le côté, en haut, ou une barre qui n’apparaît qu’au survol. Deux pages côte à côte. Clair, sombre ou automatique, six couleurs, densité et arrondis réglables, raccourcis clavier modifiables.</p>
+      </div>
+      <div class="custom" aria-hidden="true">
+        <div class="swatches">
+          <span style="--h:var(--mousse)"><i></i>Mousse</span>
+          <span style="--h:var(--marine)"><i></i>Marine</span>
+          <span style="--h:var(--ocre)"><i></i>Ocre</span>
+          <span style="--h:var(--brique)"><i></i>Brique</span>
+          <span style="--h:var(--prune)"><i></i>Prune</span>
+        </div>
+        <div class="chips"><span class="on">Barre latérale</span><span>Icônes seules</span><span>Onglets en haut</span><span>Au survol</span></div>
+        <div class="chips"><span>Clair</span><span class="on">Sombre</span><span>Auto</span><span>Côte à côte ⌘\</span></div>
+      </div>
+    </article>
+
     <p class="combo reveal">Chaque fonction existe quelque part ailleurs. <strong>La différence, c’est de les avoir toutes ensemble</strong>, dans un navigateur Mac natif.</p>
+  </div>
+</section>
+
+<!-- INCLUS D'OFFICE -->
+<section class="sec sec-alt" id="inclus">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <p class="eyebrow">Inclus d’office</p>
+      <h2>Rien à installer pour que ça marche bien.</h2>
+    </div>
+    <ul class="incl reveal">
+      <li><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><b>Blocage des pubs et traceurs</b><span>Sans extension, avec des exceptions par site.</span></li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg><b>Mots de passe</b><span>Coffre local, Touch ID, import CSV.</span></li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg><b>Palette ⌘T</b><span>Onglets, historique, favoris, actions.</span></li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><b>Espaces et groupes</b><span>Perso, Travail, Lecture, et les tiens.</span></li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><b>Mises à jour intégrées</b><span>Une proposition, un clic, Orée se relance.</span></li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><b>Liens nettoyés</b><span>utm, fbclid, gclid… retirés.</span></li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg><b>HTTPS d’abord</b><span>Pas de contournement d’un certificat invalide.</span></li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg><b>Venir d’ailleurs</b><span>Favoris, cookies de Brave, mots de passe en CSV.</span></li>
+    </ul>
   </div>
 </section>
 
@@ -207,7 +283,7 @@
   <div class="wrap honest-in reveal">
     <h3>Pas encore là</h3>
     <ul>
-      <li>Extensions</li><li>Synchronisation</li><li>Passkeys</li><li>Mises à jour auto</li><li>Windows, iPhone</li>
+      <li>Extensions</li><li>Synchronisation</li><li>Passkeys</li><li>Application notarisée</li><li>Windows, iPhone</li>
     </ul>
   </div>
 </section>
@@ -220,14 +296,15 @@
     <h2 class="reveal">Télécharge Orée.</h2>
     <p class="lead reveal">Gratuit. macOS 15.4 ou plus récent.</p>
     <div class="cta-row reveal">
-      <a class="btn btn-primary btn-lg" id="dl-btn" href="https://github.com/Gwada33/Oree/releases/latest"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Télécharger pour macOS</a>
+      <a class="btn btn-primary btn-lg" id="dl-btn" href="https://github.com/Gwada33/oree/releases/latest"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Télécharger pour macOS</a>
     </div>
-    <p class="fine reveal">Version 1.0 · Apple silicon (M1 et suivants)</p>
+    <p class="fine reveal">Version 1.0.1 · Apple silicon (M1 et suivants)</p>
 
     <div class="steps reveal">
       <ol>
         <li>Glisse Orée dans <em>Applications</em>.</li>
         <li><em>Clic droit → Ouvrir</em> la première fois (app non notarisée).</li>
+        <li>Ensuite, Orée se met à jour tout seul : <em>menu Orée → Rechercher des mises à jour</em>.</li>
       </ol>
     </div>
   </div>
@@ -239,7 +316,11 @@
     <h2 class="reveal">Questions fréquentes</h2>
     <div class="faq reveal">
       <details><summary>C’est gratuit ?</summary><p>Oui, sans compte.</p></details>
-      <details><summary>Que devient un onglet endormi ?</summary><p>Une image de sa dernière apparence. Un clic recharge la page.</p></details>
+      <details><summary>Que devient un onglet en pause, puis endormi ?</summary><p>En pause, la page reste en mémoire mais ne calcule plus : elle reprend d’un coup. Endormi, il ne reste que son image ; un clic (ou le survol) recharge la page, depuis le cache quand c’est possible.</p></details>
+      <details><summary>Vais-je perdre ce que j’étais en train d’écrire ?</summary><p>Non : un onglet où tu as saisi du texte n’est jamais déchargé, seulement mis en pause. Si le Mac manque vraiment de mémoire, les champs (jamais les mots de passe) et la position d’une vidéo sont sauvegardés puis remis.</p></details>
+      <details><summary>Puis-je garder un site toujours éveillé ?</summary><p>Oui : clic droit sur l’onglet → « Ne jamais mettre en veille ce site ». Les messageries courantes le sont déjà.</p></details>
+      <details><summary>Comment se mettent à jour les prochaines versions ?</summary><p>Orée vérifie une fois par jour s’il existe une nouvelle version (désactivable) et propose de l’installer, sans rien réinstaller à la main.</p></details>
+      <details><summary>Un site s’affiche mal avec le blocage ?</summary><p>Clic droit sur l’onglet → « Désactiver les protections sur ce site ». Réversible à tout moment.</p></details>
       <details><summary>Ma musique ou ma visio s’endort ?</summary><p>Jamais : un onglet qui joue du son reste éveillé.</p></details>
       <details><summary>Pourquoi macOS affiche un avertissement ?</summary><p>L’app n’est pas encore notarisée par Apple. Clic droit → Ouvrir la première fois.</p></details>
     </div>
@@ -252,7 +333,7 @@
   <div class="wrap foot-in">
     <a class="brand" href="#top"><svg class="brand-mark" aria-hidden="true"><use href="#mark"/></svg><span>Orée</span></a>
     <nav aria-label="Pied de page">
-      <a href="https://github.com/Gwada33/Oree">Code source</a>
+      <a href="https://github.com/Gwada33/oree">Code source</a>
       <a href="#telecharger">Télécharger</a>
       <a href="#faq">Questions</a>
     </nav>

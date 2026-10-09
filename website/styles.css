@@ -292,3 +292,51 @@ mark{background:none;color:var(--accent-text);font-weight:700}
   .diff{grid-template-columns:1fr;gap:28px;padding:40px 0}
   .diff.flip .diff-copy{order:0}
 }
+
+/* — Preuves rapides du hero — */
+.proof{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:28px auto 0;padding:0;list-style:none;max-width:860px}
+.proof li{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px 0 12px;border-radius:99px;font-size:14px;font-weight:500;background:var(--paper);box-shadow:0 0 0 1px var(--line)}
+.proof .ic{width:16px;height:16px;color:var(--accent-text)}
+
+/* — Les trois états d'un onglet — */
+.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 4px;padding:0;list-style:none;counter-reset:t}
+.tiers li{position:relative;display:flex;flex-direction:column;gap:4px;padding:14px 14px 14px;border-radius:var(--r);background:var(--paper);box-shadow:0 0 0 1px var(--line);font-size:13.5px;color:var(--ink-2)}
+.tiers li:not(:last-child)::after{content:"→";position:absolute;right:-13px;top:50%;transform:translateY(-50%);color:var(--ink-2);font-size:14px;z-index:1}
+.tiers b{font-size:15px;color:var(--ink)}
+.tiers li:nth-child(2) b{color:var(--marine)}
+.tiers li:nth-child(3) b{color:var(--ocre)}
+.care{display:flex;gap:10px;align-items:flex-start;font-size:14.5px!important;color:var(--ink-2);max-width:none!important}
+.care .ic{flex:none;width:18px;height:18px;margin-top:2px;color:var(--accent-text)}
+
+/* — Vitesse des téléchargements — */
+.speed{display:flex;flex-direction:column;gap:14px;padding:24px;border-radius:var(--r);background:var(--paper);box-shadow:0 0 0 1px var(--line),var(--shadow)}
+.speed-row{display:grid;grid-template-columns:150px 1fr 64px;align-items:center;gap:12px;font-size:14px;color:var(--ink-2)}
+.speed-row b{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
+.speed-row.on{color:var(--ink)}
+.bar{height:12px;border-radius:99px;background:var(--hover);overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:inherit;background:var(--ink-2);opacity:.45;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.speed-row.on .bar i{background:linear-gradient(90deg,var(--mark-a),var(--mark-b));opacity:1}
+html:not(.js) .bar i,.reveal.in .bar i{width:var(--w)}
+
+/* — Personnalisation — */
+.custom{display:flex;flex-direction:column;gap:16px;padding:24px;border-radius:var(--r);background:var(--paper);box-shadow:0 0 0 1px var(--line),var(--shadow)}
+.custom .chips{display:flex;flex-wrap:wrap;gap:6px}
+.custom .chips span{height:30px;display:inline-flex;align-items:center;padding:0 13px;border-radius:99px;font-size:13.5px;color:var(--ink-2);background:var(--hover)}
+.custom .chips span.on{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+
+/* — Inclus d'office — */
+.incl{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:0;padding:0;list-style:none}
+.incl li{display:flex;flex-direction:column;gap:6px;padding:20px;border-radius:var(--r);background:var(--bg);box-shadow:0 0 0 1px var(--line)}
+.incl .ic{width:22px;height:22px;color:var(--accent-text);margin-bottom:6px}
+.incl b{font-size:16px}
+.incl span{font-size:14px;color:var(--ink-2)}
+@media (max-width:900px){
+  .incl{grid-template-columns:repeat(2,1fr)}
+  .tiers{grid-template-columns:1fr}
+  .tiers li:not(:last-child)::after{content:"↓";right:auto;left:50%;top:auto;bottom:-14px;transform:translateX(-50%)}
+}
+@media (max-width:560px){
+  .incl{grid-template-columns:1fr}
+  .speed-row{grid-template-columns:1fr 56px;grid-template-areas:"l v" "b b"}
+  .speed-row span{grid-area:l}.speed-row b{grid-area:v}.speed-row .bar{grid-area:b}
+}
