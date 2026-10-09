@@ -1,6 +1,9 @@
 name: App — build et tests
 
 on:
+  push:
+    branches: [main]
+    paths-ignore: ["website/**", "*.md", "Docs/**"]
   pull_request:
     paths-ignore: ["website/**", "*.md", "Docs/**"]
   workflow_dispatch:
