@@ -292,11 +292,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// when ad blocking is on, the cosmetic CSS matching this URL.
     private func userScripts(for url: URL?) -> [WKUserScript] {
         var scripts: [WKUserScript] = [CredentialScript.makeUserScript()]
+        let exempt = ProtectionPolicy.isExempt(host: url?.host, list: SettingsStore.shared.protectionExemptHosts)
         if SettingsStore.shared.lightLongPages { scripts.append(LongPageScript.makeUserScript()) }
-        if SettingsStore.shared.fingerprintProtection {
+        if SettingsStore.shared.fingerprintProtection, !exempt {
             scripts.append(FingerprintProtection.makeUserScript(sessionSeed: fingerprintSeed))
         }
-        if SettingsStore.shared.adBlockEnabled, let url, url.scheme == "http" || url.scheme == "https" {
+        if SettingsStore.shared.adBlockEnabled, !exempt, let url, url.scheme == "http" || url.scheme == "https" {
             let css = contentBlocker.cosmetic.css(for: url)
             if !css.isEmpty, let script = CosmeticScript.makeUserScript(css: css) { scripts.append(script) }
         }
@@ -1974,6 +1975,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if self?.effectiveSidebarMode == .compact { self?.updateTabCount() }
             self?.extensionManager.tabChanged(tab, .title)
         }
+        tab.onURLChange = { [weak self, weak tab] in
+            guard let self, let tab else { return }
+            tab.tabButton.setTitle(tab.displayTitle, host: tab.badgeHost)
+            if tab.id == self.activeTabID { self.syncToolbar(for: tab) }
+        }
         tab.onSleepChange = { [weak self, weak tab] _ in
             guard let self, let tab else { return }
             tab.tabButton.setSleeping(tab.isSuspended)
@@ -2413,6 +2419,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     ///  3. the plan freezes tabs hidden for a while and sleeps the ones hidden very long or, when over
     ///     budget, the best-scoring ones down to 80 % of the budget.
     private func enforceMemoryBudget() async {
+        // Safety net: a paused page must never be the one on screen.
+        for tab in tabs where tab.isFrozen && isOnScreen(tab) { tab.thaw() }
         await cleanHiddenTabsIfDue()
 
         var reading = measureTabMemory()
@@ -2443,7 +2451,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Why a tab may or may not be touched: on screen, playing sound, using camera/mic, a messaging
     /// or "never sleep" site → left alone; unsaved input → frozen but never torn down.
     private func lifecycleExemption(of tab: Tab) async -> TabLifecyclePolicy.Exemption {
-        if isOnScreen(tab) || tab.isCapturingMedia { return .full }
+        if isOnScreen(tab) || tab.isCapturingMedia || tab.isInFullscreen || tab.audioState == .playing { return .full }
         if SleepExemptions.isExempt(host: tab.currentURL?.host, userHosts: SettingsStore.shared.neverSleepHosts) { return .full }
         if await tab.isPlayingMedia() { return .full }
         return tab.isDirty ? .noSleep : .none
@@ -2635,6 +2643,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 if never { hosts.removeAll { $0 == host } } else { hosts.append(host) }
                 SettingsStore.shared.neverSleepHosts = hosts
                 if !never { tab.thaw() }
+            }
+        }
+        if let host = ProtectionPolicy.normalized(tab.currentURL?.host), tab.currentURL?.scheme?.hasPrefix("http") == true {
+            let off = ProtectionPolicy.isExempt(host: host, list: SettingsStore.shared.protectionExemptHosts)
+            add(off ? "Réactiver les protections sur \(host)" : "Désactiver les protections sur \(host)") { [weak self] in
+                var list = SettingsStore.shared.protectionExemptHosts
+                if off { list.removeAll { host == $0 || host.hasSuffix("." + $0) } } else { list.append(host) }
+                SettingsStore.shared.protectionExemptHosts = list
+                tab.webView?.reload()
+                _ = self
             }
         }
         add("Mettre en veille", enabled: !tab.isSuspended && tab.webView != nil && (tab.id != activeTabID || visibleTabs().count > 1)) { [weak self] in
@@ -3091,6 +3109,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             return .cancel
         }
 
+        // Blocking switched off for sites that break when only partly blocked (see ProtectionPolicy).
+        let exempt = ProtectionPolicy.isExempt(host: original.host, list: settings.protectionExemptHosts)
+        tab.applyContentRuleLists(settings.adBlockEnabled && !exempt ? contentBlocker.ruleLists : [])
         tab.setUserScripts(userScripts(for: original))
         return .allow
     }

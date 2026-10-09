@@ -134,6 +134,10 @@ final class Tab: NSObject {
     /// Fires whenever the page's title changes (navigations, and SPAs retitling themselves).
     var onTitleChange: (() -> Void)?
     private var titleObservation: NSKeyValueObservation?
+    private var urlObservation: NSKeyValueObservation?
+    private var fullscreenObservation: NSKeyValueObservation?
+    /// Fires when the page's address changes without a navigation (single-page apps: YouTube, Gmail…).
+    var onURLChange: (() -> Void)?
     private var progressObservation: NSKeyValueObservation?
     private var loadingObservation: NSKeyValueObservation?
 
@@ -214,6 +218,16 @@ final class Tab: NSObject {
         savedPageState = (result as? String).flatMap { $0 == "null" ? nil : $0 }
     }
 
+    /// Playing position (seconds) captured with the page state, if a video had been watched for a while.
+    private var savedVideoSeconds: Double? {
+        guard let data = savedPageState?.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return (object["video"] as? NSNumber)?.doubleValue
+    }
+
+    /// In (or entering/leaving) a native fullscreen video: never freeze or sleep such a tab.
+    var isInFullscreen: Bool { webView.map { $0.fullscreenState != .notInFullscreen } ?? false }
+
     /// Puts saved field values / video position back into the freshly reloaded page.
     func restorePageStateIfNeeded() {
         guard let json = savedPageState, let webView else { return }
@@ -257,7 +271,8 @@ final class Tab: NSObject {
 
     @discardableResult
     private func createWebView() -> WKWebView {
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = OreeWebView(frame: .zero, configuration: configuration)
+        webView.tab = self
         webView.allowsBackForwardNavigationGestures = true
         webView.isInspectable = SettingsStore.shared.webInspectorEnabled
         // Invisible until the first content commits, so the user sees the dark
@@ -268,6 +283,19 @@ final class Tab: NSObject {
         }
         titleObservation = webView.observe(\.title, options: [.new]) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.onTitleChange?() }
+        }
+        // Entering/leaving a fullscreen video: make sure nothing of ours (fade-in, slot animation) leaves the page translucent.
+        fullscreenObservation = webView.observe(\.fullscreenState, options: [.new]) { [weak self] web, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                web.alphaValue = 1
+                self.contentSlot.layer?.removeAllAnimations()
+                self.contentSlot.alphaValue = 1
+                web.needsDisplay = true
+            }
+        }
+        urlObservation = webView.observe(\.url, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.onURLChange?() }
         }
         loadingObservation = webView.observe(\.isLoading, options: [.new]) { [weak self] web, _ in
             MainActor.assumeIsolated { self?.onProgress?(web.estimatedProgress, web.isLoading) }
@@ -343,8 +371,8 @@ final class Tab: NSObject {
     /// reference WebKit or we hold to it, and drops the web view so its WebContent
     /// process can exit. Call when the tab is closed for good.
     func tearDown() {
-        progressObservation = nil; loadingObservation = nil; titleObservation = nil
-        onProgress = nil; onTitleChange = nil
+        progressObservation = nil; loadingObservation = nil; titleObservation = nil; urlObservation = nil; fullscreenObservation = nil
+        onProgress = nil; onURLChange = nil; onTitleChange = nil
         tabButton.onSelect = nil; tabButton.onClose = nil; tabButton.onReorder = nil; tabButton.contextMenuProvider = nil
 
         let controller = configuration.userContentController
@@ -385,10 +413,18 @@ final class Tab: NSObject {
 
         suspendedInteractionState = webView.interactionState as? Data
         suspendedURL = url
+        // YouTube resumes a video from `?t=`: more reliable than seeking after load (an advert plays first).
+        if let seconds = savedVideoSeconds, ProtectionPolicy.normalized(url.host) == "youtube.com", url.path == "/watch",
+           var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            parts.queryItems = (parts.queryItems ?? []).filter { $0.name != "t" } + [URLQueryItem(name: "t", value: "\(Int(seconds))s")]
+            if let resumed = parts.url { suspendedURL = resumed; suspendedInteractionState = nil }
+        }
         sleepingTitle = webView.title
         progressObservation = nil
         loadingObservation = nil
         titleObservation = nil
+        urlObservation = nil
+        fullscreenObservation = nil
 
         // Reuse the snapshot taken when the user left the tab, unless the page was used since.
         if let capturedAt, capturedAt >= lastActiveDate, let data = try? Data(contentsOf: snapshotFile) {

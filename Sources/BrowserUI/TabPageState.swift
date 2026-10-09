@@ -46,7 +46,8 @@ enum TabPageState {
             out.fields.push({ i: i, id: el.id || null, name: el.name || null, tag: el.tagName, v: v });
           });
           var vid = document.querySelector('video');
-          if (vid && !vid.ended && vid.currentTime > 5) out.video = vid.currentTime;
+          var adShowing = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
+          if (vid && !adShowing && !vid.ended && vid.currentTime > 5) out.video = vid.currentTime;
           return out;
         },
         restore: function (state) {
@@ -61,9 +62,17 @@ enum TabPageState {
             el.dispatchEvent(new Event('change', { bubbles: true }));
           });
           if (state.video) {
-            var vid = document.querySelector('video');
-            var seek = function () { try { vid.currentTime = state.video; vid.pause(); } catch (e) {} };
-            if (vid) { if (vid.readyState > 0) seek(); else vid.addEventListener('loadedmetadata', seek, { once: true }); }
+            // The player may build its <video> late (YouTube starts with an ad): look for up to 20 s,
+            // never seek an advert, and stop as soon as the position is right.
+            var tries = 0;
+            var timer = setInterval(function () {
+              var vid = document.querySelector('video');
+              var ad = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
+              if (++tries > 40) { clearInterval(timer); return; }
+              if (!vid || ad || !(vid.duration > state.video)) return;
+              try { if (Math.abs(vid.currentTime - state.video) > 2) vid.currentTime = state.video; vid.pause(); } catch (e) {}
+              clearInterval(timer);
+            }, 500);
           }
         }
       };

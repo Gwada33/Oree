@@ -43,6 +43,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let autoSuspendMinutes = "settings.autoSuspendMinutes"
         static let freezeAfterSeconds = "settings.freezeAfterSeconds"
         static let neverSleepHosts = "settings.neverSleepHosts"
+        static let protectionExemptHosts = "settings.protectionExemptHosts"
         static let privateByDefault = "settings.privateByDefault"
         static let customHomepageURL = "settings.customHomepageURL"
         static let autoplayMediaAllowed = "settings.autoplayMediaAllowed"
@@ -88,6 +89,7 @@ public final class SettingsStore: @unchecked Sendable {
             Key.adBlockEnabled: true,
             Key.autoSuspendMinutes: 45,
             Key.freezeAfterSeconds: 120,
+            Key.protectionExemptHosts: ProtectionPolicy.defaultExemptHosts,
             Key.privateByDefault: false,
             Key.customHomepageURL: "",
             Key.autoplayMediaAllowed: false,
@@ -151,6 +153,12 @@ public final class SettingsStore: @unchecked Sendable {
     public var freezeAfterSeconds: Int {
         get { defaults.integer(forKey: Key.freezeAfterSeconds) }
         set { defaults.set(newValue, forKey: Key.freezeAfterSeconds) }
+    }
+
+    /// Sites with ad blocking and fingerprint noise switched off.
+    public var protectionExemptHosts: [String] {
+        get { defaults.stringArray(forKey: Key.protectionExemptHosts) ?? ProtectionPolicy.defaultExemptHosts }
+        set { defaults.set(newValue, forKey: Key.protectionExemptHosts) }
     }
 
     /// Sites the user asked never to freeze or sleep.
