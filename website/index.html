@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Orée — le navigateur Mac qui dort quand tu ne le regardes pas</title>
-<meta name="description" content="Orée est un navigateur natif pour Mac : onglets en pause puis endormis, réveil au survol, téléchargements plus rapides, espaces, palette ⌘T, vie privée intégrée, zéro télémétrie. Gratuit, macOS 15.4+.">
+<meta name="description" content="Orée est un navigateur natif pour Mac : ouverture et téléchargements plus rapides (mesurés), onglets en pause puis endormis, espaces, palette ⌘T, vie privée intégrée, zéro télémétrie. Gratuit, macOS 15.4+.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:title" content="Orée — le navigateur Mac qui dort quand tu ne le regardes pas">
 <meta property="og:description" content="Onglets endormis, espaces, palette ⌘T, vie privée intégrée. Natif macOS, zéro télémétrie.">
@@ -53,6 +53,7 @@
       <span>Orée</span>
     </a>
     <nav class="nav-links" aria-label="Principal">
+      <a href="#rapidite">Rapidité</a>
       <a href="#legerete">Veille</a>
       <a href="#interface">Palette</a>
       <a href="#prive">Vie privée</a>
@@ -79,13 +80,13 @@
     <p class="lead reveal">Elle libère la mémoire des onglets inutilisés, et protège ta vie privée par défaut.</p>
     <div class="cta-row reveal">
       <a class="btn btn-primary btn-lg" href="#telecharger"><svg class="ic" aria-hidden="true"><use href="#i-apple"/></svg>Télécharger pour Mac</a>
-      <a class="btn btn-ghost btn-lg" href="#legerete">Voir comment ça marche</a>
+      <a class="btn btn-ghost btn-lg" href="#rapidite">Voir les mesures</a>
     </div>
     <p class="fine reveal">Gratuit · Apple silicon (M1 et suivants) · Aucune donnée d’usage envoyée</p>
     <ul class="proof reveal" aria-label="En bref">
       <li><svg class="ic" aria-hidden="true"><use href="#i-sleep"/></svg>Onglets en pause, puis endormis</li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg>Réveil dès le survol</li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Téléchargements en parallèle</li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg>Ouverture 36 % plus rapide que Safari</li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Téléchargements ≈ 4× plus rapides</li>
       <li><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Pubs et traceurs bloqués</li>
       <li><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Mises à jour intégrées</li>
     </ul>
@@ -125,6 +126,44 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- RAPIDITE -->
+<section class="sec" id="rapidite">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <p class="eyebrow">Rapidité, mesurée</p>
+      <h2>Il démarre vite et télécharge <em>quatre fois</em> plus vite.</h2>
+      <p class="lead">Même banc, mêmes pages, même Mac. Voici ce que ça donne face à Safari et Brave.</p>
+    </div>
+
+    <div class="bench reveal">
+      <div class="bench-card">
+        <h3>Ouverture : de l’icône à la page prête</h3>
+        <div class="speed">
+          <div class="speed-row on"><span>Orée</span><div class="bar"><i style="--w:64%"></i></div><b>1,16 s</b></div>
+          <div class="speed-row"><span>Brave</span><div class="bar"><i style="--w:66%"></i></div><b>1,21 s</b></div>
+          <div class="speed-row"><span>Safari</span><div class="bar"><i style="--w:100%"></i></div><b>1,82 s</b></div>
+        </div>
+        <p class="bench-note"><strong>36 % plus rapide que Safari</strong>, à égalité avec Brave. Médiane de 5 lancements.</p>
+      </div>
+
+      <div class="bench-card">
+        <h3>Téléchargement d’un fichier de 192 Mo</h3>
+        <div class="speed">
+          <div class="speed-row on"><span>Orée</span><div class="bar"><i style="--w:23%"></i></div><b>7,0 s</b></div>
+          <div class="speed-row"><span>Safari</span><div class="bar"><i style="--w:92%"></i></div><b>27,5 s</b></div>
+          <div class="speed-row"><span>Brave</span><div class="bar"><i style="--w:100%"></i></div><b>30 s</b></div>
+        </div>
+        <p class="bench-note"><strong>≈ 4× plus rapide</strong> quand le serveur limite chaque connexion : Orée en ouvre jusqu’à 15 à la fois.</p>
+      </div>
+    </div>
+
+    <div class="bench-fine reveal">
+      <p><strong>Comment on a mesuré.</strong> Mac M1, 8 Go, macOS 27. Serveur local (aucune variance du réseau), pages jamais mises en cache, presque aucune autre app ouverte. Orée 1.0.1, Safari 27, Brave 155 (profil neuf). Le banc est dans le dépôt : <code>scripts/bench/compare.py</code>.</p>
+      <p><strong>Ce qu’on ne prétend pas.</strong> Safari reste plus économe en mémoire qu’Orée quand beaucoup d’onglets sont ouverts. Les téléchargements dépendent du serveur : sans limite par connexion, l’écart est bien plus petit. Chiffres du 9 octobre 2026, à refaire sur d’autres Mac.</p>
     </div>
   </div>
 </section>

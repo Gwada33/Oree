@@ -11,6 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBuilder: MenuBuilder?
     let contentBlocker = ContentBlockerManager()
 
+    /// Links that arrive before the window exists (Orée launched *by* clicking a link elsewhere).
+    private var pendingURLs: [URL] = []
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         LaunchTrace.mark("didFinishLaunching")
         DiagnosticsReporter.shared.start()
@@ -36,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.window?.makeKeyAndOrderFront(nil)
         LaunchTrace.mark("window shown")
         controller.showOnboardingIfNeeded()
+        pendingURLs.forEach { controller.openExternal($0) }
+        pendingURLs.removeAll()
 
         // After the window is up: applies cached/baseline rules at once, then
         // refreshes the filter lists in the background.
@@ -48,7 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Links from other apps (when HyperBrowser is the default browser) and .html files.
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls { browserController?.openExternal(url) }
+        guard let browserController else { pendingURLs += urls; return }
+        for url in urls { browserController.openExternal(url) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
