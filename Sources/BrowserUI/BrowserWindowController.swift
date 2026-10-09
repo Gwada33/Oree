@@ -40,7 +40,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // Security / privacy state (Phase 3)
     private let fingerprintSeed = UInt32.random(in: .min ... .max)
-    private let urlCleaner = URLCleaner.bundled
+    private lazy var urlCleaner = URLCleaner.bundled   // compiling its regexes cost ~10 ms of every start
     /// Hosts the user chose to open over plain HTTP, until the app quits.
     private var httpExemptHosts: Set<String> = []
     /// Hosts whose Safe Browsing warning the user chose to ignore, until quit.
@@ -67,7 +67,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var toolbar: ToolbarView!
     private var tabColumn: NSView?
     private var railWidth: NSLayoutConstraint?
-    private let drawer = CustomizeDrawerView()
+    /// Full-window panels (customize, welcome, spaces overview, palette) are built the first time they are needed,
+    /// not at launch: they are invisible until then, and building them cost ~50 ms of every start.
+    private var drawerLoaded = false
+    private lazy var drawer: CustomizeDrawerView = {
+        drawerLoaded = true
+        let view = CustomizeDrawerView()
+        installOverlay(view)
+        view.onClose = { [weak self] in self?.closeCustomize() }
+        view.onChange = { [weak self] in self?.applyLookChanges() }
+        view.onPickPhoto = { [weak self] in self?.pickHomePhoto() }
+        return view
+    }()
     private let sidePanel = SidePanelView()
     private let readingRepo = ReadingListRepository()
     private var panelButtons: [(kind: PanelKind, button: ChromeIconButton)] = []
@@ -91,12 +102,61 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var splitLeftWidth: NSLayoutConstraint?
     private var splitMonitor: Any?
     private let splitButton = ChromeIconButton(symbol: "rectangle.split.2x1", label: "Écran partagé  ⌘\\")
-    private let overview = SpacesOverviewView()
-    private let onboarding = OnboardingView()
+    private lazy var overview: SpacesOverviewView = {
+        let view = SpacesOverviewView()
+        installOverlay(view)
+        view.provider = { [weak self] in self?.overviewCards() ?? [] }
+        view.onClose = { [weak self] in self?.closeOverview() }
+        view.onSelect = { [weak self] index in self?.closeOverview(); self?.selectSpace(index) }
+        view.onUpdate = { [weak self] index, name, hue, icon in
+            guard let self, self.spaces.indices.contains(index) else { return }
+            self.spaces[index].name = name; self.spaces[index].hue = hue; self.spaces[index].icon = icon
+            self.refreshSpaceUI(animated: false)
+        }
+        view.onDelete = { [weak self] in self?.deleteSpace($0) }
+        view.onAdd = { [weak self] in self?.addSpace(select: false) }
+        return view
+    }()
+    private lazy var onboarding: OnboardingView = {
+        let view = OnboardingView()
+        installOverlay(view)
+        view.onChange = { [weak self] in self?.applyLookChanges() }
+        view.onFinish = { [weak self] in
+            self?.applyLookChanges()
+            if let webView = self?.activeTab?.webView { self?.window?.makeFirstResponder(webView) }
+        }
+        view.onImport = { [weak self] browser in
+            guard let self else { return 0 }
+            let imported = BrowserImporter.importBookmarks(from: browser)
+            for item in imported { try? self.bookmarkRepo.add(url: item.url, title: item.title) }
+            self.refreshPinnedIcons()
+            self.menuBuilder?.refreshBookmarksMenu()
+            return imported.count
+        }
+        return view
+    }()
     private var searchRow: SidebarRowView?
     private var newTabRow: SidebarRowView?
     private let collapseButton = ChromeIconButton(symbol: "sidebar.left", label: "Réduire la barre latérale")
-    private let palette = CommandPaletteView()
+    private var paletteLoaded = false
+    private lazy var palette: CommandPaletteView = {
+        paletteLoaded = true
+        let view = CommandPaletteView()
+        installOverlay(view)
+        view.provider = { [weak self] query, filter in self?.paletteSections(query: query, filter: filter) ?? [] }
+        view.onDismiss = { [weak self] in self?.closePalette() }
+        return view
+    }()
+
+    /// Pins a full-window panel over everything else.
+    private func installOverlay(_ view: NSView) {
+        guard let content = window?.contentView else { return }
+        content.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: content.topAnchor), view.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            view.leadingAnchor.constraint(equalTo: content.leadingAnchor), view.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+        ])
+    }
     private let favoritesStack = NSStackView()
     private let backButton = ChromeIconButton(symbol: "chevron.left", label: "Page précédente  ⌘[")
     private let forwardButton = ChromeIconButton(symbol: "chevron.right", label: "Page suivante  ⌘]")
@@ -268,7 +328,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         automation = AutomationServer(
             window: window,
             activeWebView: { [weak self] in self?.activeTab?.webView },
-            overlays: { [weak self] in [self?.activeTab?.interstitial, self?.loadingBar, self?.palette, self?.addressDropdown, (self?.floatingShown == true ? self?.sidebarView : nil), self?.demoPanel, self?.drawer, self?.overview, self?.onboarding, self?.findBarContainer].compactMap { $0 } },
+            overlays: { [weak self] in [self?.activeTab?.interstitial, self?.loadingBar, (self?.paletteLoaded == true ? self?.palette : nil), self?.addressDropdown, (self?.floatingShown == true ? self?.sidebarView : nil), self?.demoPanel, self?.drawer, self?.overview, self?.onboarding, self?.findBarContainer].compactMap { $0 } },
             installExtension: { [weak self] url in
                 guard let manager = self?.extensionManager else { throw CancellationError() }
                 manager.autoApprove = true   // the channel can't click the permission sheet
@@ -327,7 +387,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Look settings edited elsewhere (Réglages, a configuration) apply live.
         let look = LookProfile.capture(named: "", from: SettingsStore.shared)
         let sidebarPrefs = [SettingsStore.shared.sidebarWidth, SettingsStore.shared.sidebarGlass ? 1 : 0]
-        if look != lastLook || sidebarPrefs != lastSidebarPrefs { drawer.refreshFromSettings(); applyLookChanges() }
+        if look != lastLook || sidebarPrefs != lastSidebarPrefs { if drawerLoaded { drawer.refreshFromSettings() }; applyLookChanges() }
         if SettingsStore.shared.shortcutOverrides != lastShortcutOverrides {
             lastShortcutOverrides = SettingsStore.shared.shortcutOverrides
             menuBuilder?.rebuild()
@@ -635,64 +695,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         ])
 
         buildFindBar(in: contentView)
-
-        contentView.addSubview(drawer)
-        NSLayoutConstraint.activate([
-            drawer.topAnchor.constraint(equalTo: contentView.topAnchor),
-            drawer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            drawer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            drawer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-        ])
-        contentView.addSubview(onboarding)
-        NSLayoutConstraint.activate([
-            onboarding.topAnchor.constraint(equalTo: contentView.topAnchor),
-            onboarding.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            onboarding.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            onboarding.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-        ])
-        onboarding.onChange = { [weak self] in self?.applyLookChanges() }
-        onboarding.onFinish = { [weak self] in
-            self?.applyLookChanges()
-            if let webView = self?.activeTab?.webView { self?.window?.makeFirstResponder(webView) }
-        }
-        onboarding.onImport = { [weak self] browser in
-            guard let self else { return 0 }
-            let imported = BrowserImporter.importBookmarks(from: browser)
-            for item in imported { try? self.bookmarkRepo.add(url: item.url, title: item.title) }
-            self.refreshPinnedIcons()
-            self.menuBuilder?.refreshBookmarksMenu()
-            return imported.count
-        }
-        contentView.addSubview(overview)
-        NSLayoutConstraint.activate([
-            overview.topAnchor.constraint(equalTo: contentView.topAnchor),
-            overview.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            overview.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            overview.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-        ])
-        overview.provider = { [weak self] in self?.overviewCards() ?? [] }
-        overview.onClose = { [weak self] in self?.closeOverview() }
-        overview.onSelect = { [weak self] index in self?.closeOverview(); self?.selectSpace(index) }
-        overview.onUpdate = { [weak self] index, name, hue, icon in
-            guard let self, self.spaces.indices.contains(index) else { return }
-            self.spaces[index].name = name; self.spaces[index].hue = hue; self.spaces[index].icon = icon
-            self.refreshSpaceUI(animated: false)
-        }
-        overview.onDelete = { [weak self] in self?.deleteSpace($0) }
-        overview.onAdd = { [weak self] in self?.addSpace(select: false) }
-        drawer.onClose = { [weak self] in self?.closeCustomize() }
-        drawer.onChange = { [weak self] in self?.applyLookChanges() }
-        drawer.onPickPhoto = { [weak self] in self?.pickHomePhoto() }
-
-        contentView.addSubview(palette)
-        NSLayoutConstraint.activate([
-            palette.topAnchor.constraint(equalTo: contentView.topAnchor),
-            palette.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            palette.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            palette.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-        ])
-        palette.provider = { [weak self] query, filter in self?.paletteSections(query: query, filter: filter) ?? [] }
-        palette.onDismiss = { [weak self] in self?.closePalette() }
 
         applySidebarMode(animated: false)
     }
@@ -1728,7 +1730,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let store = SettingsStore.shared
         store.appearanceMode = all[((all.firstIndex(of: store.appearanceMode) ?? 0) + 1) % all.count]
         applyLookChanges()
-        drawer.refreshFromSettings()
+        if drawerLoaded { drawer.refreshFromSettings() }
     }
 
     /// ⌘K
@@ -1738,7 +1740,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// ⌘L — edit the address in the toolbar, with suggestions underneath.
     @objc func focusAddressBar() {
-        if drawer.isPresented { closeCustomize() }
+        if drawerLoaded, drawer.isPresented { closeCustomize() }
         let url = activeTab?.currentURL
         let text = (url?.scheme == "http" || url?.scheme == "https") ? (url?.absoluteString ?? "") : ""
         addressPill.beginEditing(text: text)
