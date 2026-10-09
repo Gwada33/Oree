@@ -1,0 +1,16 @@
+name: Site — vérifications
+
+on:
+  pull_request:
+    paths: ["website/**", "scripts/check_site.py", ".github/workflows/site-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Liens, ancres, fichiers et symboles SVG
+        run: python3 scripts/check_site.py
