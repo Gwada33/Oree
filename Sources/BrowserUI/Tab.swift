@@ -62,6 +62,7 @@ final class Tab: NSObject {
     private(set) var isAwaitingWakeReveal = false
     /// The new page committed (its first content is in the view) — the snapshot may only come down after this.
     private var hasCommittedSinceWake = false
+    private var wakeStartedAt: Date?
 
     var lastActiveDate = Date()
     /// When this tab's JavaScript memory was last cleaned while hidden.
@@ -417,6 +418,7 @@ final class Tab: NSObject {
 
         if let snapshotData {
             snapshotImageView.image = HEICSnapshotCodec.decode(snapshotData)
+            snapshotImageView.alphaValue = 1
             snapshotImageView.isHidden = false
         }
 
@@ -424,8 +426,10 @@ final class Tab: NSObject {
         if let state = suspendedInteractionState {
             webView.interactionState = state
         } else if let url = suspendedURL {
-            webView.load(URLRequest(url: url))
+            // Cache first: a page seen before comes back from disk without waiting for the network.
+            webView.load(URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad))
         }
+        wakeStartedAt = Date()
         isAwaitingWakeReveal = true
         hasCommittedSinceWake = false
         isSuspended = false
@@ -444,9 +448,17 @@ final class Tab: NSObject {
     func finishWakeReveal() {
         guard isAwaitingWakeReveal else { return }
         isAwaitingWakeReveal = false
-        snapshotImageView.isHidden = true
-        snapshotImageView.image = nil
         snapshotData = nil
+        if let started = wakeStartedAt {
+            Log.tabs.notice("Wake: live page visible after \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            wakeStartedAt = nil
+        }
+        // Dissolve instead of cutting, so the swap reads as the page "coming alive", not as a refresh.
+        let view = snapshotImageView
+        Motion.animate(Motion.quick, { view.animator().alphaValue = 0 }, completion: { [weak self] in
+            guard let self, !self.isAwaitingWakeReveal else { return }   // woken again meanwhile: keep the new snapshot
+            view.isHidden = true; view.image = nil; view.alphaValue = 1
+        })
     }
 
     // MARK: - Display
