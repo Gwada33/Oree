@@ -1115,6 +1115,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         onboarding.present()
     }
 
+    /// Daily, silent unless a newer version exists.
+    public func checkForUpdatesInBackground() { AppUpdater.shared.checkInBackgroundIfDue() }
+
+    @objc func checkForUpdates() { AppUpdater.shared.checkNow() }
+
     @objc func showAbout() { AboutPanel.shared.present() }
 
     /// Automation only.

@@ -56,6 +56,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let instantBack = "settings.instantBack"
         static let memoryBudgetMB = "settings.memoryBudgetMB"
         static let backgroundCleanup = "settings.backgroundCleanup"
+        static let autoUpdateCheck = "settings.autoUpdateCheck"
         static let lightLongPages = "settings.lightLongPages"
         static let learnSiteMemory = "settings.learnSiteMemory"
         static let appearanceMode = "settings.appearanceMode"
@@ -105,6 +106,7 @@ public final class SettingsStore: @unchecked Sendable {
             Key.memoryBudgetMB: 0,   // 0 = automatic (a quarter of RAM)
             // Off by default until its effect on the active tab's smoothness has been measured.
             Key.backgroundCleanup: false,
+            Key.autoUpdateCheck: true,
             Key.lightLongPages: false,
             Key.learnSiteMemory: true,
             Key.appearanceMode: AppearanceMode.auto.rawValue,
@@ -225,6 +227,12 @@ public final class SettingsStore: @unchecked Sendable {
     }
 
     /// Periodically run a JavaScript garbage collection once tabs have been hidden for a while.
+    /// Looks for a newer release on GitHub at launch (once a day). Off = only the menu item checks.
+    public var autoUpdateCheck: Bool {
+        get { defaults.bool(forKey: Key.autoUpdateCheck) }
+        set { defaults.set(newValue, forKey: Key.autoUpdateCheck) }
+    }
+
     public var backgroundCleanup: Bool {
         get { defaults.bool(forKey: Key.backgroundCleanup) }
         set { defaults.set(newValue, forKey: Key.backgroundCleanup) }

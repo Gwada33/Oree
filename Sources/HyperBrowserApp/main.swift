@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // After the window is up: applies cached/baseline rules at once, then
         // refreshes the filter lists in the background.
         contentBlocker.start()
+        controller.checkForUpdatesInBackground()
 
         // UI test channel for development only: off unless explicitly requested.
         if CommandLine.arguments.contains("--automation") { controller.enableAutomation() }

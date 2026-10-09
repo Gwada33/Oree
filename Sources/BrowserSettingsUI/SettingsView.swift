@@ -84,6 +84,7 @@ final class SettingsViewModel: ObservableObject {
     private let siteMemoryRepo = SiteMemoryRepository()
     @Published var lightLongPages: Bool { didSet { settings.lightLongPages = lightLongPages } }
     @Published var backgroundCleanup: Bool { didSet { settings.backgroundCleanup = backgroundCleanup } }
+    @Published var autoUpdateCheck: Bool { didSet { settings.autoUpdateCheck = autoUpdateCheck } }
     @Published var memoryBudgetMB: Int { didSet { settings.memoryBudgetMB = memoryBudgetMB } }
     @Published var instantBack: Bool { didSet { settings.instantBack = instantBack } }
     @Published var startPageShowsRecent: Bool { didSet { settings.startPageShowsRecent = startPageShowsRecent } }
@@ -118,6 +119,7 @@ final class SettingsViewModel: ObservableObject {
         instantBack = current.instantBack
         memoryBudgetMB = current.memoryBudgetMB
         backgroundCleanup = current.backgroundCleanup
+        autoUpdateCheck = current.autoUpdateCheck
         lightLongPages = current.lightLongPages
         learnSiteMemory = current.learnSiteMemory
         searchEngine = current.searchEngine
@@ -455,6 +457,12 @@ public struct SettingsView: View {
                 }
             }
 
+            Section("Mises à jour") {
+                Toggle("Rechercher automatiquement les mises à jour (une fois par jour)", isOn: $model.autoUpdateCheck)
+                Text("Contacte github.com pour lire la dernière version publiée ; rien d'autre n'est envoyé. Vous pouvez aussi vérifier à la main : menu Orée → Rechercher des mises à jour…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Recherche") {
                 Picker("Moteur de recherche", selection: $model.searchEngine) {
                     ForEach(SearchEngine.allCases, id: \.self) { engine in

@@ -5,6 +5,9 @@ cd "$(dirname "$0")"
 APP_NAME="Oree"
 EXECUTABLE_NAME="HyperBrowserApp"
 BUILD_DIR=".build/release"
+# Version shown in « À propos » and compared by the updater: edit the VERSION file before a release.
+APP_VERSION="$(tr -d '[:space:]' < VERSION)"
+BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 APP_DIR="${APP_NAME}.app"
 
 echo "==> Building release binary..."
@@ -32,9 +35,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key>
     <string>com.nolhan.hyperbrowser</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>${BUILD_NUMBER}</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>${APP_VERSION}</string>
     <key>CFBundleExecutable</key>
     <string>Oree</string>
     <key>CFBundlePackageType</key>
