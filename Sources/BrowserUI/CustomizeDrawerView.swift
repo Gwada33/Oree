@@ -183,7 +183,7 @@ final class CustomizeDrawerView: NSView {
         photo.translatesAutoresizingMaskIntoConstraints = false
         photoRow = photo; items.append(photo)
 
-        func toggle(_ key: String, _ title: String, _ get: @escaping () -> Bool, _ set: @escaping (Bool) -> Void) {
+        @MainActor func toggle(_ key: String, _ title: String, _ get: @escaping @MainActor () -> Bool, _ set: @escaping @MainActor (Bool) -> Void) {
             let s = SwitchToggle(isOn: get(), label: title) { [weak self] on in set(on); self?.changed() }
             controls[key] = s
             items.append(oreeSettingRow(title: title, control: s))
