@@ -12,3 +12,4 @@ Frameworks/AdblockBridgeFFI.xcframework/
 
 # Local benchmark output
 scripts/bench/last-results.json
+Oree-*.zip
