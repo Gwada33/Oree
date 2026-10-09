@@ -2153,6 +2153,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         Motion.animate(Motion.standard) {
             rebuildTabList()
             tabBarStack.superview?.layoutSubtreeIfNeeded()
+            tabStrip.layoutSubtreeIfNeeded()
         }
         saveSession()
     }
@@ -2225,6 +2226,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         if horizontal {
             tabStrip.spaceChip.configure(currentSpaceStyle)
+            tabStrip.tabsChanged()
             if let active = activeTab, active.tabButton.superview === tabStrip.tabsStack { tabStrip.reveal(active.tabButton) }
         }
         updateTabCount()
@@ -2305,9 +2307,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func setCurrentSpace(_ index: Int, animated: Bool) {
         guard index != currentSpace, spaces.indices.contains(index) else { return }
+        let forward = index > currentSpace
         currentSpace = index
         UserDefaults.standard.set(index, forKey: Self.activeSpaceKey)
         refreshSpaceUI(animated: animated)
+        if animated {
+            // The new space's tabs drift in from the side the space sits on; names and colours cross-fade.
+            let horizontal = SettingsStore.shared.tabLayout == .horizontal
+            Motion.enter(horizontal ? tabStrip.tabsStack : tabBarStack, fromX: horizontal ? (forward ? 24 : -24) : 0,
+                         fromY: horizontal ? 0 : (forward ? -14 : 14))
+            [spaceNameLabel, spaceMetaLabel, tabStrip.spaceChip].forEach { Motion.crossfade($0) }
+        }
     }
 
     /// User picked a space: show its tabs and go to the one you were last on there.

@@ -71,12 +71,9 @@ enum TabPageState {
     """
 }
 
-/// Receives the page's "the user typed something" signal without keeping the tab alive.
+/// Receives the page's "the user typed something" signal and flags the tab that owns that web view.
 final class TabPageStateHandler: NSObject, WKScriptMessageHandler {
-    private let onDirty: @MainActor () -> Void
-    init(onDirty: @escaping @MainActor () -> Void) { self.onDirty = onDirty }
-
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        MainActor.assumeIsolated { onDirty() }
+        MainActor.assumeIsolated { Tab.tabsByWebView.object(forKey: message.webView)?.isDirty = true }
     }
 }

@@ -188,6 +188,37 @@ enum Motion {
         CATransaction.commit()
     }
 
+    /// Content swap (new space, new list): the view fades in and drifts in from `offset` points along one axis.
+    /// Reduced motion keeps only the fade.
+    static func enter(_ view: NSView, fromX dx: CGFloat = 0, fromY dy: CGFloat = 0, duration: TimeInterval = standard) {
+        view.wantsLayer = true
+        guard let layer = view.layer else { return }
+        let length = reduced ? min(duration, quick) : duration
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0; fade.toValue = 1
+        let group = CAAnimationGroup()
+        var animations: [CAAnimation] = [fade]
+        if !reduced, dx != 0 || dy != 0 {
+            let slide = CABasicAnimation(keyPath: "transform.translation")
+            slide.fromValue = NSValue(size: NSSize(width: dx, height: dy)); slide.toValue = NSValue(size: .zero)
+            animations.append(slide)
+        }
+        group.animations = animations
+        group.duration = length
+        group.timingFunction = timing
+        layer.add(group, forKey: "oreeEnter")
+    }
+
+    /// Soft cross-fade of a view's content when its text/colour changes (space name, chip…).
+    static func crossfade(_ view: NSView, duration: TimeInterval = quick) {
+        view.wantsLayer = true
+        let transition = CATransition()
+        transition.type = .fade
+        transition.duration = reduced ? min(duration, quick) : duration
+        transition.timingFunction = timing
+        view.layer?.add(transition, forKey: "oreeCrossfade")
+    }
+
     static func animate(_ duration: TimeInterval = standard, _ changes: () -> Void, completion: (@MainActor () -> Void)? = nil) {
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = reduced ? min(duration, quick) : duration

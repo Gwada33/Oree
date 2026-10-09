@@ -19,7 +19,7 @@ final class Tab: NSObject {
     /// to let this (and the WebContent process behind it) actually
     /// deallocate, not just hide it.
     private(set) var webView: WKWebView?
-    private let snapshotImageView = NSImageView()
+    private let snapshotImageView = SnapshotView()
     /// HEIC-compressed snapshot bytes — kept instead of a decoded `NSImage`
     /// so a suspended tab's "last known look" costs tens of KB, not the
     /// megabytes a raw bitmap would, while the tab is sitting there unused.
@@ -152,7 +152,6 @@ final class Tab: NSObject {
         contentSlot.translatesAutoresizingMaskIntoConstraints = false
 
         snapshotImageView.translatesAutoresizingMaskIntoConstraints = false
-        snapshotImageView.imageScaling = .scaleProportionallyUpOrDown
         snapshotImageView.isHidden = true
 
         super.init()
@@ -187,11 +186,18 @@ final class Tab: NSObject {
 
     // MARK: - Page state tracking
 
+    /// A popup tab is handed the opener's `WKUserContentController` by WebKit, and registering the same
+    /// handler name twice there raises an (uncatchable) exception — so install once per controller, and
+    /// find the tab from the message's web view instead of capturing one tab in the handler.
+    private static let trackedControllers = NSHashTable<WKUserContentController>.weakObjects()
+    static let tabsByWebView = NSMapTable<WKWebView, Tab>(keyOptions: .weakMemory, valueOptions: .weakMemory)
+
     private func installPageStateTracking() {
         let controller = configuration.userContentController
+        guard !Tab.trackedControllers.contains(controller) else { return }
+        Tab.trackedControllers.add(controller)
         controller.addUserScript(TabPageState.makeUserScript())
-        controller.add(TabPageStateHandler { [weak self] in self?.isDirty = true },
-                       contentWorld: TabPageState.world, name: TabPageState.handlerName)
+        controller.add(TabPageStateHandler(), contentWorld: TabPageState.world, name: TabPageState.handlerName)
     }
 
     /// A new document replaced the old one: its unsaved input is gone with it.
@@ -280,6 +286,7 @@ final class Tab: NSObject {
             webView.bottomAnchor.constraint(equalTo: contentSlot.bottomAnchor),
         ])
         self.webView = webView
+        Tab.tabsByWebView.setObject(self, forKey: webView)
         return webView
     }
 
@@ -343,7 +350,6 @@ final class Tab: NSObject {
         controller.removeAllUserScripts()
         controller.removeAllContentRuleLists()
         controller.removeScriptMessageHandler(forName: CredentialScript.handlerName)
-        controller.removeScriptMessageHandler(forName: TabPageState.handlerName, contentWorld: TabPageState.world)
         try? FileManager.default.removeItem(at: snapshotFile)
 
         guard let webView else { return }
@@ -469,4 +475,24 @@ final class Tab: NSObject {
     var currentInteractionState: Data? {
         (webView?.interactionState as? Data) ?? suspendedInteractionState
     }
+}
+
+/// Shows a tab's last snapshot behind/over the page while it wakes. A plain layer instead of an
+/// `NSImageView`: it has no intrinsic size, so a snapshot taken at another window size (fullscreen!)
+/// can never push the window around; it is filled to the view and cropped at the bottom/right edges.
+final class SnapshotView: NSView {
+    var image: NSImage? { didSet { layer?.contents = image } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.contentsGravity = .resizeAspectFill
+        layer?.masksToBounds = true
+        setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        setContentCompressionResistancePriority(.init(1), for: .vertical)
+        setContentHuggingPriority(.init(1), for: .horizontal)
+        setContentHuggingPriority(.init(1), for: .vertical)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override var isOpaque: Bool { false }
 }

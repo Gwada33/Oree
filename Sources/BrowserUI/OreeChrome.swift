@@ -1088,7 +1088,8 @@ final class TabStripView: NSView {
     let tabsStack = NSStackView()
     let spaceChip = SpaceChipButton()
     let newTabButton = ChromeIconButton(symbol: "plus", label: "Nouvel onglet  ⌘T")
-    private let scroll = NSScrollView()
+    /// The room between the space chip and the + button: the tabs share exactly this width, no scrolling.
+    private let tabsHost = NSView()
     private lazy var chipLeading = spaceChip.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 92)
     /// Room for the traffic lights (none in full screen).
     func setLeadingInset(_ value: CGFloat) { chipLeading.constant = value }
@@ -1098,32 +1099,52 @@ final class TabStripView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         tabsStack.orientation = .horizontal; tabsStack.spacing = 3; tabsStack.alignment = .centerY
         tabsStack.translatesAutoresizingMaskIntoConstraints = false
-        let doc = NSView(); doc.translatesAutoresizingMaskIntoConstraints = false
-        doc.addSubview(tabsStack)
-        scroll.documentView = doc
-        scroll.hasHorizontalScroller = false; scroll.hasVerticalScroller = false
-        scroll.drawsBackground = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        [spaceChip, scroll, newTabButton].forEach(addSubview)
+        tabsHost.translatesAutoresizingMaskIntoConstraints = false
+        tabsHost.wantsLayer = true
+        tabsHost.layer?.masksToBounds = false
+        tabsHost.addSubview(tabsStack)
+        [spaceChip, tabsHost, newTabButton].forEach(addSubview)
+        // Optional trailing edge: with an absurd number of tabs the strip overflows instead of breaking layout.
+        let trailing = tabsStack.trailingAnchor.constraint(lessThanOrEqualTo: tabsHost.trailingAnchor)
+        trailing.priority = .init(600)
         NSLayoutConstraint.activate([
             chipLeading,
             spaceChip.centerYAnchor.constraint(equalTo: centerYAnchor),
-            scroll.leadingAnchor.constraint(equalTo: spaceChip.trailingAnchor, constant: 8),
-            scroll.topAnchor.constraint(equalTo: topAnchor), scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
-            scroll.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -4),
+            tabsHost.leadingAnchor.constraint(equalTo: spaceChip.trailingAnchor, constant: 8),
+            tabsHost.topAnchor.constraint(equalTo: topAnchor), tabsHost.bottomAnchor.constraint(equalTo: bottomAnchor),
+            tabsHost.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -4),
             newTabButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             newTabButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            tabsStack.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
-            tabsStack.trailingAnchor.constraint(equalTo: doc.trailingAnchor),
-            tabsStack.centerYAnchor.constraint(equalTo: doc.centerYAnchor),
-            doc.heightAnchor.constraint(equalTo: scroll.contentView.heightAnchor),
+            tabsStack.leadingAnchor.constraint(equalTo: tabsHost.leadingAnchor),
+            tabsStack.centerYAnchor.constraint(equalTo: centerYAnchor),   // the same centre line as the chip and the + button
+            trailing,
         ])
         setAccessibilityElement(true); setAccessibilityRole(.group); setAccessibilityLabel("Onglets")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    /// Keeps the selected tab in view.
-    func reveal(_ view: NSView) { scroll.contentView.scrollToVisible(view.convert(view.bounds, to: scroll.documentView).insetBy(dx: -30, dy: 0)) }
+    override func layout() {
+        super.layout()
+        fitTabs()
+    }
+
+    /// Shares the host's width between the tabs (group chips keep their own width): 190 pt at most, 56 pt at least.
+    private func fitTabs() {
+        let available = tabsHost.bounds.width
+        let items = tabsStack.arrangedSubviews
+        let tabs = items.compactMap { $0 as? TabButtonView }
+        guard available > 0, !tabs.isEmpty else { return }
+        let others = items.filter { !($0 is TabButtonView) }.reduce(CGFloat(0)) { $0 + $1.fittingSize.width }
+        let gaps = CGFloat(items.count - 1) * tabsStack.spacing
+        let width = max(56, min(190, floor((available - others - gaps) / CGFloat(tabs.count))))
+        for tab in tabs { tab.setStripWidth(width) }
+    }
+
+    /// Re-share the width after the tab list changed.
+    func tabsChanged() { needsLayout = true }
+
+    /// Kept for callers: every tab is always in view now.
+    func reveal(_ view: NSView) {}
 }
 
 /// Group label in the horizontal strip: a small tinted chip.

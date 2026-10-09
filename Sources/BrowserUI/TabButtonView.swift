@@ -32,7 +32,7 @@ final class TabButtonView: NSView {
     /// Called after a drag with how many rows to move (negative = up).
     var onReorder: ((Int) -> Void)?
 
-    private var dragStartY: CGFloat?
+    private var dragStart: CGFloat?
     private var dragOffset: CGFloat = 0
     private var isDragging = false
     /// Row height (36) + stack spacing (2).
@@ -135,6 +135,13 @@ final class TabButtonView: NSView {
             w.isActive = true
             widthConstraint = w
         }
+    }
+
+    /// Width of this chip in the horizontal strip (the strip shares its width between the tabs, 190 pt at most).
+    func setStripWidth(_ width: CGFloat) {
+        guard isHorizontal, let widthConstraint, abs(widthConstraint.constant - width) > 0.5 else { return }
+        if window != nil, superview != nil { Motion.animate(Motion.quick) { widthConstraint.animator().constant = width } }
+        else { widthConstraint.constant = width }
     }
 
     /// Tabs inside a group sit 14 pt in, with a thin guide line on the left.
@@ -251,14 +258,14 @@ final class TabButtonView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
-        dragStartY = event.locationInWindow.y
+        dragStart = isHorizontal ? event.locationInWindow.x : event.locationInWindow.y
         isDragging = false
         onSelect?()
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard !isHorizontal, let start = dragStartY else { return }
-        let delta = event.locationInWindow.y - start
+        guard let start = dragStart else { return }
+        let delta = (isHorizontal ? event.locationInWindow.x : event.locationInWindow.y) - start
         if !isDragging && abs(delta) > 5 {
             isDragging = true
             layer?.zPosition = 10
@@ -272,16 +279,17 @@ final class TabButtonView: NSView {
         dragOffset = delta
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer?.transform = CATransform3DMakeTranslation(0, isFlippedGeometry ? -delta : delta, 0)
+        layer?.transform = isHorizontal ? CATransform3DMakeTranslation(delta, 0, 0)
+            : CATransform3DMakeTranslation(0, isFlippedGeometry ? -delta : delta, 0)
         CATransaction.commit()
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragStartY = nil }
+        defer { dragStart = nil }
         guard isDragging else { return }
         isDragging = false
-        // Moving the pointer up (positive window-y) means earlier in the list.
-        let steps = -Int((dragOffset / Self.rowPitch).rounded())
+        // Vertical: pointer up (positive window-y) = earlier. Horizontal: pointer left = earlier.
+        let steps = isHorizontal ? Int((dragOffset / (bounds.width + 3)).rounded()) : -Int((dragOffset / Self.rowPitch).rounded())
         Motion.transaction(Motion.standard) {
             layer?.transform = CATransform3DIdentity
             layer?.shadowOpacity = 0
