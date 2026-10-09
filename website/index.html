@@ -49,10 +49,9 @@
       <span>Orée</span>
     </a>
     <nav class="nav-links" aria-label="Principal">
-      <a href="#legerete">Légèreté</a>
-      <a href="#interface">Interface</a>
+      <a href="#legerete">Veille</a>
+      <a href="#interface">Palette</a>
       <a href="#prive">Vie privée</a>
-      <a href="#honnete">Transparence</a>
       <a href="#faq">Questions</a>
     </nav>
     <div class="nav-actions">
@@ -72,7 +71,7 @@
   <div class="wrap hero-in">
     <p class="eyebrow reveal"><span class="dot"></span>Navigateur natif pour Mac · macOS 15.4+</p>
     <h1 class="reveal">Le navigateur qui <em>dort</em><br>quand tu ne le regardes pas.</h1>
-    <p class="lead reveal">Orée libère la mémoire des onglets que tu n’utilises pas, range ta vie en espaces et protège ta vie privée par défaut. Zéro télémétrie, zéro réglage compliqué.</p>
+    <p class="lead reveal">Elle libère la mémoire des onglets inutilisés, et protège ta vie privée par défaut.</p>
     <div class="cta-row reveal">
       <a class="btn btn-primary btn-lg" href="#telecharger"><svg class="ic" aria-hidden="true"><use href="#i-apple"/></svg>Télécharger pour Mac</a>
       <a class="btn btn-ghost btn-lg" href="#legerete">Voir comment ça marche</a>
@@ -118,191 +117,98 @@
   </div>
 </section>
 
-<!-- LEGERETE -->
-<section class="sec" id="legerete">
+<!-- DIFFERENCES -->
+<section class="sec" id="difference">
   <div class="wrap">
     <div class="sec-head reveal">
-      <p class="eyebrow"><svg class="ic" aria-hidden="true"><use href="#i-sleep"/></svg>Légèreté</p>
-      <h2>Léger par conception.</h2>
-      <p class="lead">La plupart des navigateurs gardent tout en mémoire « au cas où ». Orée remplace l’onglet que tu n’utilises pas par une image de sa dernière apparence, et décharge vraiment la page de la RAM. Elle se rouvre quand tu y reviens.</p>
+      <p class="eyebrow">Ce qui change</p>
+      <h2>Quatre choses qu’on fait autrement.</h2>
     </div>
 
-    <div class="mem reveal" id="mem">
-      <div class="mem-head">
-        <div>
-          <h3>Ouvrir avec 8 onglets sauvegardés</h3>
-          <p>Mesure sur un Mac M1, 8 Go de RAM.</p>
-        </div>
+    <!-- 1. Veille -->
+    <article class="diff reveal" id="legerete">
+      <div class="diff-copy">
+        <span class="num">01</span>
+        <h3>Les onglets s’endorment vraiment.</h3>
+        <p>La page est déchargée de la RAM, pas juste mise en pause. Elle revient quand tu cliques.</p>
+        <ul class="stats">
+          <li><strong>−75 %</strong><span>de mémoire au lancement avec 8 onglets</span></li>
+          <li><strong>≈ 0,4 s</strong><span>pour ouvrir la fenêtre</span></li>
+        </ul>
+      </div>
+      <div class="mem" id="mem" data-mode="all">
         <div class="seg" role="group" aria-label="Mode de restauration">
           <button type="button" class="on" data-mode="all" aria-pressed="true">Tout charger</button>
-          <button type="button" data-mode="lazy" aria-pressed="false">Restauration paresseuse</button>
+          <button type="button" data-mode="lazy" aria-pressed="false">Orée</button>
         </div>
+        <div class="mem-tabs" aria-hidden="true">
+          <i class="t on"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i>
+        </div>
+        <div class="mem-bar" role="img" aria-label="Barre de mémoire utilisée"><span class="mem-fill"></span></div>
+        <div class="mem-read"><strong id="memval">~700 Mo</strong><span id="memnote">8 pages chargées</span></div>
+        <p class="mem-src">Mac M1, 8 Go, 8 onglets sauvegardés.</p>
       </div>
-      <div class="mem-tabs" aria-hidden="true">
-        <i class="t on"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i>
-      </div>
-      <div class="mem-bar" role="img" aria-label="Barre de mémoire utilisée">
-        <span class="mem-fill" id="memfill"></span>
-      </div>
-      <div class="mem-read">
-        <strong id="memval">~700 Mo</strong>
-        <span id="memnote">8 pages chargées au lancement.</span>
-      </div>
-    </div>
+    </article>
 
-    <ul class="stats reveal">
-      <li><strong>−75 à −80 %</strong><span>de mémoire à l’ouverture avec 8 onglets (≈ 700 → 120–175 Mo)</span></li>
-      <li><strong>≈ 0,4 s</strong><span>pour afficher la fenêtre, ≈ 0,6 s la première page (lancement à chaud)</span></li>
-      <li><strong>≈ 50 Mo</strong><span>pour l’interface au repos</span></li>
+    <!-- 2. Palette -->
+    <article class="diff flip reveal" id="interface">
+      <div class="diff-copy">
+        <span class="num">02</span>
+        <h3>Une seule barre pour tout. <kbd>⌘T</kbd></h3>
+        <p>Onglets, historique, favoris, actions, web. Tout au clavier.</p>
+      </div>
+      <div class="pal-demo" aria-hidden="true">
+        <div class="pal-in"><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg><span>hor</span></div>
+        <div class="chips"><span class="on">Tout</span><span>Onglets</span><span>Historique</span><span>Favoris</span><span>Actions</span></div>
+        <div class="pal-row on"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><span>Ligne 28 : <mark>hor</mark>aires</span><small>Onglet</small></div>
+        <div class="pal-row"><svg class="ic" aria-hidden="true"><use href="#i-sleep"/></svg><span>Mettre en veille</span><small>Action</small></div>
+        <div class="pal-row"><svg class="ic" aria-hidden="true"><use href="#i-split"/></svg><span>Ouvrir côte à côte</span><small>⌘\</small></div>
+      </div>
+    </article>
+
+    <!-- 3. Espaces -->
+    <article class="diff reveal">
+      <div class="diff-copy">
+        <span class="num">03</span>
+        <h3>Des espaces, chacun sa couleur.</h3>
+        <p>Perso, Travail, Lecture. <kbd>⌃1</kbd> à <kbd>⌃3</kbd> pour passer de l’un à l’autre.</p>
+      </div>
+      <div class="swatches" aria-hidden="true">
+        <span style="--h:var(--mousse)"><i></i>Perso</span>
+        <span style="--h:var(--marine)"><i></i>Travail</span>
+        <span style="--h:var(--ocre)"><i></i>Lecture</span>
+        <span style="--h:var(--brique)"><i></i>Cuisine</span>
+        <span style="--h:var(--prune)"><i></i>Voyage</span>
+      </div>
+    </article>
+
+    <!-- 4. Vie privée -->
+    <article class="diff flip reveal" id="prive">
+      <div class="diff-copy">
+        <span class="num">04</span>
+        <h3>Protégé par défaut. Sans extension.</h3>
+        <p>Zéro télémétrie : rien ne quitte ton Mac.</p>
+      </div>
+      <ul class="priv">
+        <li><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><b>Pubs et traceurs bloqués</b></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><b>Liens nettoyés</b><small>utm, fbclid, gclid…</small></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg><b>Fingerprinting réduit</b></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg><b>Mots de passe en local</b><small>Trousseau + Touch ID</small></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg><b>HTTPS d’abord</b></li>
+      </ul>
+    </article>
+
+    <p class="combo reveal">Chaque fonction existe quelque part ailleurs. <strong>La différence, c’est de les avoir toutes ensemble</strong>, dans un navigateur Mac natif.</p>
+  </div>
+</section>
+
+<!-- HONNETE -->
+<section class="honest" id="honnete">
+  <div class="wrap honest-in reveal">
+    <h3>Pas encore là</h3>
+    <ul>
+      <li>Extensions</li><li>Synchronisation</li><li>Passkeys</li><li>Mises à jour auto</li><li>Windows, iPhone</li>
     </ul>
-    <p class="foot-note reveal">Mesures réalisées sur un seul Mac (M1, 8 Go) : elles varient selon ta machine et tes sites. Nous ne prétendons pas être plus léger qu’un autre navigateur, nous n’avons pas fait cette comparaison.</p>
-
-    <div class="grid3">
-      <article class="card reveal"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-sleep"/></svg><h3>Onglets endormis</h3><p>Un onglet caché s’endort. Jamais celui que tu regardes, ni un onglet qui joue du son.</p></article>
-      <article class="card reveal"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-layers"/></svg><h3>Budget mémoire</h3><p>Dépasse ton budget (réglable) et les onglets cachés les plus lourds passent en veille.</p></article>
-      <article class="card reveal"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-x"/></svg><h3>Fermer, c’est fermer</h3><p>Fermer un onglet arrête sa page et sa vidéo et libère sa mémoire. Pas de page fantôme.</p></article>
-    </div>
-  </div>
-</section>
-
-<!-- INTERFACE -->
-<section class="sec sec-alt" id="interface">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <p class="eyebrow"><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg>Interface</p>
-      <h2>Pierre, papier, encre.<br>Et une couleur par espace.</h2>
-      <p class="lead">Une barre latérale, une palette, zéro encombrement. Tout se fait au clavier.</p>
-    </div>
-
-    <div class="bento">
-      <article class="card b-wide reveal">
-        <div class="b-copy">
-          <h3>Tape <kbd>⌘T</kbd>. Tout est là.</h3>
-          <p>Une seule barre pour aller sur un onglet ouvert, chercher dans l’historique, ouvrir un favori, lancer une action ou chercher sur le web. Filtres Tout, Onglets, Historique, Favoris, Actions.</p>
-        </div>
-        <div class="b-vis pal-demo" aria-hidden="true">
-          <div class="chips"><span class="on">Tout</span><span>Onglets</span><span>Historique</span><span>Favoris</span><span>Actions</span></div>
-          <div class="pal-row on"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><span>Ligne 28 : <mark>hor</mark>aires</span><small>Onglet</small></div>
-          <div class="pal-row"><svg class="ic" aria-hidden="true"><use href="#i-split"/></svg><span>Ouvrir côte à côte</span><small>⌘\</small></div>
-          <div class="pal-row"><svg class="ic" aria-hidden="true"><use href="#i-palette"/></svg><span>Thème sombre</span><small>Action</small></div>
-        </div>
-      </article>
-
-      <article class="card b-spaces reveal">
-        <h3>Espaces</h3>
-        <p>Perso, Travail, Lecture : trois groupes d’onglets, chacun sa couleur. Raccourcis <kbd>⌃1</kbd> à <kbd>⌃3</kbd>. Renommables, en nombre libre.</p>
-        <div class="swatches" aria-hidden="true">
-          <span style="--h:var(--mousse)"><i></i>Perso</span>
-          <span style="--h:var(--brique)"><i></i>Cuisine</span>
-          <span style="--h:var(--ocre)"><i></i>Lecture</span>
-          <span style="--h:var(--marine)"><i></i>Travail</span>
-          <span style="--h:var(--prune)"><i></i>Voyage</span>
-        </div>
-      </article>
-
-      <article class="card reveal">
-        <svg class="ic ic-lg" aria-hidden="true"><use href="#i-split"/></svg>
-        <h3>Écran partagé</h3>
-        <p>Deux pages côte à côte (<kbd>⌘\</kbd>), répartition ⅓ ½ ⅔, charnière à glisser.</p>
-      </article>
-
-      <article class="card reveal">
-        <svg class="ic ic-lg" aria-hidden="true"><use href="#i-palette"/></svg>
-        <h3>Ton réglage, en direct</h3>
-        <p>Clair, sombre ou auto, six couleurs d’accent, densité et arrondi réglables.</p>
-      </article>
-
-      <article class="card reveal">
-        <svg class="ic ic-lg" aria-hidden="true"><use href="#i-feather"/></svg>
-        <h3>Accueil local, instantané</h3>
-        <p>La page de nouvel onglet ne touche pas au réseau. Favoris numérotés <kbd>⌥1</kbd>–<kbd>⌥8</kbd>.</p>
-      </article>
-
-      <article class="card reveal">
-        <svg class="ic ic-lg" aria-hidden="true"><use href="#i-cmd"/></svg>
-        <h3>Raccourcis éditables</h3>
-        <p>Change tout dans Réglages, avec détection des conflits. Glisser-déposer, <kbd>⌘⇧T</kbd>, <kbd>⌘1</kbd>–<kbd>⌘9</kbd>.</p>
-      </article>
-    </div>
-  </div>
-</section>
-
-<!-- VIE PRIVEE -->
-<section class="sec" id="prive">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <p class="eyebrow"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Vie privée</p>
-      <h2>Protégé par défaut.<br>Sans extension.</h2>
-      <p class="lead">Rien n’est envoyé, rien n’est suivi. La protection est dans le navigateur, pas dans un module à installer.</p>
-    </div>
-
-    <div class="priv">
-      <div class="priv-list reveal">
-        <div class="pv"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><div><h3>Pubs et traceurs bloqués</h3><p>Listes EasyList et EasyPrivacy compilées pour WebKit, masquage cosmétique, mises à jour en arrière-plan.</p></div></div>
-        <div class="pv"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><div><h3>Liens nettoyés</h3><p><code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>… retirés à la navigation (règles ClearURLs).</p></div></div>
-        <div class="pv"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg><div><h3>Fingerprinting réduit</h3><p>Bruit discret sur canvas, WebGL et audio, différent par site et par session.</p></div></div>
-        <div class="pv"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg><div><h3>HTTPS d’abord</h3><p>Mise à niveau automatique, et un certificat invalide n’ouvre pas la page, sans bouton de contournement.</p></div></div>
-      </div>
-
-      <div class="vault reveal">
-        <svg class="ic ic-lg" aria-hidden="true"><use href="#i-key"/></svg>
-        <h3>Mots de passe intégrés, 100 % locaux</h3>
-        <ul class="ticks">
-          <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Coffre chiffré, clé dans le Trousseau macOS</li>
-          <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Remplissage seulement sur un vrai clic, jamais en automatique</li>
-          <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Import CSV (Mots de passe Apple, Chrome…)</li>
-          <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Presse-papiers effacé 30 s après copie</li>
-          <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Tout reste sur ton Mac</li>
-        </ul>
-        <p class="zero"><strong>Zéro télémétrie.</strong> Aucune donnée d’usage ne quitte ton Mac.</p>
-      </div>
-    </div>
-    <p class="foot-note reveal">Le blocage et l’anti-fingerprinting peuvent, rarement, casser un site. Aucun blocage n’est efficace à 100 % : cela dépend des sites et des listes.</p>
-  </div>
-</section>
-
-<!-- NATIF -->
-<section class="sec sec-alt">
-  <div class="wrap native">
-    <div class="reveal">
-      <p class="eyebrow"><svg class="ic" aria-hidden="true"><use href="#i-apple"/></svg>Mac natif</p>
-      <h2>Écrit pour le Mac,<br>pas porté dessus.</h2>
-      <p class="lead">Swift et AppKit, sur le moteur WebKit du système : tu profites des correctifs de sécurité d’Apple. Messages et pages d’erreur en français.</p>
-    </div>
-    <ul class="kv reveal">
-      <li><span>Interface</span><b>Swift · AppKit</b></li>
-      <li><span>Moteur</span><b>WebKit (système)</b></li>
-      <li><span>Navigation privée</span><b>Aucune session ni favori enregistré</b></li>
-      <li><span>Téléchargements</span><b>Quarantaine macOS (Gatekeeper)</b></li>
-      <li><span>Inspecteur web</span><b>Option développeur</b></li>
-    </ul>
-  </div>
-</section>
-
-<!-- TRANSPARENCE -->
-<section class="sec" id="honnete">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <p class="eyebrow"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Transparence</p>
-      <h2>Ce qu’Orée fait, et ce qu’elle ne fait pas.</h2>
-      <p class="lead">On préfère que tu saches avant de télécharger.</p>
-    </div>
-    <div class="two">
-      <div class="card reveal">
-        <h3>Pas (encore) disponible</h3>
-        <ul class="ticks no">
-          <li><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Extensions de navigateur</li>
-          <li><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Synchronisation entre appareils</li>
-          <li><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Passkeys</li>
-          <li><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Mises à jour automatiques</li>
-          <li><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Windows, Linux, iPhone : Mac uniquement</li>
-        </ul>
-      </div>
-      <div class="card reveal">
-        <h3>Notre différence, c’est la combinaison</h3>
-        <p>Beaucoup de fonctions de vie privée existent ailleurs, surtout dans Brave et Firefox. Orée réunit légèreté, espaces, palette de commandes et protection intégrée dans un navigateur Mac natif. On ne dit pas « plus rapide que » ou « meilleure batterie que » : on ne l’a pas mesuré.</p>
-      </div>
-    </div>
   </div>
 </section>
 
@@ -312,20 +218,17 @@
     <svg class="dl-icon-mark" aria-hidden="true"><use href="#mark"/></svg>
     <img class="dl-icon" src="assets/icon-256.png" width="128" height="128" alt="Icône de l’application Orée">
     <h2 class="reveal">Télécharge Orée.</h2>
-    <p class="lead reveal">Gratuit. Pour Mac sous macOS 15.4 ou plus récent.</p>
+    <p class="lead reveal">Gratuit. macOS 15.4 ou plus récent.</p>
     <div class="cta-row reveal">
       <a class="btn btn-primary btn-lg" id="dl-btn" href="https://github.com/Gwada33/Oree/releases/latest"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Télécharger pour macOS</a>
     </div>
     <p class="fine reveal">Version 1.0 · Apple silicon (M1 et suivants)</p>
 
     <div class="steps reveal">
-      <h3>Installer en 3 étapes</h3>
       <ol>
-        <li><b>Ouvre</b> le fichier téléchargé et glisse Orée dans <em>Applications</em>.</li>
-        <li><b>Clic droit</b> sur Orée → <em>Ouvrir</em>, puis confirme.</li>
-        <li><b>Définis-la</b> comme navigateur par défaut dans les Réglages si tu veux.</li>
+        <li>Glisse Orée dans <em>Applications</em>.</li>
+        <li><em>Clic droit → Ouvrir</em> la première fois (app non notarisée).</li>
       </ol>
-      <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg><span>L’app est signée en « ad-hoc » et n’est pas encore notarisée par Apple : macOS affichera donc un avertissement à la première ouverture. C’est normal, d’où le clic droit.</span></p>
     </div>
   </div>
 </section>
@@ -335,12 +238,10 @@
   <div class="wrap faq-wrap">
     <h2 class="reveal">Questions fréquentes</h2>
     <div class="faq reveal">
-      <details><summary>Orée est-elle vraiment gratuite ?</summary><p>Oui. Aucun compte requis et aucune donnée d’usage envoyée.</p></details>
-      <details><summary>Que devient un onglet endormi ?</summary><p>Il est remplacé par une image de sa dernière apparence et sa page est déchargée de la mémoire. Un clic dessus la recharge.</p></details>
-      <details><summary>Mes onglets de musique ou de vidéo s’endorment-ils ?</summary><p>Non : un onglet qui joue du son n’est jamais mis en veille. Une icône haut-parleur apparaît sur l’onglet, un clic coupe le son.</p></details>
-      <details><summary>Puis-je importer mes mots de passe ?</summary><p>Oui, par fichier CSV (export de Mots de passe Apple, Chrome…). Orée propose ensuite de supprimer le fichier en clair.</p></details>
-      <details><summary>Y a-t-il des extensions ?</summary><p>Pas pour l’instant. La protection (pubs, traceurs, liens, HTTPS) est intégrée.</p></details>
-      <details><summary>Pourquoi macOS affiche-t-il un avertissement ?</summary><p>L’app est signée en ad-hoc, sans compte développeur Apple payant. Fais un clic droit → Ouvrir la première fois.</p></details>
+      <details><summary>C’est gratuit ?</summary><p>Oui, sans compte.</p></details>
+      <details><summary>Que devient un onglet endormi ?</summary><p>Une image de sa dernière apparence. Un clic recharge la page.</p></details>
+      <details><summary>Ma musique ou ma visio s’endort ?</summary><p>Jamais : un onglet qui joue du son reste éveillé.</p></details>
+      <details><summary>Pourquoi macOS affiche un avertissement ?</summary><p>L’app n’est pas encore notarisée par Apple. Clic droit → Ouvrir la première fois.</p></details>
     </div>
   </div>
 </section>

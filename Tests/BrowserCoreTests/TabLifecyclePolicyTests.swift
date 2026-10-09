@@ -41,7 +41,7 @@ import Foundation
         let big = entry(400, idle: 300), mid = entry(300, idle: 300), small = entry(300, idle: 300)
         let plan = TabLifecyclePolicy.plan(entries: [small, mid, big], budgetBytes: 800 * mb, timing: timing)
         #expect(plan.sleep.first == big.id)           // heaviest × same idle
-        #expect(plan.sleep.count == 2)                // 1000 → 600 ≤ 640, then stop
+        #expect(plan.sleep.count == 1)                // 1000 → 600 ≤ 640 after the heaviest, then stop
     }
 
     @Test func recentlyUsedTabsAreSkippedByBudgetRule() {

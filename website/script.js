@@ -32,8 +32,8 @@
     var val = document.getElementById('memval');
     var note = document.getElementById('memnote');
     var texts = {
-      all: ['~700 Mo', '8 pages chargées au lancement.'],
-      lazy: ['~120–175 Mo', 'Seul l’onglet visible est chargé, les autres attendent.']
+      all: ['~700 Mo', '8 pages chargées'],
+      lazy: ['~120–175 Mo', '1 page chargée, 7 en attente']
     };
     mem.querySelectorAll('.seg button').forEach(function (b) {
       b.addEventListener('click', function () {
