@@ -11,7 +11,7 @@ try:
         for on in (False, True):
             subprocess.run(["defaults", "write", BID, "settings.lightLongPages", "-bool", "true" if on else "false"])
             before = {p for p, _, _ in bench.procs()}
-            subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/HyperBrowser.app", "--args", "--automation"])
+            subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/Oree.app", "--args", "--automation"])
             while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.2)
             time.sleep(1.5)
             for _ in range(10):
@@ -27,7 +27,7 @@ try:
             big = max([p for p, _, c in bench.procs() if p not in before and "WebContent" in c], key=lambda p: bench.footprint_mb([p]))
             ms = ui("eval", "(() => { const t = performance.now(); document.body.style.zoom = 1.001; document.body.offsetHeight; document.body.style.zoom = 1; document.body.offsetHeight; return Math.round(performance.now() - t); })()")
             print(f"run {run+1} {'ACTIVÉ   ' if on else 'désactivé'} : {round(bench.footprint_mb([big]))} Mo, relayout {ms} ms, hauteur de page {h0} -> {h1} px, blocs traités : {applied}"); sys.stdout.flush()
-            subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(1.5)
-            bench.kill([p for p, _, c in bench.procs() if p not in before and ("HyperBrowser.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)
+            subprocess.run(["pkill", "-x", "Oree"]); time.sleep(1.5)
+            bench.kill([p for p, _, c in bench.procs() if p not in before and ("Oree.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)
 finally:
     subprocess.run(["defaults", "delete", BID, "settings.lightLongPages"])

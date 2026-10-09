@@ -955,6 +955,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func isOnScreen(_ tab: Tab) -> Bool { tab.id == activeTabID || splitContains(tab.id) }
 
     private func ensureAwake(_ tab: Tab) {
+        if tab.isFrozen { tab.thaw() }   // instant: the page was only paused
         guard tab.isSuspended else { return }
         let webView = tab.wake()
         webView.navigationDelegate = self
@@ -1113,6 +1114,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard !SettingsStore.shared.onboardingDone, !isFreshSession else { return }
         onboarding.present()
     }
+
+    @objc func showAbout() { AboutPanel.shared.present() }
 
     /// Automation only.
     @objc func automationOnboarding() { onboarding.present() }
@@ -1972,6 +1975,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             self.updateTabCount()
         }
         tab.tabButton.setSleeping(tab.isSuspended)
+        tab.onFreezeChange = { [weak self, weak tab] _ in
+            guard let self, let tab else { return }
+            tab.tabButton.setFrozen(tab.isFrozen)
+            self.updateTabCount()
+        }
+        tab.tabButton.onHoverDwell = { [weak self, weak tab] in
+            guard let self, let tab else { return }
+            self.prewake(tab)
+        }
         tab.onProgress = { [weak self, weak tab] progress, isLoading in
             guard let self, let tab else { return }
             let hue = self.spaces[min(tab.spaceIndex, self.spaces.count - 1)].hue
@@ -2057,6 +2069,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             previous.tabButton.isActive = false
             previous.contentSlot.isHidden = !splitContains(previous.id)
             previous.lastActiveDate = Date()
+            // Snapshot now, while the page is exactly as the user saw it — sleeping later then costs nothing.
+            Task { await previous.captureSnapshot() }
         }
         let switching = activeTabID != nil && activeTabID != tab.id
         activeTabID = tab.id
@@ -2151,8 +2165,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func updateTabCount() {
         let mine = visibleTabs()
         let sleeping = mine.filter(\.isSuspended).count
+        let frozen = mine.filter(\.isFrozen).count
         let count = mine.count
-        spaceMetaLabel.stringValue = "\(count) onglet\(count > 1 ? "s" : "") · \(sleeping) en veille"
+        spaceMetaLabel.stringValue = "\(count) onglet\(count > 1 ? "s" : "") · \(sleeping) en veille" + (frozen > 0 ? " · \(frozen) en pause" : "")
         sleepMetaLabel.stringValue = sleeping > 0 ? "\(sleeping) en veille" : ""
         spaceRail.setTabs(mine.map { tab in
             (tab.displayTitle, tab.badgeHost, tab.id == activeTabID, tab.isSuspended,
@@ -2368,57 +2383,99 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    /// One pass of the memory policy, every 20 s:
+    /// Fraction of the budget the last pass found in use; pre-waking is skipped while over budget.
+    private var isOverBudget = false
+
+    private func memoryBudgetBytes() -> UInt64? {
+        let setting = SettingsStore.shared.memoryBudgetMB
+        guard setting >= 0 else { return nil }
+        return setting == 0 ? MemoryBudget.automaticBudgetBytes() : UInt64(setting) * 1_048_576
+    }
+
+    /// One pass of the tab lifecycle, every 20 s (awake → frozen → asleep, see `TabLifecyclePolicy`):
     ///  1. hidden tabs: after a minute out of sight, clean their JavaScript memory (once per absence);
-    ///  2. over budget: first clean (cheap, nothing is lost), and only if that isn't enough,
-    ///     put the heaviest hidden tabs to sleep (the active tab and sound-playing tabs are never touched).
+    ///  2. over budget: first clean (cheap, nothing is lost), and only if that isn't enough, apply the plan;
+    ///  3. the plan freezes tabs hidden for a while and sleeps the ones hidden very long or, when over
+    ///     budget, the best-scoring ones down to 80 % of the budget.
     private func enforceMemoryBudget() async {
         await cleanHiddenTabsIfDue()
 
         var reading = measureTabMemory()
         recordSiteSamples(reading)
 
-        let setting = SettingsStore.shared.memoryBudgetMB
-        guard setting >= 0 else { return }
-        let budget = setting == 0 ? MemoryBudget.automaticBudgetBytes() : UInt64(setting) * 1_048_576
-        guard reading.total > budget else { return }
+        let budget = memoryBudgetBytes() ?? UInt64.max
+        isOverBudget = reading.total > budget
 
-        // Rung 1: cheap cleanup first.
-        if releaseJavaScriptMemory(reason: "over budget") {
+        if isOverBudget, releaseJavaScriptMemory(reason: "over budget") {
             try? await Task.sleep(for: .seconds(4))
             reading = measureTabMemory()
-            if reading.total <= budget {
-                Log.tabs.notice("Memory budget: cleanup was enough (\(reading.total / 1_048_576) MB <= \(budget / 1_048_576) MB)")
-                return
-            }
+            isOverBudget = reading.total > budget
         }
-
-        // Rung 2: sleep the heaviest hidden tabs.
-        let slept = await sleepTabs(toReach: budget, reading: reading, minimumIdle: 20)
+        let plan = await lifecyclePlan(reading: reading, budget: budget, timing: lifecycleTiming())
+        let slept = await apply(plan)
         if slept > 0 {
-            Log.tabs.notice("Memory budget: \(reading.total / 1_048_576) MB > \(budget / 1_048_576) MB, put \(slept) tab(s) to sleep")
+            Log.tabs.notice("Tab lifecycle: \(reading.total / 1_048_576) MB used, froze \(plan.freeze.count), slept \(slept)")
         }
     }
 
-    /// Puts the heaviest hidden tabs to sleep until the total should fit `target` (the active tab and
-    /// tabs playing sound are never touched). Returns how many were put to sleep.
-    private func sleepTabs(toReach target: UInt64, reading: MemoryReading, minimumIdle: Double) async -> Int {
+    private func lifecycleTiming() -> TabLifecyclePolicy.Timing {
+        var sleepAfter = TimeInterval(SettingsStore.shared.autoSuspendMinutes * 60)
+        // After a recent memory warning, be much less patient.
+        if sleepAfter > 0, let last = lastMemoryPressure, Date().timeIntervalSince(last) < 600 { sleepAfter = min(sleepAfter, 180) }
+        return .init(freezeAfter: TimeInterval(SettingsStore.shared.freezeAfterSeconds), sleepAfter: sleepAfter)
+    }
+
+    /// Why a tab may or may not be touched: on screen, playing sound, using camera/mic, a messaging
+    /// or "never sleep" site → left alone; unsaved input → frozen but never torn down.
+    private func lifecycleExemption(of tab: Tab) async -> TabLifecyclePolicy.Exemption {
+        if isOnScreen(tab) || tab.isCapturingMedia { return .full }
+        if SleepExemptions.isExempt(host: tab.currentURL?.host, userHosts: SettingsStore.shared.neverSleepHosts) { return .full }
+        if await tab.isPlayingMedia() { return .full }
+        return tab.isDirty ? .noSleep : .none
+    }
+
+    private func lifecyclePlan(reading: MemoryReading, budget: UInt64, timing: TabLifecyclePolicy.Timing) async -> TabLifecyclePolicy.Plan {
         let tabsPerProcess = Dictionary(grouping: reading.processOfTab.values, by: { $0 }).mapValues(\.count)
         let now = Date()
-        var candidates: [MemoryBudget.Candidate] = []
-        for tab in tabs {
+        var entries: [TabLifecyclePolicy.Entry] = []
+        for tab in tabs where !tab.isSuspended && tab.webView != nil {
             guard let pid = reading.processOfTab[tab.id], let bytes = reading.bytesByProcess[pid] else { continue }
-            var isProtected = isOnScreen(tab)
-            if !isProtected { isProtected = await tab.isPlayingMedia() }
-            candidates.append(.init(id: tab.id, bytes: bytes / UInt64(max(tabsPerProcess[pid] ?? 1, 1)),
-                                    idleSeconds: now.timeIntervalSince(tab.lastActiveDate), isProtected: isProtected))
+            var limit = timing.sleepAfter
+            if limit > 0 {
+                // A space you've switched away from is out of sight: its tabs sleep after 2 minutes at most.
+                if tab.spaceIndex != currentSpace { limit = min(limit, 120) }
+                limit = SiteMemoryPolicy.idleLimit(base: limit, profile: siteProfile(forHost: SiteMemoryPolicy.normalizedHost(tab.currentURL)))
+            }
+            entries.append(.init(id: tab.id, bytes: bytes / UInt64(max(tabsPerProcess[pid] ?? 1, 1)),
+                                 idleSeconds: now.timeIntervalSince(tab.lastActiveDate),
+                                 state: tab.isFrozen ? .frozen : .awake,
+                                 exemption: await lifecycleExemption(of: tab),
+                                 keepWeight: tab.spaceIndex == currentSpace ? 0.5 : 1,
+                                 sleepAfter: limit))
         }
-        let toSleep = MemoryBudget.tabsToSleep(candidates: candidates, totalBytes: reading.total, budgetBytes: target, minimumIdle: minimumIdle)
-        for id in toSleep {
-            guard let tab = tabs.first(where: { $0.id == id }) else { continue }
+        return TabLifecyclePolicy.plan(entries: entries, budgetBytes: budget, timing: timing)
+    }
+
+    /// Carries out a plan; returns how many tabs were put to sleep.
+    @discardableResult
+    private func apply(_ plan: TabLifecyclePolicy.Plan) async -> Int {
+        for id in plan.freeze { tabs.first { $0.id == id }?.freeze() }
+        var slept = 0
+        for id in plan.sleep {
+            guard let tab = tabs.first(where: { $0.id == id }), !isOnScreen(tab) else { continue }
             await tab.suspend()
+            slept += 1
         }
-        return toSleep.count
+        return slept
+    }
+
+    /// Puts the best-scoring hidden tabs to sleep until the total should fit `target` (the active tab,
+    /// sound/camera tabs and tabs with unsaved input are never torn down). Returns how many slept.
+    private func sleepTabs(toReach target: UInt64, reading: MemoryReading, minimumIdle: Double) async -> Int {
+        let timing = TabLifecyclePolicy.Timing(freezeAfter: 0, sleepAfter: 0, minimumIdle: minimumIdle, hysteresis: 1)
+        var plan = await lifecyclePlan(reading: reading, budget: target, timing: timing)
+        plan.freeze = []
+        return await apply(plan)
     }
 
     // MARK: Learned site profiles
@@ -2555,6 +2612,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard let self, let active = self.activeTab else { return }
             self.beginSplit(left: active, right: tab)
         }
+        let host = tab.currentURL?.host?.lowercased().replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+        if let host, !host.isEmpty {
+            let never = SettingsStore.shared.neverSleepHosts.contains(host)
+            add(never ? "Autoriser la mise en veille de \(host)" : "Ne jamais mettre en veille \(host)") {
+                var hosts = SettingsStore.shared.neverSleepHosts
+                if never { hosts.removeAll { $0 == host } } else { hosts.append(host) }
+                SettingsStore.shared.neverSleepHosts = hosts
+                if !never { tab.thaw() }
+            }
+        }
         add("Mettre en veille", enabled: !tab.isSuspended && tab.webView != nil && (tab.id != activeTabID || visibleTabs().count > 1)) { [weak self] in
             self?.sleepTab(tab)
         }
@@ -2611,6 +2678,22 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func tab(for webView: WKWebView) -> Tab? {
         tabs.first { $0.webView === webView }
+    }
+
+    /// The pointer rests on a sleeping tab: wake it in the background so the click finds it ready.
+    /// Skipped when the Mac is already over the memory budget.
+    private func prewake(_ tab: Tab) {
+        guard tab.isSuspended, !isOverBudget else { return }
+        tab.lastActiveDate = Date()   // counts as touched: it must not be put straight back to sleep
+        ensureAwake(tab)
+    }
+
+    /// WebKit's private "first real content painted" signal (see `Tab.contentRenderedEvents`): the
+    /// right moment to swap the snapshot for the live page. Ignored if this WebKit never calls it.
+    @objc(_webView:renderingProgressDidChange:)
+    func webViewRenderingProgress(_ webView: WKWebView, events: UInt) {
+        guard events & Tab.contentRenderedEvents != 0, let tab = tab(for: webView) else { return }
+        clearWakeRevealIfNeeded(for: tab)
     }
 
     /// The first time a freshly-woken tab's page reports anything (even a
@@ -2891,26 +2974,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    /// Steady-state hygiene: discard background tabs nobody has touched in a
-    /// while. Oldest-touched first (matters most under `suspendAllBackgroundTabs`,
-    /// kept consistent here too).
+    /// Steady-state hygiene, once a minute: same pass as the memory timer (freeze / sleep by idle time).
     private func suspendInactiveTabs() async {
-        let now = Date()
-        var threshold = TimeInterval(SettingsStore.shared.autoSuspendMinutes * 60)
-        guard threshold > 0 else { return }
-        // After a recent memory warning, be much less patient.
-        if let last = lastMemoryPressure, now.timeIntervalSince(last) < 600 { threshold = min(threshold, 180) }
-        // A space you've switched away from is out of sight: its tabs sleep after 2 minutes at most.
-        let eligible = tabs
-            .filter { tab in
-                var limit = tab.spaceIndex == currentSpace ? threshold : min(threshold, 120)
-                limit = SiteMemoryPolicy.idleLimit(base: limit, profile: siteProfile(forHost: SiteMemoryPolicy.normalizedHost(tab.currentURL)))
-                return !isOnScreen(tab) && !tab.isSuspended && now.timeIntervalSince(tab.lastActiveDate) > limit
-            }
-            .sorted { $0.lastActiveDate < $1.lastActiveDate }
-        for tab in eligible where !(await tab.isPlayingMedia()) {
-            await tab.suspend()
-        }
+        await enforceMemoryBudget()
     }
 
     /// Emergency response: the OS just told us real memory is tight. Discard
@@ -2933,12 +2999,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     private func suspendAllBackgroundTabs() async {
-        let eligible = tabs
-            .filter { !isOnScreen($0) && !$0.isSuspended }
-            .sorted { $0.lastActiveDate < $1.lastActiveDate }
-        for tab in eligible where !(await tab.isPlayingMedia()) {
-            await tab.suspend()
+        let reading = measureTabMemory()
+        let tabsPerProcess = Dictionary(grouping: reading.processOfTab.values, by: { $0 }).mapValues(\.count)
+        var entries: [TabLifecyclePolicy.Entry] = []
+        for tab in tabs where !tab.isSuspended && tab.webView != nil {
+            let pid = reading.processOfTab[tab.id]
+            let bytes = pid.flatMap { reading.bytesByProcess[$0] } ?? 0
+            entries.append(.init(id: tab.id, bytes: bytes / UInt64(max(pid.flatMap { tabsPerProcess[$0] } ?? 1, 1)),
+                                 idleSeconds: Date().timeIntervalSince(tab.lastActiveDate),
+                                 state: tab.isFrozen ? .frozen : .awake,
+                                 exemption: await lifecycleExemption(of: tab)))
         }
+        await apply(TabLifecyclePolicy.emergencyPlan(entries: entries))
     }
 
     // MARK: - WKNavigationDelegate
@@ -3094,6 +3166,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard let tab = tab(for: webView) else { return }
         tab.interstitial.hide()
+        tab.pageDidCommit()
         tab.revealWebView()
         if !firstCommitTraced { firstCommitTraced = true; LaunchTrace.mark("first page committed") }
         extensionManager.tabChanged(tab, [.URL, .loading, .title])
@@ -3121,6 +3194,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard let tab = tab(for: webView) else { return }
         tab.tabButton.setTitle(tab.displayTitle, host: tab.badgeHost)
         clearWakeRevealIfNeeded(for: tab)
+        tab.restorePageStateIfNeeded()
         tab.revealWebView()
         extensionManager.tabChanged(tab, [.loading, .title])
         tab.upgradedFromHTTP = nil

@@ -24,17 +24,44 @@ final class Tab: NSObject {
     /// so a suspended tab's "last known look" costs tens of KB, not the
     /// megabytes a raw bitmap would, while the tab is sitting there unused.
     private var snapshotData: Data?
+    /// Snapshot taken when the user left the tab (so sleeping later costs nothing). Kept on disk.
+    private var capturedAt: Date?
+    private var snapshotFile: URL {
+        Tab.snapshotDirectory.appendingPathComponent("\(id.uuidString).heic")
+    }
+    static let snapshotDirectory: URL = {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Orée/Snapshots", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
 
     var isSuspended = false {
         // Observation only: lets the sidebar show the "sleeping" look. No behavior depends on it.
         didSet { if oldValue != isSuspended { onSleepChange?(isSuspended) } }
     }
     var onSleepChange: ((Bool) -> Void)?
+
+    // MARK: Frozen tier
+    /// Frozen = the page is alive (instant to resume, nothing reloads) but its JavaScript, timers and
+    /// rendering are paused. Asleep (`isSuspended`) = page and process gone, only a snapshot remains.
+    private(set) var isFrozen = false {
+        didSet { if oldValue != isFrozen { onFreezeChange?(isFrozen) } }
+    }
+    var onFreezeChange: ((Bool) -> Void)?
+    /// True once the user typed into a field / editor of the current page: such a tab may be frozen
+    /// but is only torn down when the system really needs the memory.
+    var isDirty = false
+    private var usedPrivateFreeze = false
+    /// Field values and video position saved just before a forced sleep, put back after the reload.
+    private var savedPageState: String?
     private var suspendedURL: URL?
     private var suspendedInteractionState: Data?
     /// Set by `wake()`, cleared once the fresh page finishes loading — tells
     /// the caller when it's safe to drop the snapshot image.
     private(set) var isAwaitingWakeReveal = false
+    /// The new page committed (its first content is in the view) — the snapshot may only come down after this.
+    private var hasCommittedSinceWake = false
 
     var lastActiveDate = Date()
     /// When this tab's JavaScript memory was last cleaned while hidden.
@@ -130,6 +157,7 @@ final class Tab: NSObject {
 
         super.init()
         Tab.liveCount += 1
+        installPageStateTracking()
 
         if let sleeping {
             suspendedURL = sleeping.url
@@ -157,6 +185,67 @@ final class Tab: NSObject {
         ])
     }
 
+    // MARK: - Page state tracking
+
+    private func installPageStateTracking() {
+        let controller = configuration.userContentController
+        controller.addUserScript(TabPageState.makeUserScript())
+        controller.add(TabPageStateHandler { [weak self] in self?.isDirty = true },
+                       contentWorld: TabPageState.world, name: TabPageState.handlerName)
+    }
+
+    /// A new document replaced the old one: its unsaved input is gone with it.
+    func pageDidCommit() {
+        isDirty = false
+        hasCommittedSinceWake = true
+    }
+
+    /// Reads field values and the video position before a forced teardown.
+    private func collectPageState() async {
+        guard let webView, !webView.isLoading else { savedPageState = nil; return }
+        let result = try? await webView.evaluateJavaScript(TabPageState.collectCall, in: nil, contentWorld: TabPageState.world)
+        savedPageState = (result as? String).flatMap { $0 == "null" ? nil : $0 }
+    }
+
+    /// Puts saved field values / video position back into the freshly reloaded page.
+    func restorePageStateIfNeeded() {
+        guard let json = savedPageState, let webView else { return }
+        savedPageState = nil
+        webView.evaluateJavaScript(TabPageState.restoreCall(json: json), in: nil, in: TabPageState.world) { _ in }
+    }
+
+    // MARK: - Freeze / thaw
+
+    private static let suspendSelector = NSSelectorFromString("_suspendPage:")
+    private static let resumeSelector = NSSelectorFromString("_resumePage:")
+    private typealias PageSuspendFunction = @convention(c) (AnyObject, Selector, @escaping @convention(block) (Bool) -> Void) -> Void
+
+    private func callPrivate(_ selector: Selector, on webView: WKWebView) -> Bool {
+        guard webView.responds(to: selector), let imp = webView.method(for: selector) else { return false }
+        unsafeBitCast(imp, to: PageSuspendFunction.self)(webView, selector) { _ in }
+        return true
+    }
+
+    /// Pauses the page in place. Uses WebKit's private page-suspend when this macOS has it,
+    /// otherwise the public media pause (JavaScript keeps running but is throttled while hidden).
+    func freeze() {
+        guard !isSuspended, !isFrozen, let webView else { return }
+        usedPrivateFreeze = callPrivate(Tab.suspendSelector, on: webView)
+        if !usedPrivateFreeze { webView.setAllMediaPlaybackSuspended(true) { } }
+        isFrozen = true
+    }
+
+    /// Resumes a frozen page. Immediate: nothing is reloaded.
+    func thaw() {
+        guard isFrozen else { return }
+        isFrozen = false
+        guard let webView else { return }
+        if usedPrivateFreeze { _ = callPrivate(Tab.resumeSelector, on: webView) }
+        else { webView.setAllMediaPlaybackSuspended(false) { } }
+        usedPrivateFreeze = false
+        setInspectable(SettingsStore.shared.webInspectorEnabled)
+    }
+
     // MARK: - Web view lifecycle
 
     @discardableResult
@@ -176,6 +265,12 @@ final class Tab: NSObject {
         loadingObservation = webView.observe(\.isLoading, options: [.new]) { [weak self] web, _ in
             MainActor.assumeIsolated { self?.onProgress?(web.estimatedProgress, web.isLoading) }
         }
+        // Ask WebKit to tell us when real content first paints: that is the right moment to drop the snapshot.
+        let renderingSelector = NSSelectorFromString("_setObservedRenderingProgressEvents:")
+        if webView.responds(to: renderingSelector), let imp = webView.method(for: renderingSelector) {
+            typealias Function = @convention(c) (AnyObject, Selector, UInt) -> Void
+            unsafeBitCast(imp, to: Function.self)(webView, renderingSelector, Tab.contentRenderedEvents)
+        }
         webView.translatesAutoresizingMaskIntoConstraints = false
         contentSlot.addSubview(webView, positioned: .below, relativeTo: nil)
         NSLayoutConstraint.activate([
@@ -188,11 +283,20 @@ final class Tab: NSObject {
         return webView
     }
 
+    /// FirstVisuallyNonEmptyLayout | FirstPaintWithSignificantArea (WebKit's `_WKRenderingProgressEvent` bits).
+    static let contentRenderedEvents: UInt = (1 << 1) | (1 << 2)
+
     /// Whether this tab is actively playing audio/video — such a tab must
     /// never be put to sleep, or the music would just stop.
     func isPlayingMedia() async -> Bool {
-        guard let webView else { return false }
+        guard let webView, !isFrozen else { return false }   // a paused page can't answer
         return await webView.requestMediaPlaybackState() == .playing
+    }
+
+    /// Camera, microphone or screen sharing in use — such a tab must keep running.
+    var isCapturingMedia: Bool {
+        guard let webView else { return false }
+        return webView.cameraCaptureState != .none || webView.microphoneCaptureState != .none
     }
 
     /// Fades the page in (called when its first content commits).
@@ -201,8 +305,11 @@ final class Tab: NSObject {
         Motion.animate(Motion.quick) { webView.animator().alphaValue = 1 }
     }
 
+    /// WebKit raises an Objective-C exception (uncatchable from Swift → crash) for some page states, so
+    /// only touch the property when it really changes, and never on a paused page: that one catches up on thaw.
     func setInspectable(_ enabled: Bool) {
-        webView?.isInspectable = enabled
+        guard let webView, !isFrozen, webView.isInspectable != enabled else { return }
+        webView.isInspectable = enabled
     }
 
     /// Replaces this tab's content-blocking rule lists, whether or not it
@@ -221,6 +328,7 @@ final class Tab: NSObject {
         let controller = configuration.userContentController
         controller.removeAllUserScripts()
         scripts.forEach { controller.addUserScript($0) }
+        controller.addUserScript(TabPageState.makeUserScript())
     }
 
     /// Fully releases the page: unloads it (which stops any video/audio), cuts every
@@ -235,6 +343,8 @@ final class Tab: NSObject {
         controller.removeAllUserScripts()
         controller.removeAllContentRuleLists()
         controller.removeScriptMessageHandler(forName: CredentialScript.handlerName)
+        controller.removeScriptMessageHandler(forName: TabPageState.handlerName, contentWorld: TabPageState.world)
+        try? FileManager.default.removeItem(at: snapshotFile)
 
         guard let webView else { return }
         webView.navigationDelegate = nil
@@ -246,12 +356,25 @@ final class Tab: NSObject {
         self.webView = nil
     }
 
-    /// Captures a compressed snapshot, tears down the live `WKWebView` (and
-    /// with it, its WebContent process) to actually free memory, and shows
-    /// the snapshot in its place. Caller is responsible for not calling this
-    /// on the active tab (there's nothing to show instead).
+    /// Takes the snapshot of the page as the user last saw it. Called as the user leaves the tab,
+    /// so a later sleep only has to reuse it; stored on disk, not in RAM.
+    func captureSnapshot() async {
+        guard !isSuspended, !isFrozen, let webView, webView.url != nil, !webView.isLoading else { return }
+        guard let image = try? await webView.takeSnapshot(configuration: nil),
+              let data = HEICSnapshotCodec.encode(image) else { return }
+        try? data.write(to: snapshotFile, options: .atomic)
+        capturedAt = Date()
+    }
+
+    /// Tears down the live `WKWebView` (and with it, its WebContent process) to actually free memory,
+    /// and shows the last snapshot in its place. Caller is responsible for not calling this on a tab
+    /// that is on screen (there's nothing to show instead). A frozen page is resumed first so its
+    /// state can be read. Field values (never passwords) and the video position are saved and put
+    /// back when the tab wakes.
     func suspend() async {
         guard !isSuspended, let webView, let url = webView.url, url.absoluteString != "about:blank" else { return }
+        thaw()
+        await collectPageState()
 
         suspendedInteractionState = webView.interactionState as? Data
         suspendedURL = url
@@ -260,18 +383,21 @@ final class Tab: NSObject {
         loadingObservation = nil
         titleObservation = nil
 
-        if let image = try? await webView.takeSnapshot(configuration: nil) {
-            // Compressed bytes only — no decoded NSImage is kept in memory
-            // while the tab just sits here suspended. Decoded on demand by
-            // `wake()`, right when it's actually about to be shown.
+        // Reuse the snapshot taken when the user left the tab, unless the page was used since.
+        if let capturedAt, capturedAt >= lastActiveDate, let data = try? Data(contentsOf: snapshotFile) {
+            snapshotData = data
+        } else if let image = try? await webView.takeSnapshot(configuration: nil) {
             snapshotData = HEICSnapshotCodec.encode(image)
         }
+        try? FileManager.default.removeItem(at: snapshotFile)
+        capturedAt = nil
 
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.removeFromSuperview()
         self.webView = nil
 
+        isDirty = false
         isSuspended = true
     }
 
@@ -280,6 +406,7 @@ final class Tab: NSObject {
     /// the returned view — `Tab` doesn't know about the window controller.
     @discardableResult
     func wake() -> WKWebView {
+        if isFrozen { thaw() }
         guard isSuspended else { return webView ?? createWebView() }
 
         if let snapshotData {
@@ -294,7 +421,15 @@ final class Tab: NSObject {
             webView.load(URLRequest(url: url))
         }
         isAwaitingWakeReveal = true
+        hasCommittedSinceWake = false
         isSuspended = false
+        // Safety net: if WebKit never reports a paint, don't leave the snapshot up forever.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            if self?.hasCommittedSinceWake == true { self?.finishWakeReveal() }
+            try? await Task.sleep(for: .seconds(7))
+            self?.finishWakeReveal()
+        }
         return webView
     }
 

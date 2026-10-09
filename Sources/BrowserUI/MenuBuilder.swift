@@ -15,7 +15,7 @@ public final class MenuBuilder {
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "À propos d’Orée", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        addCommand("about", to: appMenu, title: "À propos d’Orée", selector: #selector(BrowserWindowController.showAbout))
         appMenu.addItem(.separator())
         addCommand("customize", to: appMenu, title: "Personnaliser…", selector: #selector(BrowserWindowController.openCustomize))
         addCommand("settings", to: appMenu, title: "Réglages…", selector: #selector(BrowserWindowController.openSettings))

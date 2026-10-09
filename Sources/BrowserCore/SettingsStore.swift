@@ -41,6 +41,8 @@ public final class SettingsStore: @unchecked Sendable {
         static let searchEngine = "settings.searchEngine"
         static let adBlockEnabled = "settings.adBlockEnabled"
         static let autoSuspendMinutes = "settings.autoSuspendMinutes"
+        static let freezeAfterSeconds = "settings.freezeAfterSeconds"
+        static let neverSleepHosts = "settings.neverSleepHosts"
         static let privateByDefault = "settings.privateByDefault"
         static let customHomepageURL = "settings.customHomepageURL"
         static let autoplayMediaAllowed = "settings.autoplayMediaAllowed"
@@ -83,7 +85,8 @@ public final class SettingsStore: @unchecked Sendable {
         defaults.register(defaults: [
             Key.searchEngine: SearchEngine.google.rawValue,
             Key.adBlockEnabled: true,
-            Key.autoSuspendMinutes: 10,
+            Key.autoSuspendMinutes: 45,
+            Key.freezeAfterSeconds: 120,
             Key.privateByDefault: false,
             Key.customHomepageURL: "",
             Key.autoplayMediaAllowed: false,
@@ -140,6 +143,18 @@ public final class SettingsStore: @unchecked Sendable {
     public var autoSuspendMinutes: Int {
         get { defaults.integer(forKey: Key.autoSuspendMinutes) }
         set { defaults.set(newValue, forKey: Key.autoSuspendMinutes) }
+    }
+
+    /// Seconds a tab stays hidden before it is frozen (page alive but paused). 0 = never freeze.
+    public var freezeAfterSeconds: Int {
+        get { defaults.integer(forKey: Key.freezeAfterSeconds) }
+        set { defaults.set(newValue, forKey: Key.freezeAfterSeconds) }
+    }
+
+    /// Sites the user asked never to freeze or sleep.
+    public var neverSleepHosts: [String] {
+        get { defaults.stringArray(forKey: Key.neverSleepHosts) ?? [] }
+        set { defaults.set(newValue, forKey: Key.neverSleepHosts) }
     }
 
     public var privateByDefault: Bool {

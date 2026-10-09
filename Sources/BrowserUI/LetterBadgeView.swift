@@ -55,6 +55,9 @@ final class LetterBadgeView: NSView {
 
     /// Letter badge immediately, then swaps to the real favicon once (if) it loads.
     func configureFavicon(host: String, fallbackText: String) {
+        // The app's own home page has no site: it wears the Orée mark instead of a letter.
+        if host.hasSuffix("Nouvel onglet") { applyMark(); return }
+        if isMarkShown { mark.isHidden = true; isMarkShown = false }
         applyFallback(text: fallbackText)
         currentHost = host
         FaviconLoader.shared.icon(for: host) { [weak self] image in
@@ -69,6 +72,29 @@ final class LetterBadgeView: NSView {
         }
     }
 
+    /// 16 pt, 4-bar version (the badge is smaller than 48 pt, so the mark picks it by itself).
+    private lazy var mark: OreeMark = {
+        let mark = OreeMark(size: 14, simplified: true)
+        addSubview(mark)
+        NSLayoutConstraint.activate([
+            mark.centerXAnchor.constraint(equalTo: centerXAnchor),
+            mark.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        return mark
+    }()
+
+    private var isMarkShown = false
+
+    private func applyMark() {
+        currentHost = nil
+        fallbackKey = nil
+        label.isHidden = true
+        imageView.isHidden = true
+        mark.isHidden = false
+        isMarkShown = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
     private var currentHost: String?
     private var fallbackKey: String?
 
@@ -81,6 +107,7 @@ final class LetterBadgeView: NSView {
 
     private func applyFallback(text: String) {
         currentHost = nil
+        if isMarkShown { mark.isHidden = true; isMarkShown = false }
         let letter = text.first.map { String($0).uppercased() } ?? "?"
         label.stringValue = letter
         label.isHidden = false

@@ -12,7 +12,7 @@ ui = lambda *a: subprocess.run([UI, *a], capture_output=True, text=True).stdout.
 
 def launch(env):
     full = {"HB_FRESH_SESSION": "1", **env}
-    subprocess.run(["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in full.items()], []) + [f"{HB}/HyperBrowser.app", "--args", "--automation"])
+    subprocess.run(["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in full.items()], []) + [f"{HB}/Oree.app", "--args", "--automation"])
     while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.1)
     time.sleep(1.5)
     for _ in range(10):
@@ -21,7 +21,7 @@ def launch(env):
     raise SystemExit("window never became visible")
 
 def my_pids(before):
-    return [p for p, _, cmd in bench.procs() if p not in before and ("HyperBrowser.app" in cmd or bench.WEBKIT_HELPER.search(cmd))]
+    return [p for p, _, cmd in bench.procs() if p not in before and ("Oree.app" in cmd or bench.WEBKIT_HELPER.search(cmd))]
 
 def cpu_seconds(pids):
     out = subprocess.run(["ps", "-o", "pid=,time=", "-p", ",".join(map(str, pids))], capture_output=True, text=True).stdout
@@ -31,7 +31,7 @@ def cpu_seconds(pids):
     return total
 
 def shutdown(pids):
-    subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(1.5); bench.kill(pids); time.sleep(2)
+    subprocess.run(["pkill", "-x", "Oree"]); time.sleep(1.5); bench.kill(pids); time.sleep(2)
 
 def bfcache(configs, runs):
     for name, env in configs.items():

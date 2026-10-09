@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2E6C4F"/><stop offset="1" stop-color="#163A2A"/></linearGradient>
+    <radialGradient id="gl" cx="0.7" cy="0.4" r="0.55"><stop offset="0" stop-color="#F2C46E" stop-opacity="0.42"/><stop offset="1" stop-color="#F2C46E" stop-opacity="0"/></radialGradient>
+    <linearGradient id="mg" gradientUnits="userSpaceOnUse" x1="8" y1="0" x2="56" y2="0"><stop offset="0" stop-color="#DCEBDD"/><stop offset="1" stop-color="#F4C86F"/></linearGradient>
+    <clipPath id="ci"><circle cx="32" cy="32" r="24"/></clipPath>
+    <linearGradient id="hl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.16"/><stop offset="0.4" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  </defs>
+  <g clip-path="url(#sq)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#bg)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#gl)"/>
+    <g transform="translate(512 512) scale(11) translate(-32 -32)">
+      <path d="M8 7H15V57H8ZM16.2 7H21.52V57H16.2ZM22.98 7H27.03V57H22.98ZM28.81 7H31.88V57H28.81ZM34.06 7H36.4V57H34.06ZM39.05 7H40.83V57H39.05ZM44.07 7H45.42V57H44.07ZM49.37 7H50.4V57H49.37ZM55.22 7H56V57H55.22Z" fill="url(#mg)" clip-path="url(#ci)"/>
+    </g>
+    <rect x="100" y="100" width="824" height="824" fill="url(#hl)"/>
+  </g>
+  <rect x="101" y="101" width="822" height="822" rx="184" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="2"/>
+</svg>

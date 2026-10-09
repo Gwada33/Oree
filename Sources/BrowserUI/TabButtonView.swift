@@ -9,6 +9,7 @@ final class TabButtonView: NSView {
     private let spinner = SpinnerRingView()
     private let moon = NSImageView()
     private var isSleeping = false
+    private var isFrozen = false
     private var isLoading = false
     private var badgeLeading: NSLayoutConstraint!
     private var heightConstraint: NSLayoutConstraint!
@@ -168,10 +169,36 @@ final class TabButtonView: NSView {
     /// Sleeping tab: grey title, desaturated half-transparent favicon, moon.
     func setSleeping(_ sleeping: Bool) {
         isSleeping = sleeping
-        moon.isHidden = !sleeping
+        applyRestSymbol()
         badge.alphaValue = sleeping ? 0.5 : 1
         badge.layer?.filters = sleeping ? [Self.desaturate] : nil
         updateAppearance(animated: false)
+    }
+
+    /// Frozen tab (page paused but alive, resumes instantly): a small snowflake, favicon slightly dimmed.
+    func setFrozen(_ frozen: Bool) {
+        isFrozen = frozen
+        applyRestSymbol()
+        if !isSleeping { badge.alphaValue = frozen ? 0.75 : 1 }
+    }
+
+    private func applyRestSymbol() {
+        moon.isHidden = !(isSleeping || isFrozen)
+        moon.image = isSleeping
+            ? .oreeSymbol("moon", size: 10, weight: .medium) { Theme.muted }
+            : .oreeSymbol("snowflake", size: 10, weight: .medium) { Theme.muted }
+    }
+
+    /// Fires once the pointer has rested on a sleeping tab for a moment — the app wakes it ahead of the click.
+    var onHoverDwell: (() -> Void)?
+    private var dwellWork: DispatchWorkItem?
+
+    private func startDwell() {
+        dwellWork?.cancel()
+        guard isSleeping else { return }
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { if self?.isHovered == true { self?.onHoverDwell?() } } }
+        dwellWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 
     private static let desaturate: CIFilter = {
@@ -293,8 +320,8 @@ final class TabButtonView: NSView {
         guide.backgroundColor = Theme.cg(Theme.line, in: self)
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovered = true; updateAppearance(animated: true) }
-    override func mouseExited(with event: NSEvent) { isHovered = false; updateAppearance(animated: true) }
+    override func mouseEntered(with event: NSEvent) { isHovered = true; updateAppearance(animated: true); startDwell() }
+    override func mouseExited(with event: NSEvent) { isHovered = false; dwellWork?.cancel(); updateAppearance(animated: true) }
 
     private func updateAppearance(animated: Bool) {
         let target: (color: NSColor, opacity: Float) = isActive

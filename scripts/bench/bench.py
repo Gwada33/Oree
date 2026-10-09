@@ -98,7 +98,7 @@ def kill(pids):
         except ProcessLookupError: pass
 
 def hb_launch(urls_):
-    subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", os.path.expanduser("~/HyperBrowser/HyperBrowser.app"), "--args", "--automation"])
+    subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", os.path.expanduser("~/HyperBrowser/Oree.app"), "--args", "--automation"])
     time.sleep(5)
     ui = os.path.expanduser("~/HyperBrowser/scripts/ui.sh")
     for u in urls_:
@@ -107,7 +107,7 @@ def hb_launch(urls_):
         subprocess.run([ui, "key", "return"], capture_output=True); time.sleep(0.3)
     return None
 def hb_match(pid, cmd, before, ctx):
-    return pid not in before and ("HyperBrowser.app" in cmd or WEBKIT_HELPER.search(cmd) is not None)
+    return pid not in before and ("Oree.app" in cmd or WEBKIT_HELPER.search(cmd) is not None)
 
 def brave_launch(urls_):
     d = tempfile.mkdtemp(prefix="bench-brave-")

@@ -10,7 +10,7 @@ srv = bench.ThreadingHTTPServer(("127.0.0.1", bench.PORT), bench.Handler); threa
 for enabled in (False, True):
     subprocess.run(["defaults", "write", BID, "settings.backgroundCleanup", "-bool", "true" if enabled else "false"])
     before = {p for p, _, _ in bench.procs()}
-    subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/HyperBrowser.app", "--args", "--automation"])
+    subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/Oree.app", "--args", "--automation"])
     while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.2)
     time.sleep(1.5)
     for _ in range(10):
@@ -25,5 +25,5 @@ for enabled in (False, True):
     for wait in (5, 50, 90, 130):
         time.sleep(max(0, wait - (time.time() - t0))); row.append(f"{wait}s={mb()}")
     print(f"nettoyage {'ACTIVÉ ' if enabled else 'désactivé'} : actif {active} Mo | caché : " + "  ".join(row), "Mo"); sys.stdout.flush()
-    subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(1.5); bench.kill([p for p, _, c in bench.procs() if p not in before and ("HyperBrowser.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)
+    subprocess.run(["pkill", "-x", "Oree"]); time.sleep(1.5); bench.kill([p for p, _, c in bench.procs() if p not in before and ("Oree.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)
 subprocess.run(["defaults", "delete", BID, "settings.backgroundCleanup"])

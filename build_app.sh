@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_NAME="HyperBrowser"
+APP_NAME="Oree"
 EXECUTABLE_NAME="HyperBrowserApp"
 BUILD_DIR=".build/release"
 APP_DIR="${APP_NAME}.app"
@@ -26,9 +26,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Orée</string>
+    <string>Oree</string>
     <key>CFBundleDisplayName</key>
-    <string>Orée</string>
+    <string>Oree</string>
     <key>CFBundleIdentifier</key>
     <string>com.nolhan.hyperbrowser</string>
     <key>CFBundleVersion</key>
@@ -36,7 +36,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
     <key>CFBundleExecutable</key>
-    <string>HyperBrowser</string>
+    <string>Oree</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleIconFile</key>
@@ -95,20 +95,15 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-echo "==> Building app icon from Branding/AppIcon-1024.png..."
-# The artwork is drawn by Branding/make_logo.swift (run it again after changing the logo).
-ICON_PNG="$(cd "$(dirname "$0")" && pwd)/Branding/AppIcon-1024.png"
-if [ ! -f "$ICON_PNG" ]; then echo "missing $ICON_PNG — run: swift Branding/make_logo.swift Branding"; exit 1; fi
-
-ICONSET="/tmp/HyperBrowser.iconset"
-rm -rf "$ICONSET"
-mkdir -p "$ICONSET"
-for s in 16 32 128 256 512; do
-  sips -z "$s" "$s" "$ICON_PNG" --out "$ICONSET/icon_${s}x${s}.png" > /dev/null
-  d=$((s * 2))
-  sips -z "$d" "$d" "$ICON_PNG" --out "$ICONSET/icon_${s}x${s}@2x.png" > /dev/null
-done
-iconutil -c icns "$ICONSET" -o "$APP_DIR/Contents/Resources/AppIcon.icns"
+echo "==> Building app icon from Branding/AppIcon.appiconset..."
+# Source art: design/AppIcon.svg (full) and design/AppIcon-small.svg (4 bars, used up to 64 px).
+# The PNGs are rendered with rsvg-convert (sips renders SVG gradients badly): see design/README in the commit.
+ICONSET="$(cd "$(dirname "$0")" && pwd)/Branding/AppIcon.appiconset"
+if [ ! -f "$ICONSET/icon_512x512@2x.png" ]; then echo "missing $ICONSET — render design/AppIcon.svg with rsvg-convert"; exit 1; fi
+ICONSET_TMP="${TMPDIR:-/tmp}/Orée.iconset"
+rm -rf "$ICONSET_TMP"; mkdir -p "$ICONSET_TMP"
+cp "$ICONSET"/icon_*.png "$ICONSET_TMP/"
+iconutil -c icns "$ICONSET_TMP" -o "$APP_DIR/Contents/Resources/AppIcon.icns"
 
 echo "==> Code signing (ad-hoc)..."
 codesign --force --sign - --identifier com.nolhan.hyperbrowser.downloader "$APP_DIR/Contents/MacOS/OreeDownloader"

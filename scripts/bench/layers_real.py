@@ -16,7 +16,7 @@ FIX = """(() => { let n = 0; const s = document.createElement('style'); s.textCo
   return n; })()"""
 for site in SITES:
     before = {p for p, _, _ in bench.procs()}
-    subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/HyperBrowser.app", "--args", "--automation"])
+    subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/Oree.app", "--args", "--automation"])
     while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.2)
     time.sleep(1.5)
     for _ in range(10):
@@ -35,5 +35,5 @@ for site in SITES:
     fixed = ui("eval", FIX); time.sleep(8)
     m1 = measure()
     print(f"{site:34s} will-change: {info.get('willChange'):>4}, translateZ(0): {info.get('identity3d'):>4} sur {info.get('elements'):>5} éléments | page+GPU {m0:4d} Mo -> {m1:4d} Mo après neutralisation"); sys.stdout.flush()
-    subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(1.5)
-    bench.kill([p for p, _, c in bench.procs() if p not in before and ("HyperBrowser.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)
+    subprocess.run(["pkill", "-x", "Oree"]); time.sleep(1.5)
+    bench.kill([p for p, _, c in bench.procs() if p not in before and ("Oree.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)

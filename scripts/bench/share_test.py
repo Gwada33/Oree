@@ -10,7 +10,7 @@ for name, env in [("processus séparés (défaut)", {}), ("un seul processus par
     for run in (1, 2):
         before = {p for p, _, _ in bench.procs()}
         full = {"HB_FRESH_SESSION": "1", **env}
-        subprocess.run(["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in full.items()] , []) + [f"{HB}/HyperBrowser.app", "--args", "--automation"])
+        subprocess.run(["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in full.items()] , []) + [f"{HB}/Oree.app", "--args", "--automation"])
         while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.1)
         time.sleep(1.5)
         for _ in range(10):
@@ -19,6 +19,6 @@ for name, env in [("processus séparés (défaut)", {}), ("un seul processus par
         for u in SITES:
             ui("action", "newTabAction"); time.sleep(0.5); ui("type", u.replace("https://", "")); ui("key", "return"); time.sleep(6)
         time.sleep(15)
-        pids = [p for p, _, cmd in bench.procs() if p not in before and ("HyperBrowser.app" in cmd or bench.WEBKIT_HELPER.search(cmd))]
+        pids = [p for p, _, cmd in bench.procs() if p not in before and ("Oree.app" in cmd or bench.WEBKIT_HELPER.search(cmd))]
         print(json.dumps({"config": name, "run": run, "mem_mb": round(bench.footprint_mb(pids)), "procs": len(pids), "webkit": ui("webkit").split(" ")[0]})); sys.stdout.flush()
-        subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(1.5); bench.kill(pids); time.sleep(2)
+        subprocess.run(["pkill", "-x", "Oree"]); time.sleep(1.5); bench.kill(pids); time.sleep(2)

@@ -23,7 +23,7 @@ def ui(*a): return subprocess.run([UI, *a], capture_output=True, text=True).stdo
 def run(cfg):
     setting("settings.fingerprintProtection", cfg["fp"]); setting("settings.adBlockEnabled", cfg["ads"])
     env = {"HB_FRESH_SESSION": "1", **cfg["env"]}
-    subprocess.run(["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in env.items()], []) + [f"{HB}/HyperBrowser.app", "--args", "--automation"])
+    subprocess.run(["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in env.items()], []) + [f"{HB}/Oree.app", "--args", "--automation"])
     while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.1)
     time.sleep(1.5)
     ui("front"); time.sleep(0.5)   # a scripted launch is occluded -> page "hidden" -> throttled
@@ -36,7 +36,7 @@ def run(cfg):
         raise SystemExit("page never became visible: results would be meaningless")
     ui("eval", "document.body.focus(); runScroll(4000); 1"); time.sleep(6)
     res = json.loads(ui("eval", "JSON.stringify(window.__res)") or "null")
-    subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(2.5)
+    subprocess.run(["pkill", "-x", "Oree"]); time.sleep(2.5)
     return res
 
 if __name__ == "__main__":

@@ -69,6 +69,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var privateByDefault: Bool { didSet { settings.privateByDefault = privateByDefault } }
     @Published var autoplayAllowed: Bool { didSet { settings.autoplayMediaAllowed = autoplayAllowed } }
     @Published var autoSuspendMinutes: Int { didSet { settings.autoSuspendMinutes = autoSuspendMinutes } }
+    @Published var freezeAfterSeconds: Int { didSet { settings.freezeAfterSeconds = freezeAfterSeconds } }
     @Published var httpsOnly: Bool { didSet { settings.httpsOnly = httpsOnly } }
     @Published var urlCleaning: Bool { didSet { settings.urlCleaning = urlCleaning } }
     @Published var fingerprintProtection: Bool { didSet { settings.fingerprintProtection = fingerprintProtection } }
@@ -125,6 +126,7 @@ final class SettingsViewModel: ObservableObject {
         privateByDefault = current.privateByDefault
         autoplayAllowed = current.autoplayMediaAllowed
         autoSuspendMinutes = current.autoSuspendMinutes
+        freezeAfterSeconds = current.freezeAfterSeconds
         reloadPermissions()
         reloadLogins()
         refreshDefaultBrowser()
@@ -390,7 +392,10 @@ public struct SettingsView: View {
 
     private let autoSuspendOptions: [(label: String, minutes: Int)] = [
         ("5 minutes", 5), ("10 minutes", 10), ("20 minutes", 20),
-        ("30 minutes", 30), ("1 heure", 60), ("Jamais", 0),
+        ("30 minutes", 30), ("45 minutes", 45), ("1 heure", 60), ("Jamais", 0),
+    ]
+    private let freezeOptions: [(label: String, seconds: Int)] = [
+        ("1 minute", 60), ("2 minutes", 120), ("5 minutes", 300), ("10 minutes", 600), ("Jamais", 0),
     ]
 
     @MainActor
@@ -501,7 +506,15 @@ public struct SettingsView: View {
                 Text("Utilise nettement plus de mémoire quand vous naviguez beaucoup. Pris en compte au prochain lancement.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Picker("Suspendre les onglets inactifs après", selection: $model.autoSuspendMinutes) {
+                Picker("Mettre en pause les onglets cachés après", selection: $model.freezeAfterSeconds) {
+                    ForEach(freezeOptions, id: \.seconds) { option in
+                        Text(option.label).tag(option.seconds)
+                    }
+                }
+                Text("En pause : la page reste en mémoire mais ne calcule plus ; elle reprend instantanément. Un onglet avec une saisie non enregistrée n'est jamais déchargé, seulement mis en pause.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("Décharger les onglets inactifs après", selection: $model.autoSuspendMinutes) {
                     ForEach(autoSuspendOptions, id: \.minutes) { option in
                         Text(option.label).tag(option.minutes)
                     }

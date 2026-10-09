@@ -12,7 +12,7 @@ live = lambda: int(ui("state").split("liveTabs=")[1].split()[0])
 
 srv = bench.ThreadingHTTPServer(("127.0.0.1", bench.PORT), bench.Handler)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
-subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/HyperBrowser.app", "--args", "--automation"])
+subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/Oree.app", "--args", "--automation"])
 while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.1)
 ui("front"); time.sleep(1)
 base_live = live()
@@ -22,7 +22,7 @@ live_open = live()
 ui("action", "closeActiveTabAction"); time.sleep(1)
 b1 = beats(); time.sleep(3); after = beats() - b1
 live_closed = live()
-subprocess.run(["pkill", "-x", "HyperBrowser"])
+subprocess.run(["pkill", "-x", "Oree"])
 print(f"heartbeats while open (2 s): {running}   after closing (3 s): {after}")
 print(f"live tabs: before={base_live} open={live_open} closed={live_closed}")
 ok = running > 3 and after == 0 and live_closed == base_live

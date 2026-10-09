@@ -42,6 +42,7 @@ enum StartPage {
         <meta charset="utf-8">
         <meta name="color-scheme" content="light dark">
         <title>Nouvel onglet</title>
+        <link rel="icon" href="data:image/svg+xml,\(markFavicon)">
         <style>\(css(hue: input.hue))</style>
         </head>
         <body class="bg-\(background.rawValue)\(calm)">
@@ -114,6 +115,9 @@ enum StartPage {
     }
 
     private static func hueClass(_ host: String) -> String { "h-\(HomeFormatting.hue(forHost: host).rawValue)" }
+
+    /// The 4-bar Orée mark as an SVG favicon (URL-encoded for a data: URI).
+    private static let markFavicon = "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='6 6 52 52'%3E%3Cdefs%3E%3ClinearGradient id='g' gradientUnits='userSpaceOnUse' x1='8' y1='0' x2='56' y2='0'%3E%3Cstop offset='0' stop-color='%232F7354'/%3E%3Cstop offset='1' stop-color='%23D9A441'/%3E%3C/linearGradient%3E%3CclipPath id='c'%3E%3Ccircle cx='32' cy='32' r='24'/%3E%3C/clipPath%3E%3C/defs%3E%3Cpath d='M8 7H21V57H8ZM25.93 7H33.47V57H25.93ZM40.11 7H44.49V57H40.11ZM53.46 7H56V57H53.46Z' fill='url(%23g)' clip-path='url(%23c)'/%3E%3C/svg%3E"
 
     /// 24-grid stroke icons for the space chips.
     private static func icon(_ icon: SpaceIcon) -> String {

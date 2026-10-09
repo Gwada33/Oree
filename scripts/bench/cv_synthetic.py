@@ -8,7 +8,7 @@ srv = bench.ThreadingHTTPServer(("127.0.0.1", bench.PORT), bench.Handler); threa
 for run in range(2):
     for cv in (False, True):
         before = {p for p, _, _ in bench.procs()}
-        subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/HyperBrowser.app", "--args", "--automation"])
+        subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/Oree.app", "--args", "--automation"])
         while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.2)
         time.sleep(1.5)
         for _ in range(10):
@@ -20,5 +20,5 @@ for run in range(2):
         big = max([p for p, _, c in bench.procs() if p not in before and "WebContent" in c], key=lambda p: bench.footprint_mb([p]))
         ms = ui("eval", "(() => { const t = performance.now(); document.body.style.zoom = 1.001; document.body.offsetHeight; document.body.style.zoom = 1; document.body.offsetHeight; return Math.round(performance.now() - t); })()")
         print(f"run {run+1} {'AVEC' if cv else 'SANS'} content-visibility : {round(bench.footprint_mb([big]))} Mo, relayout complet {ms} ms"); sys.stdout.flush()
-        subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(1.5)
-        bench.kill([p for p, _, c in bench.procs() if p not in before and ("HyperBrowser.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)
+        subprocess.run(["pkill", "-x", "Oree"]); time.sleep(1.5)
+        bench.kill([p for p, _, c in bench.procs() if p not in before and ("Oree.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)

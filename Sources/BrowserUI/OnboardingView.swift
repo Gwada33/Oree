@@ -64,6 +64,9 @@ final class OnboardingView: NSView {
 
     private func render() {
         content.arrangedSubviews.forEach { content.removeArrangedSubview($0); $0.removeFromSuperview() }
+        let brand = NSStackView(views: [OreeMark(size: 22), oreeLabel("Orée", font: Theme.sans(18, .bold), color: Theme.text)])
+        brand.orientation = .horizontal; brand.spacing = 8; brand.alignment = .centerY
+        content.addArrangedSubview(brand)
         let dots = oreeLabel("Étape \(step + 1) sur 3", font: Theme.sans(12, .semibold), color: Theme.muted)
         content.addArrangedSubview(dots)
         switch step {

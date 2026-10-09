@@ -11,7 +11,7 @@ configs = [("défaut", {}), ("tas serré", TIGHT)] * int(sys.argv[1] if len(sys.
 for name, env in configs:
     before = {p for p, _, _ in bench.procs()}
     full = {"HB_FRESH_SESSION": "1", **env}
-    subprocess.run(["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in full.items()], []) + [f"{HB}/HyperBrowser.app", "--args", "--automation"])
+    subprocess.run(["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in full.items()], []) + [f"{HB}/Oree.app", "--args", "--automation"])
     while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.2)
     time.sleep(1.5)
     for _ in range(10):
@@ -27,5 +27,5 @@ for name, env in configs:
     ops = ui("eval", "window.__ops")
     if not ops.isdigit(): print(name, "page state lost:", ui("state")[:120]); ops = "0"
     print(f"{name:10s} mémoire de la page : moyenne {statistics.mean(samples):4.0f} Mo, pic {max(samples):4.0f} Mo | débit : {int(ops)//1000000:>5} M objets sur 20 s"); sys.stdout.flush()
-    subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(1.5)
-    bench.kill([p for p, _, c in bench.procs() if p not in before and ("HyperBrowser.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)
+    subprocess.run(["pkill", "-x", "Oree"]); time.sleep(1.5)
+    bench.kill([p for p, _, c in bench.procs() if p not in before and ("Oree.app" in c or bench.WEBKIT_HELPER.search(c))]); time.sleep(2)

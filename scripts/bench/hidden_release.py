@@ -9,7 +9,7 @@ ui = lambda *a: subprocess.run([UI, *a], capture_output=True, text=True).stdout.
 SITE = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "www.youtube.com"
 AUTO = "--auto" in sys.argv   # rely on the app's own cleanup instead of forcing one
 before = {p for p, _, _ in bench.procs()}
-subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/HyperBrowser.app", "--args", "--automation"])
+subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", f"{HB}/Oree.app", "--args", "--automation"])
 while subprocess.run([UI, "state"], capture_output=True).returncode: time.sleep(0.2)
 time.sleep(1.5)
 for _ in range(10):
@@ -28,4 +28,4 @@ for wait in ((5, 30, 60, 90, 120) if AUTO else (5, 30, 60, 90)):
 if not AUTO:
     print("GC forcé :", ui("gc")); time.sleep(10)
     print(f"10 s après le GC     : {mb()} Mo")
-subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(1.5); bench.kill([p for p, _, c in bench.procs() if p not in before and ("HyperBrowser.app" in c or bench.WEBKIT_HELPER.search(c))])
+subprocess.run(["pkill", "-x", "Oree"]); time.sleep(1.5); bench.kill([p for p, _, c in bench.procs() if p not in before and ("Oree.app" in c or bench.WEBKIT_HELPER.search(c))])

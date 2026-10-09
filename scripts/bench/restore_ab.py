@@ -11,7 +11,7 @@ TABS = 8
 
 def launch(db, eager):
     env = {"HB_DB_PATH": db, **({"HB_EAGER_RESTORE": "1"} if eager else {})}
-    args = ["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in env.items()], []) + [f"{HB}/HyperBrowser.app", "--args", "--automation"]
+    args = ["open", "-g", "-n"] + sum([["--env", f"{k}={v}"] for k, v in env.items()], []) + [f"{HB}/Oree.app", "--args", "--automation"]
     subprocess.run(args)
 
 def ready(timeout=30):
@@ -31,7 +31,7 @@ def run(db, eager):
     time.sleep(20)
     with bench.lock:
         loaded = sum(1 for _, k, d in bench.events if k == "beacon" and d.get("kind") == "done")
-    mine = [p for p, _, cmd in bench.procs() if p not in before and ("HyperBrowser.app" in cmd or bench.WEBKIT_HELPER.search(cmd))]
+    mine = [p for p, _, cmd in bench.procs() if p not in before and ("Oree.app" in cmd or bench.WEBKIT_HELPER.search(cmd))]
     mem = bench.footprint_mb(mine)
     bench.kill(mine); time.sleep(3)
     return {"mode": "eager" if eager else "lazy", "ready_s": round(t_ready, 2), "pages_loaded": loaded, "mem_mb": round(mem), "procs": len(mine)}
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     db = tempfile.mktemp(suffix=".sqlite")
     # Let the app create the schema once, then seed the saved session.
-    launch(db, False); ready(); time.sleep(2); subprocess.run(["pkill", "-x", "HyperBrowser"]); time.sleep(3)
+    launch(db, False); ready(); time.sleep(2); subprocess.run(["pkill", "-x", "Oree"]); time.sleep(3)
     con = sqlite3.connect(db)
     for i, url in enumerate(bench.urls(TABS)):
         con.execute("INSERT INTO tabSessions (orderIndex, url, isPrivate, interactionState, updatedAt) VALUES (?,?,0,NULL,datetime('now'))", (i, url))
