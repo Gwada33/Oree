@@ -11,86 +11,86 @@
    "launch": [
     {
      "ok": true,
-     "first_request_s": 0.8738369941711426,
-     "first_done_s": 1.2717249393463135,
+     "first_request_s": 0.9248256683349609,
+     "first_done_s": 1.372276782989502,
      "js": {
       "id": "0",
       "kind": "done",
-      "domMs": 40,
-      "fibMs": 9,
-      "sortMs": 191,
-      "jsonMs": 42,
-      "strMs": 10,
-      "canvasMs": 77,
-      "total": 369,
+      "domMs": 70,
+      "fibMs": 19,
+      "sortMs": 241,
+      "jsonMs": 33,
+      "strMs": 6,
+      "canvasMs": 52,
+      "total": 421,
       "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
      }
     },
     {
      "ok": true,
-     "first_request_s": 0.9092831611633301,
-     "first_done_s": 1.3048701286315918,
+     "first_request_s": 0.8983709812164307,
+     "first_done_s": 1.3032450675964355,
      "js": {
       "id": "0",
       "kind": "done",
-      "domMs": 41,
-      "fibMs": 12,
-      "sortMs": 217,
-      "jsonMs": 34,
-      "strMs": 7,
-      "canvasMs": 62,
-      "total": 373,
+      "domMs": 63,
+      "fibMs": 14,
+      "sortMs": 172,
+      "jsonMs": 43,
+      "strMs": 9,
+      "canvasMs": 76,
+      "total": 377,
       "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
      }
     },
     {
      "ok": true,
-     "first_request_s": 0.888218879699707,
-     "first_done_s": 1.1641590595245361,
-     "js": {
-      "id": "0",
-      "kind": "done",
-      "domMs": 38,
-      "fibMs": 10,
-      "sortMs": 129,
-      "jsonMs": 22,
-      "strMs": 5,
-      "canvasMs": 49,
-      "total": 253,
-      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
-     }
-    },
-    {
-     "ok": true,
-     "first_request_s": 0.8776259422302246,
-     "first_done_s": 1.145493984222412,
-     "js": {
-      "id": "0",
-      "kind": "done",
-      "domMs": 38,
-      "fibMs": 9,
-      "sortMs": 129,
-      "jsonMs": 21,
-      "strMs": 5,
-      "canvasMs": 45,
-      "total": 247,
-      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
-     }
-    },
-    {
-     "ok": true,
-     "first_request_s": 0.8887910842895508,
-     "first_done_s": 1.1539182662963867,
+     "first_request_s": 0.8570661544799805,
+     "first_done_s": 1.267035961151123,
      "js": {
       "id": "0",
       "kind": "done",
       "domMs": 36,
+      "fibMs": 25,
+      "sortMs": 172,
+      "jsonMs": 58,
+      "strMs": 10,
+      "canvasMs": 81,
+      "total": 382,
+      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
+     }
+    },
+    {
+     "ok": true,
+     "first_request_s": 0.9261291027069092,
+     "first_done_s": 1.342621088027954,
+     "js": {
+      "id": "0",
+      "kind": "done",
+      "domMs": 55,
+      "fibMs": 13,
+      "sortMs": 193,
+      "jsonMs": 43,
+      "strMs": 10,
+      "canvasMs": 73,
+      "total": 387,
+      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
+     }
+    },
+    {
+     "ok": true,
+     "first_request_s": 0.9059820175170898,
+     "first_done_s": 1.3137080669403076,
+     "js": {
+      "id": "0",
+      "kind": "done",
+      "domMs": 39,
       "fibMs": 9,
-      "sortMs": 129,
-      "jsonMs": 23,
-      "strMs": 5,
-      "canvasMs": 43,
-      "total": 245,
+      "sortMs": 191,
+      "jsonMs": 42,
+      "strMs": 13,
+      "canvasMs": 81,
+      "total": 375,
       "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
      }
     }
@@ -202,86 +202,86 @@
    "launch": [
     {
      "ok": true,
-     "first_request_s": 1.4766719341278076,
-     "first_done_s": 1.8207957744598389,
+     "first_request_s": 1.3868858814239502,
+     "first_done_s": 1.7682709693908691,
      "js": {
       "id": "0",
       "kind": "done",
-      "domMs": 52,
-      "fibMs": 12,
-      "sortMs": 163,
-      "jsonMs": 23,
-      "strMs": 5,
+      "domMs": 46,
+      "fibMs": 13,
+      "sortMs": 226,
+      "jsonMs": 25,
+      "strMs": 6,
       "canvasMs": 47,
-      "total": 302,
+      "total": 363,
       "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
      }
     },
     {
      "ok": true,
-     "first_request_s": 1.5050270557403564,
-     "first_done_s": 1.8337290287017822,
+     "first_request_s": 1.6712498664855957,
+     "first_done_s": 2.0109140872955322,
      "js": {
       "id": "0",
       "kind": "done",
-      "domMs": 54,
-      "fibMs": 14,
-      "sortMs": 165,
-      "jsonMs": 23,
-      "strMs": 5,
-      "canvasMs": 44,
-      "total": 305,
-      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
-     }
-    },
-    {
-     "ok": true,
-     "first_request_s": 1.4865520000457764,
-     "first_done_s": 1.8134641647338867,
-     "js": {
-      "id": "0",
-      "kind": "done",
-      "domMs": 51,
-      "fibMs": 12,
-      "sortMs": 165,
-      "jsonMs": 24,
-      "strMs": 5,
-      "canvasMs": 46,
-      "total": 303,
-      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
-     }
-    },
-    {
-     "ok": true,
-     "first_request_s": 1.491455078125,
-     "first_done_s": 1.8268580436706543,
-     "js": {
-      "id": "0",
-      "kind": "done",
-      "domMs": 62,
-      "fibMs": 12,
-      "sortMs": 164,
-      "jsonMs": 22,
+      "domMs": 65,
+      "fibMs": 15,
+      "sortMs": 161,
+      "jsonMs": 21,
       "strMs": 5,
       "canvasMs": 45,
-      "total": 310,
+      "total": 312,
       "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
      }
     },
     {
      "ok": true,
-     "first_request_s": 1.448744773864746,
-     "first_done_s": 1.7876217365264893,
+     "first_request_s": 1.396878719329834,
+     "first_done_s": 1.7158007621765137,
      "js": {
       "id": "0",
       "kind": "done",
-      "domMs": 55,
-      "fibMs": 12,
+      "domMs": 42,
+      "fibMs": 10,
       "sortMs": 168,
       "jsonMs": 24,
+      "strMs": 6,
+      "canvasMs": 45,
+      "total": 295,
+      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
+     }
+    },
+    {
+     "ok": true,
+     "first_request_s": 1.372534990310669,
+     "first_done_s": 1.6806678771972656,
+     "js": {
+      "id": "0",
+      "kind": "done",
+      "domMs": 42,
+      "fibMs": 11,
+      "sortMs": 164,
+      "jsonMs": 21,
       "strMs": 5,
-      "canvasMs": 50,
-      "total": 314,
+      "canvasMs": 46,
+      "total": 289,
+      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
+     }
+    },
+    {
+     "ok": true,
+     "first_request_s": 1.3394451141357422,
+     "first_done_s": 1.6463518142700195,
+     "js": {
+      "id": "0",
+      "kind": "done",
+      "domMs": 40,
+      "fibMs": 10,
+      "sortMs": 162,
+      "jsonMs": 24,
+      "strMs": 5,
+      "canvasMs": 45,
+      "total": 286,
       "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
      }
     }

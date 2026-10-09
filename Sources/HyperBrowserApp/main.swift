@@ -4,6 +4,8 @@ import BrowserCore
 import BrowserUI
 
 LaunchTrace.mark("main.swift entered")
+// First WebContent process starts now, in parallel with building the window.
+ProcessPoolFactory.warmUpFirstProcess()
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -11,8 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBuilder: MenuBuilder?
     let contentBlocker = ContentBlockerManager()
 
-    /// Links that arrive before the window exists (Orée launched *by* clicking a link elsewhere).
+    /// Links that arrive before the window exists (Orée launched *by* clicking a link elsewhere) or before the session is back.
     private var pendingURLs: [URL] = []
+    private var sessionReady = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         LaunchTrace.mark("didFinishLaunching")
@@ -37,10 +40,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (`open -g`, scripts). Forcing it stole focus from whatever you were doing.
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
+        controller.window?.displayIfNeeded()   // paint the empty window now; the tabs follow
         LaunchTrace.mark("window shown")
-        controller.showOnboardingIfNeeded()
-        pendingURLs.forEach { controller.openExternal($0) }
-        pendingURLs.removeAll()
+
+        // The session comes back once the window is already visible. Links that launched us open after it.
+        DispatchQueue.main.async { [self] in
+            controller.restoreSession(openFreshTab: pendingURLs.isEmpty) { [self] in
+                sessionReady = true
+                pendingURLs.forEach { controller.openExternal($0) }
+                pendingURLs.removeAll()
+                controller.ensureTabExists()
+                controller.showOnboardingIfNeeded()
+            }
+        }
 
         // After the window is up: applies cached/baseline rules at once, then
         // refreshes the filter lists in the background.
@@ -53,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Links from other apps (when HyperBrowser is the default browser) and .html files.
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard let browserController else { pendingURLs += urls; return }
+        guard sessionReady, let browserController else { pendingURLs += urls; return }
         for url in urls { browserController.openExternal(url) }
     }
 

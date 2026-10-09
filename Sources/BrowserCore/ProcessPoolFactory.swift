@@ -11,6 +11,18 @@ import WebKit
 /// `WKProcessPool()` instead of crashing.
 @MainActor
 public enum ProcessPoolFactory {
+    /// The pool of normal (non-private) tabs. Created at the very start of the launch, so WebKit can start the
+    /// first WebContent process while the window is still being built, instead of after.
+    public static let launchPool: WKProcessPool = makeLeanProcessPool()
+
+    /// Starts that first WebContent process now (private WebKit call, guarded: missing = no gain, no harm).
+    /// It is the process the first tab needs anyway, so nothing is wasted.
+    public static func warmUpFirstProcess() {
+        let selector = NSSelectorFromString("_warmInitialProcess")
+        guard launchPool.responds(to: selector) else { return }
+        _ = launchPool.perform(selector)
+    }
+
     public static func makeLeanProcessPool() -> WKProcessPool {
         guard
             let configClass = NSClassFromString("_WKProcessPoolConfiguration") as? NSObject.Type,

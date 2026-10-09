@@ -13,7 +13,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private let contentBlocker: ContentBlockerManager
     private nonisolated(unsafe) var settingsObserver: NSObjectProtocol?
-    private let processPool = ProcessPoolFactory.makeLeanProcessPool()
+    private let processPool = ProcessPoolFactory.launchPool
     private let privateProcessPool = ProcessPoolFactory.makeLeanProcessPool()
     private var tabs: [Tab] = []
     private var activeTabID: UUID?
@@ -169,19 +169,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         startMemoryBudgetTimer()
         refreshSpaceUI(animated: false)
         startMemoryPressureMonitor()
-        // Extensions must be loaded before the first pages, or their content scripts miss them.
-        if extensionManager.hasEnabledExtensions {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.extensionManager.loadAll()
-                self.restoreSessionOrOpenFreshTab()
-                LaunchTrace.mark("session restored (after extensions)")
-            }
-        } else {
-            restoreSessionOrOpenFreshTab()
-            LaunchTrace.mark("session restored")
-        }
-
         contentBlocker.onRuleListsChanged = { [weak self] _ in self?.applyRuleLists() }
         // Settings write straight to UserDefaults; re-evaluate whatever
         // depends on them (e.g. the ad-block toggle) as soon as one changes.
@@ -197,6 +184,32 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     public required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// Brings the previous session back (or opens a first tab). Called once the window is already on screen, so
+    /// the window appears first and its tabs follow. Extensions load before the first pages, or their content
+    /// scripts would miss them.
+    /// - Parameter openFreshTab: false when links are about to be opened anyway (Orée launched *by* a link).
+    public func restoreSession(openFreshTab: Bool = true, completion: @escaping @MainActor () -> Void) {
+        let restore: @MainActor () -> Void = { [weak self] in
+            guard let self else { return }
+            self.restoreSessionOrOpenFreshTab(openFreshTab: openFreshTab)
+            LaunchTrace.mark("session restored")
+            completion()
+        }
+        if extensionManager.hasEnabledExtensions {
+            Task { @MainActor [weak self] in
+                await self?.extensionManager.loadAll()
+                restore()
+            }
+        } else {
+            restore()
+        }
+    }
+
+    /// A window must never stay empty (e.g. a launch link that could not be opened).
+    public func ensureTabExists() {
+        if tabs.isEmpty { newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault) }
+    }
 
     private var automation: AutomationServer?
     private var lastMemoryPressure: Date?
@@ -2028,18 +2041,26 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     @discardableResult
     func newTab(urlString: String?, isPrivate: Bool) -> Tab {
         let config = makeConfiguration(isPrivate: isPrivate)
+        LaunchTrace.mark("newTab: configuration made")
         let tab = Tab(configuration: config, isPrivate: isPrivate)
+        LaunchTrace.mark("newTab: tab + web view created")
         tab.spaceIndex = currentSpace
         attachTab(tab)
+        LaunchTrace.mark("newTab: attached")
         let homepage = SettingsStore.shared.customHomepageURL
         if let urlString {
             load(urlString: urlString, in: tab)
         } else if !homepage.isEmpty {
             load(urlString: homepage, in: tab)
         } else {
-            tab.webView?.loadHTMLString(StartPage.render(homeInput(for: tab)), baseURL: StartPage.baseURL)
+            let input = homeInput(for: tab)
+            LaunchTrace.mark("newTab: home data read")
+            let html = StartPage.render(input)
+            LaunchTrace.mark("newTab: home html rendered")
+            tab.webView?.loadHTMLString(html, baseURL: StartPage.baseURL)
         }
         selectTab(tab)
+        LaunchTrace.mark("newTab: selected")
         saveSession()
         return tab
     }
@@ -2742,10 +2763,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// never touch the saved session.
     private let isFreshSession = ProcessInfo.processInfo.environment["HB_FRESH_SESSION"] == "1"
 
-    private func restoreSessionOrOpenFreshTab() {
+    private func restoreSessionOrOpenFreshTab(openFreshTab: Bool = true) {
         let snapshots = isFreshSession ? [] : ((try? sessionRepo.load()) ?? [])
         guard !snapshots.isEmpty else {
-            newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault)
+            if openFreshTab { newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault) }
             return
         }
 
