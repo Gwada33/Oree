@@ -61,4 +61,22 @@
       setTimeout(tick, i === 0 ? 700 : i > word.length ? 400 : 180);
     })();
   }
+
+  // Téléchargement : le bouton pointe déjà vers le dernier .dmg (adresse stable de GitHub). On affiche en plus
+  // le numéro, la date et la taille de la dernière version, sans rien casser si l'API est indisponible.
+  var fine = document.getElementById('dl-fine');
+  if (fine && window.fetch) {
+    fetch('https://api.github.com/repos/Gwada33/oree/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (rel) {
+        if (!rel || !rel.tag_name) return;
+        var dmg = (rel.assets || []).filter(function (a) { return /\.dmg$/i.test(a.name); })[0];
+        var parts = ['Version ' + rel.tag_name.replace(/^v/, '')];
+        if (rel.published_at) parts.push(new Date(rel.published_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }));
+        if (dmg) parts.push(Math.round(dmg.size / 1048576) + ' Mo');
+        parts.push('Apple silicon (M1 et suivants)');
+        fine.textContent = parts.join(' · ');
+      })
+      .catch(function () {});
+  }
 })();

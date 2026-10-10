@@ -1,48 +1,65 @@
 name: App — publier une version
 
-# Pousse un tag « v1.0.0 » pour construire Oree.app et l'attacher à une release GitHub.
+# Construit Oree.app, fabrique le zip (mise à jour intégrée) et le DMG (premier téléchargement), puis crée la release.
+#  - à la main : ./scripts/release.sh patch   (pousse le tag vX.Y.Z → ce flux démarre)
+#  - planifié  : scheduled-release.yml l'appelle (un tag poussé avec le jeton de GitHub ne déclenche pas d'autre flux)
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag à publier (ex. v1.0.3)"
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag existant à (re)publier (ex. v1.0.3)"
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-tags: true
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - name: Pont Rust (blocage de pubs)
         run: ./Rust/build_bridge.sh
-      - name: Numéro de version = tag (v1.0.2 → 1.0.2)
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: echo "${GITHUB_REF_NAME#v}" > VERSION
+      - name: Numéro de version = tag (v1.0.3 → 1.0.3)
+        run: echo "${TAG#v}" > VERSION
       - name: Construire et signer (ad-hoc)
         run: ./build_app.sh
-      - name: Archiver (zip pour la mise à jour intégrée)
+      - name: Zip (mise à jour intégrée) + empreinte
         run: |
           ditto -c -k --keepParent Oree.app Oree-macOS-arm64.zip
           shasum -a 256 Oree-macOS-arm64.zip | tee Oree-macOS-arm64.zip.sha256
-      - name: Image disque (.dmg avec image de fond)
+      - name: Image disque (.dmg avec image de fond) + empreinte
         run: |
           pip3 install --break-system-packages dmgbuild
           ./scripts/make_dmg.sh
           mv Oree-*.dmg Oree-macOS-arm64.dmg
           shasum -a 256 Oree-macOS-arm64.dmg | tee Oree-macOS-arm64.dmg.sha256
+      - name: Notes de version (le message du tag)
+        run: git tag -l --format='%(contents)' "$TAG" | sed '1,2d' > notes.md; cat notes.md
       - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
         with:
+          tag_name: ${{ env.TAG }}
+          name: Orée ${{ env.TAG }}
+          body_path: notes.md
           files: |
             Oree-macOS-arm64.zip
             Oree-macOS-arm64.zip.sha256
             Oree-macOS-arm64.dmg
             Oree-macOS-arm64.dmg.sha256
-          generate_release_notes: true
-      - uses: actions/upload-artifact@v4
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        with:
-          name: Oree-macOS-arm64
-          path: Oree-macOS-arm64.zip

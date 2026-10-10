@@ -1,0 +1,67 @@
+name: App — publication planifiée
+
+# Chaque vendredi à 16:00 UTC (et à la demande) : s'il y a au moins `min_commits` changements depuis la dernière
+# version ET que la branche main passe ses tests, une version « patch » est publiée toute seule.
+# Pour changer le moment : modifiez la ligne `cron` (https://crontab.guru). À la demande : onglet Actions → Lancer.
+on:
+  schedule:
+    - cron: "0 16 * * 5"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Type de version"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      min_commits:
+        description: "Nombre minimum de changements depuis la dernière version"
+        default: "3"
+      force:
+        description: "Publier même s'il y a moins de changements (et sans attendre les tests)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Faut-il publier ?
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMP: ${{ inputs.bump || 'patch' }}
+          MIN: ${{ inputs.min_commits || '3' }}
+          FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          COUNT="$(./scripts/release-notes.sh --count)"
+          echo "Changements depuis la dernière version : $COUNT (minimum $MIN)"
+          echo "release=false" >> "$GITHUB_OUTPUT"
+          if [ "$FORCE" != "true" ]; then
+            [ "$COUNT" -ge "$MIN" ] || { echo "Pas assez de changements : rien à publier."; exit 0; }
+            STATE="$(gh run list --workflow app-ci.yml --branch main --limit 1 --json conclusion --jq '.[0].conclusion // "none"')"
+            [ "$STATE" = "success" ] || [ "$STATE" = "none" ] || { echo "Les tests de main ne passent pas ($STATE) : on ne publie pas."; exit 0; }
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          ./scripts/release.sh "$BUMP" --ci
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "tag=v$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: decide
+    if: needs.decide.outputs.release == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.decide.outputs.tag }}
+    permissions:
+      contents: write
