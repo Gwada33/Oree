@@ -1,17 +1,18 @@
 #!/bin/bash
 # Publie une version de bout en bout :
-#   ./scripts/release.sh patch|minor|major|X.Y.Z [--dry-run] [--skip-tests]
+#   ./scripts/release.sh patch|minor|major|X.Y.Z [--dry-run] [--skip-tests] [--no-push]
 # Calcule le numéro, vérifie (tests), écrit VERSION + CHANGELOG.md, commit, crée le tag annoté (les notes sont
 # les commits depuis la dernière version) et pousse. GitHub Actions (release.yml) construit alors Oree.app,
 # fabrique le zip (mise à jour intégrée) et le DMG (premier téléchargement), puis publie la release.
 # Le site sert toujours le dernier DMG ; les copies installées proposent la mise à jour d'elles-mêmes.
+# `--no-push` : prépare tout (tests, VERSION, CHANGELOG, commit, tag) et s'arrête avant de pousser : vous poussez vous-même.
 # `--ci` : utilisé par la publication planifiée (pas de tests ici, la CI les a déjà passés).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BUMP="${1:-}"; shift || true
-DRY=0; SKIP_TESTS=0; CI=0
-for a in "$@"; do case "$a" in --dry-run) DRY=1;; --skip-tests) SKIP_TESTS=1;; --ci) CI=1; SKIP_TESTS=1;; *) echo "option inconnue : $a"; exit 2;; esac; done
+DRY=0; SKIP_TESTS=0; CI=0; PUSH=1
+for a in "$@"; do case "$a" in --dry-run) DRY=1;; --skip-tests) SKIP_TESTS=1;; --no-push) PUSH=0;; --ci) CI=1; SKIP_TESTS=1;; *) echo "option inconnue : $a"; exit 2;; esac; done
 [ -n "$BUMP" ] || { sed -n '2,3p' "$0" | sed 's/^# //'; exit 2; }
 
 CURRENT="$(tr -d '[:space:]' < VERSION)"
@@ -46,7 +47,12 @@ git commit -qm "Version $NEXT"
 git tag -a "$TAG" -m "Orée $NEXT
 
 $NOTES"
-git push origin main "$TAG"
+if [ "$PUSH" = 1 ]; then
+  git push origin main "$TAG"
+else
+  echo "==> $TAG prête en local. Pour publier :  git push origin main $TAG"
+  exit 0
+fi
 
 echo "==> $TAG poussée. Construction : https://github.com/Gwada33/oree/actions"
 echo "    Release (zip + dmg) dans quelques minutes : https://github.com/Gwada33/oree/releases/tag/$TAG"
