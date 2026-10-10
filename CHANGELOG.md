@@ -1,3 +1,11 @@
+## 1.0.5 — 2026-10-10
+
+- Site : nouvelle section « Sur la page », questions sur les fonctions avec IA, palette ⌘K
+- Sur la page : traduction, L'essentiel (recettes), Boosts et mode calme, Calendrier, mode nuit, copier-coller propre, reprise
+- Builds et tests locaux plus rapides : build_app.sh --debug, tests sans le moteur de téléchargement
+- Vidéos en plein écran : cause probable de l'écran noir corrigée (la vue web ne pouvait plus tomber à 0 × 0), à confirmer
+- Hibernation fantôme, phase 3 : Shadow DOM, canvas, vidéos, iframes, images différées
+
 ## 1.0.4 — 2026-10-10
 
 - release.sh : option --no-push
