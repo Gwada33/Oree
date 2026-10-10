@@ -17,3 +17,5 @@ Oree-*.zip
 graphify-out/
 scripts/bench/compare-results*.json
 scripts/bench/ghost-report.json
+scripts/bench/ghost-swap-report.json
+__pycache__/

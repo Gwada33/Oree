@@ -64,6 +64,7 @@ final class Tab: NSObject {
     private(set) var ghostView: GhostView?
     private var pendingGhostURL: URL?
     private var ghostShownFrom: Date?
+    private var hydration: Task<Void, Never>?
     /// Content-blocking lists for the ghost's own web view (set by the window controller).
     var ghostRuleLists: (() -> [WKContentRuleList])?
     /// A sleep is in progress (it awaits): a second request must not start another.
@@ -245,8 +246,8 @@ final class Tab: NSObject {
 
     /// Runs a script in `world` and returns its string result, or nil on error or after `seconds`. A page that is
     /// stuck never answers: without this deadline one hung tab would block every other tab's sleep.
-    func evaluateWithTimeout(_ script: String, world: WKContentWorld, seconds: Double) async -> String? {
-        guard let webView else { return nil }
+    func evaluateWithTimeout(_ script: String, in target: WKWebView? = nil, world: WKContentWorld, seconds: Double) async -> String? {
+        guard let webView = target ?? webView else { return nil }
         return await withCheckedContinuation { continuation in
             var finished = false
             let finish: (String?) -> Void = { value in
@@ -374,7 +375,8 @@ final class Tab: NSObject {
 
     /// Fades the page in (called when its first content commits).
     func revealWebView() {
-        guard let webView, webView.alphaValue < 1 else { return }
+        // While a ghost covers the tab the real page stays invisible: the hand-over (`hydrate`) shows it, in one frame.
+        guard let webView, webView.alphaValue < 1, !(isAwaitingWakeReveal && ghostView != nil) else { return }
         Motion.animate(Motion.quick) { webView.animator().alphaValue = 1 }
     }
 
@@ -464,6 +466,141 @@ final class Tab: NSObject {
         return ghost
     }
 
+    // MARK: Hydration: the invisible hand-over from ghost to real page
+
+    private func beginHydration() {
+        guard hydration == nil, ghostView != nil else { return }
+        hydration = Task { @MainActor [weak self] in await self?.hydrate() }
+    }
+
+    /// Waits until the real page (under the ghost) is ready, lines its scroll up with the ghost's, waits for WebKit to have
+    /// presented that frame, then swaps ghost → real page in a single animation-free transaction.
+    /// Any failure ends in the swap anyway: the real page is what the user came for.
+    private func hydrate() async {
+        guard let webView, let ghost = ghostView else { return }
+        let started = Date()
+        // A page that is loaded but never stops changing (carousels, trackers) must not keep the ghost up for ever: that
+        // swaps after 2.5 s. A page that is still *loading* is worse than the ghost, so for that case we keep waiting
+        // (up to three rounds, ~8 s) and swap only when it is there.
+        var readiness: String?
+        for _ in 0..<3 {
+            readiness = await callAsyncWithTimeout(GhostScript.ready, arguments: ["timeoutMs": 2500], seconds: 3.1)
+            guard ghostView === ghost, isAwaitingWakeReveal else { return }
+            if let r = readiness, r.hasPrefix("timeout"), r.contains("/loading/") { continue }
+            break
+        }
+        guard ghostView === ghost, isAwaitingWakeReveal else { return }          // slept or woke again meanwhile
+
+        var note = "ready=\(readiness ?? "no answer")"
+        // The swap needs a frame the real page has drawn, and a tab that is not on screen draws none (a hover pre-wake
+        // wakes tabs in the background). Hold the ghost until the tab is shown (30 s at most), then check the page paints.
+        let waitStart = Date()
+        while contentSlot.isHidden, Date().timeIntervalSince(waitStart) < 30 {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard ghostView === ghost, isAwaitingWakeReveal else { return }
+        }
+        if Date().timeIntervalSince(waitStart) > 0.2 { note += " shownAfter=\(Int(Date().timeIntervalSince(waitStart) * 1000))ms" }
+        let painted = await callAsyncWithTimeout(GhostScript.painted, arguments: [:], seconds: 1)
+        guard ghostView === ghost, isAwaitingWakeReveal else { return }
+        note += " frames=\(painted ?? "no answer")"
+        if ghost.isReady {
+            let ghostItems = GhostMatcher.parse(await evaluateWithTimeout(GhostScript.visibleItems, in: ghost.webView, world: GhostScript.world, seconds: 1) ?? "")
+            let realItems = GhostMatcher.parse(await evaluateWithTimeout(GhostScript.visibleItems, in: webView, world: GhostScript.world, seconds: 1) ?? "")
+            let similarity = GhostMatcher.similarity(ghost: ghostItems, real: realItems)
+            note += String(format: " text=%.0f%% position=%.0f%%", similarity.textMatch * 100, similarity.positionMatch * 100)
+            if let dy = GhostMatcher.scrollDelta(ghost: ghostItems, real: realItems), abs(dy) >= 1 {
+                _ = await evaluateWithTimeout("window.scrollBy(0, \(dy)); String(window.scrollY)", in: webView, world: GhostScript.world, seconds: 1)
+                _ = await callAsyncWithTimeout("await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return 'ok'", arguments: [:], seconds: 1)
+                note += " scrollFix=\(Int(dy))pt"
+            }
+            if let directory = ProcessInfo.processInfo.environment["HB_GHOST_SWAP_DUMP"] { await dumpSwap(ghost: ghost.webView, real: webView, to: directory) }
+        } else {
+            note += " (ghost not painted yet)"
+        }
+        guard ghostView === ghost, isAwaitingWakeReveal else { return }
+        await afterNextPresentation(of: webView)
+        guard ghostView === ghost, isAwaitingWakeReveal else { return }
+        swapGhostForRealPage()
+        Log.tabs.notice("Ghost: swap after \(Int(Date().timeIntervalSince(started) * 1000)) ms of hydration — \(note, privacy: .public)")
+    }
+
+    /// Ghost out, real page in, snapshot out: one transaction with every implicit animation disabled.
+    private func swapGhostForRealPage() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        webView?.alphaValue = 1
+        isAwaitingWakeReveal = false
+        snapshotImageView.isHidden = true; snapshotImageView.image = nil; snapshotImageView.alphaValue = 1
+        snapshotImageView.layer?.backgroundColor = nil
+        snapshotData = nil
+        let link = pendingGhostURL
+        pendingGhostURL = nil
+        dropGhost()
+        CATransaction.commit()
+        if let started = wakeStartedAt {
+            Log.tabs.notice("Wake: live page visible after \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            wakeStartedAt = nil
+        }
+        refreshHover()
+        // A link clicked in the ghost before the real page was ready: follow it now.
+        if let link { webView?.load(URLRequest(url: link)) }
+    }
+
+    /// The pointer has not moved but the page under it changed: tell WebKit so `:hover` styles are recomputed.
+    private func refreshHover() {
+        guard let webView, let window = webView.window else { return }
+        let point = window.mouseLocationOutsideOfEventStream
+        guard webView.bounds.contains(webView.convert(point, from: nil)),
+              let event = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else { return }
+        NSApp.postEvent(event, atStart: false)
+    }
+
+    /// Resumes once WebKit has presented the web view's next frame (private call, guarded), or after 250 ms.
+    private func afterNextPresentation(of view: WKWebView) async {
+        let selector = NSSelectorFromString("_doAfterNextPresentationUpdate:")
+        guard view.responds(to: selector), let imp = view.method(for: selector) else {
+            try? await Task.sleep(for: .milliseconds(50)); return
+        }
+        typealias Function = @convention(c) (AnyObject, Selector, @escaping @convention(block) () -> Void) -> Void
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            var done = false
+            let finish = { if !done { done = true; continuation.resume() } }
+            unsafeBitCast(imp, to: Function.self)(view, selector) { DispatchQueue.main.async(execute: finish) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: finish)
+        }
+    }
+
+    /// Like `evaluateWithTimeout` but for `callAsyncJavaScript` (a script that awaits), in the ghost world.
+    private func callAsyncWithTimeout(_ body: String, arguments: [String: Any], seconds: Double) async -> String? {
+        guard let webView else { return nil }
+        return await withCheckedContinuation { continuation in
+            var finished = false
+            let finish: (String?) -> Void = { value in
+                guard !finished else { return }
+                finished = true
+                continuation.resume(returning: value)
+            }
+            Task { @MainActor in
+                let value = try? await webView.callAsyncJavaScript(body, arguments: arguments, in: nil, contentWorld: GhostScript.world)
+                finish(value as? String)
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(seconds))
+                finish(nil)
+            }
+        }
+    }
+
+    /// Dev only (`HB_GHOST_SWAP_DUMP=/dir`): what the ghost and the real page look like at the very moment of the swap.
+    private func dumpSwap(ghost: WKWebView, real: WKWebView, to directory: String) async {
+        for (name, view) in [("swap-ghost.png", ghost), ("swap-real.png", real)] {
+            guard let image = try? await view.takeSnapshot(configuration: nil), let tiff = image.tiffRepresentation,
+                  let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { continue }
+            try? png.write(to: URL(fileURLWithPath: directory).appendingPathComponent(name))
+        }
+    }
+
     private func showGhost(_ ghost: GhostView) {
         ghostView = ghost
         let view = ghost.webView
@@ -482,13 +619,20 @@ final class Tab: NSObject {
         ghost.load()
     }
 
-    private func dropGhost() {
+    /// Takes the ghost view off the tab (and stops any hand-over in progress). The stored file stays.
+    private func removeGhostView() {
         if let from = ghostShownFrom, ghostView != nil {
             Log.tabs.notice("Ghost: replaced by the real page \(Int(Date().timeIntervalSince(from) * 1000)) ms after the wake")
         }
         ghostShownFrom = nil
+        hydration?.cancel(); hydration = nil
         ghostView?.tearDown()
         ghostView = nil
+    }
+
+    /// View and stored file: the ghost has done its job (or the tab is closing).
+    private func dropGhost() {
+        removeGhostView()
         try? GhostStorage.store?.remove(key: id.uuidString)
     }
 
@@ -513,7 +657,7 @@ final class Tab: NSObject {
         guard !isSuspended, !isSuspending, let webView, let url = webView.url, url.absoluteString != "about:blank" else { return }
         isSuspending = true
         defer { isSuspending = false }
-        dropGhost()      // a ghost from a wake that never finished must not stay over the new snapshot
+        dropGhost()      // a ghost view from a wake that never finished must not stay over the new snapshot, nor a stale file survive
         thaw()
         await collectPageState()
         if captureGhost { await self.captureGhost() }
@@ -565,9 +709,19 @@ final class Tab: NSObject {
             snapshotImageView.isHidden = false
         }
 
-        dropGhost()
-        if let ghost = makeGhostView() { showGhost(ghost) }
+        removeGhostView()      // keep the stored file: it is what we are about to show
+        let ghost = makeGhostView()
+        if ghost != nil {
+            // The page under the ghost must be drawn at full opacity: WebKit stops producing frames for a view at alpha 0, so
+            // it could not be ready, nor painted, when the swap comes. An opaque layer (the snapshot, or at least the page
+            // colour) covers it until then.
+            snapshotImageView.layer?.backgroundColor = Theme.cg(Theme.page, in: snapshotImageView)
+            snapshotImageView.alphaValue = 1
+            snapshotImageView.isHidden = false
+        }
+        if let ghost { showGhost(ghost) }
         let webView = createWebView()
+        if ghost != nil { webView.alphaValue = 1 }
         if let state = suspendedInteractionState {
             webView.interactionState = state
         } else if let url = suspendedURL {
@@ -592,14 +746,11 @@ final class Tab: NSObject {
     /// swap the (now stale) snapshot back out and free its memory.
     func finishWakeReveal() {
         guard isAwaitingWakeReveal else { return }
+        // With a ghost on screen, "the real page loaded something" is only the start: hydrate() waits until it is
+        // truly ready and swaps in one frame (see below). Calling this again is harmless.
+        if ghostView != nil { beginHydration(); return }
         isAwaitingWakeReveal = false
         snapshotData = nil
-        if ghostView != nil {
-            dropGhost()
-            // A link clicked in the ghost before the real page was ready: follow it now.
-            if let url = pendingGhostURL { webView?.load(URLRequest(url: url)) }
-            pendingGhostURL = nil
-        }
         if let started = wakeStartedAt {
             Log.tabs.notice("Wake: live page visible after \(Int(Date().timeIntervalSince(started) * 1000)) ms")
             wakeStartedAt = nil

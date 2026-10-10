@@ -333,6 +333,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 switch op {
                 case "select": self.selectTab(tab); return "selected \(index)"
                 case "sleep": self.sleepTab(tab); return "sleeping \(index)"
+                case "prewake": self.prewake(tab); return "prewoken \(index)"
                 default: return "unknown op"
                 }
             },

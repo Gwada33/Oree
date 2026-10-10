@@ -1,6 +1,6 @@
 # Hibernation invisible d'Orée — « Fantôme + Hydratation »
 
-Statut : **phase 1 terminée** (derrière le flag `oree.hibernation.ghost`, désactivé par défaut). Phases 2 à 6 : voir « Suite ».
+Statut : **phases 1 et 2 terminées** (derrière le flag `oree.hibernation.ghost`, désactivé par défaut). Phases 3 à 6 : voir « Suite ».
 
 ## Principe
 La veille actuelle remplace l'onglet par une image HEIC puis recharge la page derrière : l'image est morte et le remplacement se voit.
@@ -119,9 +119,59 @@ Un fantôme **affiché** coûte presque autant qu'une page (le coût fixe d'un p
 - Les images **lazy** hors écran sont rendues eager : le fantôme peut en charger plus que la page.
 - Pas encore de chiffrement au repos (phase 6) : les fichiers sont dans `Caches/Orée/Ghosts`, vidés au lancement et à la fermeture, jamais créés en navigation privée.
 
+## Phase 2 — l'échange invisible (ghost → vraie page)
+
+### Ce qui se passe au retour sur un onglet hibernié
+Du bas vers le haut dans l'onglet : **vraie page** (restaurée à pleine opacité, dans la fenêtre) → **image HEIC** (ou, à défaut, la couleur de la page) → **fantôme**. Le fantôme n'apparaît qu'une fois peint et défilé.
+Quand la vraie page « charge quelque chose », `Tab.hydrate()` prend le relais :
+1. attend que la vraie page soit **prête** (`GhostScript.ready`) : document complet, polices chargées, images du viewport chargées, aucune mutation visible depuis 150 ms, puis deux frames d'animation ;
+2. compare les blocs de texte visibles du fantôme et de la vraie page (tag + hash du texte + position, `GhostMatcher.similarity`) et **aligne le scroll** : le premier bloc visible du fantôme est retrouvé dans la vraie page, qui est décalée de l'écart (`GhostMatcher.scrollDelta`), ce qui évite tout saut si du contenu a été ajouté au-dessus ;
+2bis. **si l'onglet est caché** (réveil au survol), garde le fantôme jusqu'à ce que l'onglet soit affiché (30 s au plus), puis vérifie que la vraie page dessine ses frames : un onglet caché n'en produit aucune, et l'échanger à ce moment ferait apparaître une page vide au clic ;
+3. attend que WebKit ait présenté la frame de la vraie page (`_doAfterNextPresentationUpdate:`, API privée gardée par `responds(to:)`, repli 250 ms) ;
+4. échange fantôme → vraie page dans **une seule transaction** `CATransaction` sans animation (alpha, image, fantôme retirés ensemble) ; puis un `mouseMoved` synthétique recalcule les `:hover`, et un lien cliqué dans le fantôme entre-temps est suivi.
+
+Toute défaillance mène quand même à l'échange. Une page qui **charge encore** (pas `complete`) est attendue jusqu'à ~8 s (3 tours) : le fantôme est alors meilleur que la vraie page. Une page chargée qui ne cesse de muter (carrousels, trackers) est échangée après ~2,5 s.
+
+### Pourquoi la vraie page n'est plus à `alpha 0`
+Mesuré : une page dont la vue est à `alphaValue = 0` ne produit **aucune frame** pour WebKit (le script « prête » ne reçoit jamais ses `requestAnimationFrame`). La vraie page est donc créée à pleine opacité sous un calque opaque (image HEIC ou couleur de page).
+
+### Limite de la mesure automatique (important)
+L'instance de test est lancée en arrière-plan (`open -g`) : sa fenêtre est **masquée** pour macOS (`visible=false`), donc WebKit met la page en `visibilityState = hidden` et ne produit pas de frames (`ready=…/no-frames/…/hidden` dans les journaux). Dans cet état :
+- le test « une frame peinte avant l'échange » **ne peut pas être validé** automatiquement (en fenêtre visible, deux sites l'ont montré : `painted/visible`) ;
+- les minuteries sont ralenties, ce qui allonge certaines durées.
+À confirmer avec une vraie fenêtre visible (voir « Comment tester l'échange »).
+
+### Résultats (10 sites, `scripts/bench/ghost_swap_check.py`)
+`écart` = % de pixels qui diffèrent entre ce que montre le fantôme et ce que montre la vraie page **juste avant** l'échange (0 % = rien ne bouge à l'écran). `durée` = temps de hand-over mesuré sans captures (`--timing`).
+
+| Site | Écart au moment de l'échange | Durée de la phase fantôme | Blocs de texte identiques | Remarque |
+|---|---|---|---|---|
+| BBC | 3,4 % (une exécution à 0 %) | 0,9 s | 100 % | légers décalages de mise en page (publicités) |
+| Wikipédia | 0,0 % (une exécution à 13,8 %) | 0,9 s | 95–100 % | résultat variable d'une exécution à l'autre |
+| GitHub | 0,0 % | 0,8 s | 100 % | |
+| react.dev | 0,0 % | 0,8 s | 100 % | |
+| IKEA | 0,0 % | 3,8 s | 100 % | la page ne cesse de muter ; minuteries ralenties |
+| MDN | 7,8 % | 2,1 s | 46–51 % | Shadow DOM (phase 3) ; scroll corrigé de 36 pt |
+| Hacker News | 0,0 % | 0,6 s | 100 % | |
+| Stack Overflow | 0,3–5,0 % | 2,7 s | 98 % | iframe Google (phase 3) |
+| Next.js (vercel.com) | variable | 3,3 s → ~8 s | 16 % tant que la page charge | la vraie page est lente à se restaurer ; on attend |
+| Tailwind | 0,0 % | 0,7 s | 100 % | |
+
+Constat : sur 6 sites sur 10 rien ne bouge à l'écran au moment de l'échange (0,0 %). Les écarts restants viennent de pages qui ne se rechargent **pas à l'identique** (publicités, contenus variables), du Shadow DOM et des iframes (phase 3). Les durées de 2 à 4 s concernent des pages très animées, dans une fenêtre masquée.
+
+### Revue de fin de phase 2
+- **Corrigé** : échange pendant que l'onglet est caché (réveil au survol). Vérifié : après `ui.sh tab prewake 0` l'onglet reste caché 8 s sans échange ; après `tab select 0` l'échange suit (`shownAfter=8022ms`).
+- **Ouvert** : (2) l'alignement du scroll s'accroche à un en-tête fixe (prendre le bloc du milieu de la fenêtre) ; (3) le journal affiche 100 % quand la comparaison a échoué ; (4) l'observateur de mutations relit la mise en page ; (5) `dumpSwap` à déplacer dans `Tab+GhostHarness.swift`.
+- **Non vérifié** : `_doAfterNextPresentationUpdate:` et la frame réellement dessinée, en fenêtre visible ; la saisie au clavier pendant que le fantôme couvre l'onglet (elle va à la vraie page cachée dessous) — phase 4.
+
+## Comment tester l'échange (fenêtre visible)
+```
+defaults write com.nolhan.hyperbrowser oree.hibernation.ghost -bool true   # ou lancer avec HB_GHOST=1
+```
+Ouvrez une page longue, défilez, allez sur un autre onglet, endormez le premier (clic droit → Mettre en veille, ou ⌥⌘E), revenez dessus. Le journal (`log stream --predicate 'subsystem == "com.nolhan.hyperbrowser" AND category == "tabs"' --info`) affiche `Ghost: swap after … — ready=ready/painted/…/visible text=… position=…`. `painted` + `visible` = la vraie page a bien produit ses frames avant l'échange.
+
 ## Suite
-2. Échange invisible en une frame (API privée gardée `_doAfterNextPresentationUpdate:`) ; image HEIC → fantôme → vraie page.
-3. Contenus difficiles (Shadow DOM, canvas, vidéos, iframes).
+3. Contenus difficiles (Shadow DOM, canvas, vidéos, iframes) — corrigent MDN et Stack Overflow.
 4. Transfert de l'état utilisateur ; **préchargement au survol** (condition du bénéfice de réveil).
 5. Score de fidélité ; gel noyau `SIGSTOP`/`SIGCONT` (flag `oree.hibernation.kernelFreeze`).
 6. Chiffrement AES-GCM, banc automatique d'invisibilité.

@@ -163,7 +163,7 @@ final class AutomationServer {
         case "state":
             let web = activeWebView()
             let responder = window.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-            return (true, "liveTabs=\(Tab.liveCount) url=\(web?.url?.absoluteString ?? "nil") title=\(web?.title ?? "nil") loading=\(web?.isLoading ?? false) firstResponder=\(responder) window=\(window.frame)")
+            return (true, "liveTabs=\(Tab.liveCount) url=\(web?.url?.absoluteString ?? "nil") title=\(web?.title ?? "nil") loading=\(web?.isLoading ?? false) firstResponder=\(responder) window=\(window.frame) visible=\(window.occlusionState.contains(.visible)) key=\(window.isKeyWindow)")
         default:
             return (false, "unknown cmd; use snapshot|tree|type|key|click|action|eval|state")
         }

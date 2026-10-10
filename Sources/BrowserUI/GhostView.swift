@@ -19,6 +19,8 @@ final class GhostView: NSObject, WKNavigationDelegate {
     var onNavigate: ((URL?) -> Void)?
     /// The ghost has loaded and painted its first content.
     var onReady: (() -> Void)?
+    /// True once the ghost has loaded and scrolled (its scripts can be queried).
+    private(set) var isReady = false
     private(set) var loadStarted: Date?
     private(set) var loadTime: TimeInterval?
 
@@ -88,7 +90,7 @@ final class GhostView: NSObject, WKNavigationDelegate {
         loadTime = loadStarted.map { Date().timeIntervalSince($0) }
         // Scroll first, reveal after: the ghost must never be seen at the top of the page for a frame.
         webView.evaluateJavaScript(GhostScript.restoreScroll(x: record.scrollX, y: record.scrollY), in: nil, in: GhostScript.world) { [weak self] _ in
-            MainActor.assumeIsolated { self?.onReady?() }
+            MainActor.assumeIsolated { self?.isReady = true; self?.onReady?() }
         }
         // Images and fonts arrive after didFinish and can move things: restore again once the layout has settled.
         let endBoot = DispatchWorkItem { [weak self] in
