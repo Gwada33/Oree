@@ -27,6 +27,10 @@ HELPER="$CLT/usr/libexec/swift/pm/swiftpm-testing-helper"
 swift build --build-tests -Xswiftc -load-plugin-library -Xswiftc "$PLUGIN"
 
 BIN_DIR=$(swift build --show-bin-path)
+# The download engine is finished and no longer changes, and its suites (real transfers against local servers) take ~40 s of
+# the ~45 s run: they are skipped by default. `scripts/test.sh --all` runs everything (releases do).
+FAST=1
+if [ "${1:-}" = "--all" ]; then FAST=0; shift; elif [ "${1:-}" = "--fast" ]; then shift; fi
 FILTER="${1:-}"
 status=0
 ran=0
@@ -34,6 +38,7 @@ ran=0
 for bundle in "$BIN_DIR"/*.xctest; do
   name=$(basename "$bundle" .xctest)
   if [ -n "$FILTER" ] && [[ "$name" != *"$FILTER"* ]]; then continue; fi
+  if [ "$FAST" = 1 ] && [[ "$name" == Download* ]]; then continue; fi
   bin="$bundle/Contents/MacOS/$name"
   echo "==> $name"
   ran=$((ran + 1))

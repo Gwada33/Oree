@@ -37,7 +37,7 @@ echo "Notes :"; echo "$NOTES"
   git pull --rebase --quiet origin main
 }
 git rev-parse "$TAG" >/dev/null 2>&1 && { echo "Le tag $TAG existe déjà."; exit 2; }
-[ "$SKIP_TESTS" = 1 ] || { echo "==> Tests…"; ./scripts/test.sh >/dev/null 2>&1 || { echo "Les tests échouent : version non publiée (lancez ./scripts/test.sh pour voir)."; exit 1; }; }
+[ "$SKIP_TESTS" = 1 ] || { echo "==> Tests…"; ./scripts/test.sh --all >/dev/null 2>&1 || { echo "Les tests échouent : version non publiée (lancez ./scripts/test.sh --all pour voir)."; exit 1; }; }
 
 echo "$NEXT" > VERSION
 { echo "## $NEXT — $(date +%Y-%m-%d)"; echo; echo "$NOTES"; echo; [ -f CHANGELOG.md ] && cat CHANGELOG.md; } > CHANGELOG.md.new

@@ -4,15 +4,23 @@ cd "$(dirname "$0")"
 
 APP_NAME="Oree"
 EXECUTABLE_NAME="HyperBrowserApp"
-BUILD_DIR=".build/release"
+# `./build_app.sh --debug` : quick local build (about 10 s instead of about 2 min) for trying things out; same options as
+# scripts/test.sh, so switching between the two does not recompile everything. Releases always use the default.
+CONFIG=release
+EXTRA=()
+if [ "${1:-}" = "--debug" ]; then
+    CONFIG=debug
+    EXTRA=(-Xswiftc -load-plugin-library -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib)
+fi
+BUILD_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
 # Version shown in « À propos » and compared by the updater: edit the VERSION file before a release.
 APP_VERSION="$(tr -d '[:space:]' < VERSION)"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 APP_DIR="${APP_NAME}.app"
 
 echo "==> Building release binary..."
-swift build -c release --product "$EXECUTABLE_NAME"
-swift build -c release --product OreeDownloader
+swift build -c "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"} --product "$EXECUTABLE_NAME"
+swift build -c "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"} --product OreeDownloader
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"

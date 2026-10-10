@@ -26,6 +26,6 @@ Le site affiche le numéro, la date et la taille de la dernière version en lisa
 Les copies installées vérifient une fois par jour (ou via « Rechercher des mises à jour… ») et proposent l'installation, avec les notes.
 
 ## Si ça ne part pas
-- Les tests échouent → `./scripts/test.sh`.
+- Les tests échouent → `./scripts/test.sh --all`.
 - Le flux planifié ne peut pas pousser sur `main` → une protection de branche l'en empêche (autorisez « github-actions » ou publiez à la main).
 - Republier un tag existant : Actions → « App — publier une version » → Run workflow avec le tag.
