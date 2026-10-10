@@ -6,6 +6,8 @@ public struct ReleaseInfo: Sendable, Equatable {
     public let version: String
     public let notes: String
     public let downloadURL: URL
+    /// The `<zip name>.sha256` file published next to the zip (nil = the release has none).
+    public let checksumURL: URL?
 }
 
 public enum UpdateChecker {
@@ -37,7 +39,15 @@ public enum UpdateChecker {
               release.draft != true, release.prerelease != true,
               let zip = release.assets.first(where: { $0.name.lowercased().hasSuffix(".zip") }),
               zip.browser_download_url.scheme == "https" else { return nil }
+        let checksum = release.assets.first { $0.name == zip.name + ".sha256" && $0.browser_download_url.scheme == "https" }
         return ReleaseInfo(version: release.tag_name.hasPrefix("v") ? String(release.tag_name.dropFirst()) : release.tag_name,
-                           notes: release.body ?? "", downloadURL: zip.browser_download_url)
+                           notes: release.body ?? "", downloadURL: zip.browser_download_url, checksumURL: checksum?.browser_download_url)
+    }
+
+    /// The 64-hex SHA-256 at the start of a `shasum` line ("<hash>  <file>"), lowercased, or nil if malformed.
+    public static func parseChecksum(_ text: String) -> String? {
+        guard let first = text.split(whereSeparator: { $0.isWhitespace }).first, first.count == 64,
+              first.allSatisfy(\.isHexDigit) else { return nil }
+        return first.lowercased()
     }
 }

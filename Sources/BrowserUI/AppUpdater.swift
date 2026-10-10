@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import BrowserCore
 
 /// Self-update from GitHub Releases: checks the latest release, and on approval downloads the zip,
@@ -58,7 +59,16 @@ final class AppUpdater {
             return
         }
         do {
+            // The release must publish a SHA-256 next to the zip, and the zip must match it: the bundle identifier
+            // alone says nothing about who built the file.
+            guard let checksumURL = release.checksumURL,
+                  let (checksumData, _) = try? await URLSession.shared.data(from: checksumURL),
+                  let expected = UpdateChecker.parseChecksum(String(decoding: checksumData, as: UTF8.self)) else {
+                throw UpdateError.noChecksum
+            }
             let (zip, _) = try await URLSession.shared.download(from: release.downloadURL)
+            let digest = SHA256.hash(data: try Data(contentsOf: zip, options: .mappedIfSafe)).map { String(format: "%02x", $0) }.joined()
+            guard digest == expected else { throw UpdateError.checksumMismatch }
             let work = FileManager.default.temporaryDirectory.appendingPathComponent("oree-update-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
             let staged = work.appendingPathComponent("zip.zip")
@@ -102,6 +112,16 @@ final class AppUpdater {
             process.executableURL = URL(fileURLWithPath: path); process.arguments = arguments
             process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
             do { try process.run() } catch { continuation.resume(throwing: error) }
+        }
+    }
+
+    private enum UpdateError: LocalizedError {
+        case noChecksum, checksumMismatch
+        var errorDescription: String? {
+            switch self {
+            case .noChecksum: "cette version ne publie pas d'empreinte de vérification"
+            case .checksumMismatch: "l'empreinte du fichier téléchargé ne correspond pas"
+            }
         }
     }
 

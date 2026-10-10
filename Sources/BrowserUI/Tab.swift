@@ -32,9 +32,16 @@ final class Tab: NSObject {
     static let snapshotDirectory: URL = {
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Orée/Snapshots", isDirectory: true)
+        // Images left by a previous run (quit or crash) are page screenshots nobody needs: remove them.
+        try? FileManager.default.removeItem(at: dir)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()
+
+    /// Deletes every saved snapshot (called when the app quits).
+    static func purgeSnapshots() {
+        try? FileManager.default.removeItem(at: snapshotDirectory)
+    }
 
     var isSuspended = false {
         // Observation only: lets the sidebar show the "sleeping" look. No behavior depends on it.
@@ -53,6 +60,8 @@ final class Tab: NSObject {
     /// but is only torn down when the system really needs the memory.
     var isDirty = false
     private var usedPrivateFreeze = false
+    /// A sleep is in progress (it awaits): a second request must not start another.
+    private var isSuspending = false
     /// Field values and video position saved just before a forced sleep, put back after the reload.
     private var savedPageState: String?
     private var suspendedURL: URL?
@@ -214,8 +223,24 @@ final class Tab: NSObject {
     /// Reads field values and the video position before a forced teardown.
     private func collectPageState() async {
         guard let webView, !webView.isLoading else { savedPageState = nil; return }
-        let result = try? await webView.evaluateJavaScript(TabPageState.collectCall, in: nil, contentWorld: TabPageState.world)
-        savedPageState = (result as? String).flatMap { $0 == "null" ? nil : $0 }
+        // A page that is stuck never answers: give up after 2 s instead of blocking every other tab's sleep.
+        let result: String? = await withCheckedContinuation { continuation in
+            var finished = false
+            let finish: (String?) -> Void = { value in
+                guard !finished else { return }
+                finished = true
+                continuation.resume(returning: value)
+            }
+            Task { @MainActor in
+                let value = try? await webView.evaluateJavaScript(TabPageState.collectCall, in: nil, contentWorld: TabPageState.world)
+                finish(value as? String)
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                finish(nil)
+            }
+        }
+        savedPageState = result.flatMap { $0 == "null" ? nil : $0 }
     }
 
     /// Playing position (seconds) captured with the page state, if a video had been watched for a while.
@@ -394,7 +419,8 @@ final class Tab: NSObject {
     /// Takes the snapshot of the page as the user last saw it. Called as the user leaves the tab,
     /// so a later sleep only has to reuse it; stored on disk, not in RAM.
     func captureSnapshot() async {
-        guard !isSuspended, !isFrozen, let webView, webView.url != nil, !webView.isLoading else { return }
+        // Never for a private tab: its page image must not reach the disk.
+        guard !isPrivate, !isSuspended, !isFrozen, let webView, webView.url != nil, !webView.isLoading else { return }
         guard let image = try? await webView.takeSnapshot(configuration: nil),
               let data = HEICSnapshotCodec.encode(image) else { return }
         try? data.write(to: snapshotFile, options: .atomic)
@@ -407,7 +433,9 @@ final class Tab: NSObject {
     /// state can be read. Field values (never passwords) and the video position are saved and put
     /// back when the tab wakes.
     func suspend() async {
-        guard !isSuspended, let webView, let url = webView.url, url.absoluteString != "about:blank" else { return }
+        guard !isSuspended, !isSuspending, let webView, let url = webView.url, url.absoluteString != "about:blank" else { return }
+        isSuspending = true
+        defer { isSuspending = false }
         thaw()
         await collectPageState()
 

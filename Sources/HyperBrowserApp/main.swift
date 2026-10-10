@@ -69,6 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls { browserController.openExternal(url) }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        BrowserWindowController.purgeSnapshots()   // no page screenshot outlives the app
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }

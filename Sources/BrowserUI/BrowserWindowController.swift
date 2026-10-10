@@ -229,16 +229,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         startMemoryBudgetTimer()
         refreshSpaceUI(animated: false)
         startMemoryPressureMonitor()
+        lastBlockingSettings = ["\(SettingsStore.shared.adBlockEnabled)"] + SettingsStore.shared.protectionExemptHosts
         contentBlocker.onRuleListsChanged = { [weak self] _ in self?.applyRuleLists() }
         // Settings write straight to UserDefaults; re-evaluate whatever
         // depends on them (e.g. the ad-block toggle) as soon as one changes.
         settingsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.applyRuleLists()
-                self?.settingsChanged()
-            }
+            MainActor.assumeIsolated { self?.scheduleSettingsReaction() }
         }
         refreshSafeBrowsing()
     }
@@ -354,9 +352,41 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Pushes the current rule lists (or none, if ad blocking is switched off)
     /// to every tab. Safe to call repeatedly — it just replaces what's there.
+    /// Ad / tracker rule lists for a page: none when blocking is off or the site is on the exemption list.
+    private func ruleLists(for url: URL?) -> [WKContentRuleList] {
+        let settings = SettingsStore.shared
+        guard settings.adBlockEnabled, !ProtectionPolicy.isExempt(host: url?.host, list: settings.protectionExemptHosts) else { return [] }
+        return contentBlocker.ruleLists
+    }
+
+    private var settingsReactionWork: DispatchWorkItem?
+
+    /// Many defaults are written in a burst (saving the session writes several): react once, shortly after.
+    private func scheduleSettingsReaction() {
+        settingsReactionWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                self?.applyRuleListsIfSettingsChanged()
+                self?.settingsChanged()
+            }
+        }
+        settingsReactionWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
     private func applyRuleLists() {
-        let lists = SettingsStore.shared.adBlockEnabled ? contentBlocker.ruleLists : []
-        for tab in tabs { tab.applyContentRuleLists(lists) }
+        for tab in tabs { tab.applyContentRuleLists(ruleLists(for: tab.currentURL)) }
+    }
+
+    private var lastBlockingSettings: [String] = []
+
+    /// Re-applies the rule lists only when what decides them changed (the toggle, the exemption list) —
+    /// not on every write to UserDefaults, which would also undo the per-site exemptions.
+    private func applyRuleListsIfSettingsChanged() {
+        let current = ["\(SettingsStore.shared.adBlockEnabled)"] + SettingsStore.shared.protectionExemptHosts
+        guard current != lastBlockingSettings else { return }
+        lastBlockingSettings = current
+        applyRuleLists()
     }
 
     // MARK: - Security & privacy (Phase 3)
@@ -1132,6 +1162,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Daily, silent unless a newer version exists.
+    public static func purgeSnapshots() { Tab.purgeSnapshots() }
+
     public func checkForUpdatesInBackground() { AppUpdater.shared.checkInBackgroundIfDue() }
 
     @objc func checkForUpdates() { AppUpdater.shared.checkNow() }
@@ -2441,7 +2473,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     ///  2. over budget: first clean (cheap, nothing is lost), and only if that isn't enough, apply the plan;
     ///  3. the plan freezes tabs hidden for a while and sleeps the ones hidden very long or, when over
     ///     budget, the best-scoring ones down to 80 % of the budget.
+    private var isLifecyclePassRunning = false
+
     private func enforceMemoryBudget() async {
+        // Two timers call this and a pass awaits (media checks, a 4 s pause): never run two at once.
+        guard !isLifecyclePassRunning else { return }
+        isLifecyclePassRunning = true
+        defer { isLifecyclePassRunning = false }
         // Safety net: a paused page must never be the one on screen.
         for tab in tabs where tab.isFrozen && isOnScreen(tab) { tab.thaw() }
         await cleanHiddenTabsIfDue()
@@ -2767,12 +2805,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func restoreSessionOrOpenFreshTab(openFreshTab: Bool = true) {
         let snapshots = isFreshSession ? [] : ((try? sessionRepo.load()) ?? [])
-        guard !snapshots.isEmpty else {
+        guard snapshots.contains(where: { !$0.url.isEmpty && !$0.isPrivate }) else {
             if openFreshTab { newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault) }
             return
         }
 
-        let restorable = snapshots.filter { !$0.url.isEmpty }
+        // Older versions saved private tabs too: never bring those back.
+        let restorable = snapshots.filter { !$0.url.isEmpty && !$0.isPrivate }
         let eager = ProcessInfo.processInfo.environment["HB_EAGER_RESTORE"] == "1"   // A/B benchmarking
         let savedActive = UserDefaults.standard.integer(forKey: Self.activeIndexKey)
         let activeIndex = restorable.indices.contains(savedActive) ? savedActive : 0
@@ -2808,6 +2847,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault)
         }
         restoreSplit()
+        saveSession()   // rewrites the saved session at once: rows left by older versions (private tabs) disappear
     }
 
     /// Brings back the split screen of the previous session (same two tabs, same ratio).
@@ -2834,7 +2874,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard !isFreshSession else { return }
         // Tabs with no address (failed load, blank page) aren't worth restoring —
         // they used to come back as empty tabs and pile up on every launch.
-        let savable = tabs.filter { $0.currentURL != nil && $0.currentURL?.absoluteString != "about:blank" && $0.currentURL?.scheme != "oree" }
+        // Private tabs are never written to disk (see SessionPolicy).
+        let savable = tabs.filter { SessionPolicy.isSavable(url: $0.currentURL, isPrivate: $0.isPrivate) }
         if let activeTab, let index = savable.firstIndex(where: { $0.id == activeTab.id }) {
             UserDefaults.standard.set(index, forKey: Self.activeIndexKey)
         }
@@ -3134,7 +3175,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
         // Blocking switched off for sites that break when only partly blocked (see ProtectionPolicy).
         let exempt = ProtectionPolicy.isExempt(host: original.host, list: settings.protectionExemptHosts)
-        tab.applyContentRuleLists(settings.adBlockEnabled && !exempt ? contentBlocker.ruleLists : [])
+        tab.applyContentRuleLists(ruleLists(for: original))
         tab.setUserScripts(userScripts(for: original))
         return .allow
     }
