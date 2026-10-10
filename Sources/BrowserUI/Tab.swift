@@ -13,7 +13,7 @@ final class Tab: NSObject {
     /// whichever of `webView` / the snapshot / the crash overlay applies.
     /// Keeping this stable (rather than re-parenting the web view itself)
     /// means suspending/waking a tab never touches the outer layout.
-    let contentSlot = NSView()
+    let contentSlot = ContentSlotView()
 
     /// `nil` while the tab is suspended — the whole point of suspension is
     /// to let this (and the WebContent process behind it) actually
@@ -345,6 +345,15 @@ final class Tab: NSObject {
         fullscreenObservation = webView.observe(\.fullscreenState, options: [.new]) { [weak self] web, _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                // A trace for diagnosing a black fullscreen video: where the page lives and whether its window is on screen.
+                let window = web.window
+                // Entering fullscreen: never let the web view sit at 0 × 0 in WebKit's own window (a black screen).
+                if web.fullscreenState != .notInFullscreen, web.frame.isEmpty, let bounds = window?.contentView?.bounds, !bounds.isEmpty {
+                    web.frame = bounds
+                    web.autoresizingMask = [.width, .height]
+                    Log.tabs.notice("Fullscreen: the web view had collapsed to 0 × 0, resized to \(NSStringFromRect(bounds), privacy: .public)")
+                }
+                Log.tabs.notice("Fullscreen state \(web.fullscreenState.rawValue) frame \(NSStringFromRect(web.frame), privacy: .public) visible \(window?.occlusionState.contains(.visible) ?? false) key \(window?.isKeyWindow ?? false) frozen \(self.isFrozen)")
                 web.alphaValue = 1
                 self.contentSlot.layer?.removeAllAnimations()
                 self.contentSlot.alphaValue = 1
@@ -363,14 +372,13 @@ final class Tab: NSObject {
             typealias Function = @convention(c) (AnyObject, Selector, UInt) -> Void
             unsafeBitCast(imp, to: Function.self)(webView, renderingSelector, Tab.contentRenderedEvents)
         }
-        webView.translatesAutoresizingMaskIntoConstraints = false
+        // Sized by its frame, not by Auto Layout constraints: for a fullscreen video WebKit takes the web view out of this slot and puts it
+        // in its own window, which drops every constraint tied to the slot. A web view left with no constraints could collapse to 0 × 0 there
+        // (a black fullscreen, seen in the logs), whereas a frame and an autoresizing mask survive the move.
+        webView.translatesAutoresizingMaskIntoConstraints = true
+        webView.autoresizingMask = [.width, .height]
+        webView.frame = contentSlot.bounds
         contentSlot.addSubview(webView, positioned: .below, relativeTo: nil)
-        NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: contentSlot.topAnchor),
-            webView.leadingAnchor.constraint(equalTo: contentSlot.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: contentSlot.trailingAnchor),
-            webView.bottomAnchor.constraint(equalTo: contentSlot.bottomAnchor),
-        ])
         self.webView = webView
         Tab.tabsByWebView.setObject(self, forKey: webView)
         return webView
@@ -878,6 +886,15 @@ final class Tab: NSObject {
 /// Shows a tab's last snapshot behind/over the page while it wakes. A plain layer instead of an
 /// `NSImageView`: it has no intrinsic size, so a snapshot taken at another window size (fullscreen!)
 /// can never push the window around; it is filled to the view and cropped at the bottom/right edges.
+/// The tab's content area. The web view is sized by its frame, not by constraints (see `createWebView`), so this keeps it fitted to the
+/// slot on every layout pass, including when WebKit puts it back after a fullscreen video.
+final class ContentSlotView: NSView {
+    override func layout() {
+        super.layout()
+        for case let web as WKWebView in subviews where web.frame != bounds { web.frame = bounds }
+    }
+}
+
 final class SnapshotView: NSView {
     var image: NSImage? { didSet { layer?.contents = image } }
 
