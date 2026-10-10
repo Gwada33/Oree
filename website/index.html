@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Orée — le navigateur Mac qui dort quand tu ne le regardes pas</title>
-<meta name="description" content="Orée est un navigateur natif pour Mac : ouverture et téléchargements plus rapides (mesurés), onglets en pause puis endormis, espaces, palette ⌘T, vie privée intégrée, zéro télémétrie. Gratuit, macOS 15.4+.">
+<meta name="description" content="Orée est un navigateur natif pour Mac : ouverture et téléchargements plus rapides (mesurés), onglets en pause puis endormis, espaces, palette ⌘K, vie privée intégrée, zéro télémétrie, et sur la page : recettes allégées, traduction, mode nuit, calendrier. Gratuit, macOS 15.4+.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:title" content="Orée — le navigateur Mac qui dort quand tu ne le regardes pas">
-<meta property="og:description" content="Onglets endormis, espaces, palette ⌘T, vie privée intégrée. Natif macOS, zéro télémétrie.">
+<meta property="og:description" content="Onglets endormis, espaces, palette ⌘K, vie privée intégrée, traduction et résumés sur ton Mac. Natif macOS, zéro télémétrie.">
 <meta property="og:image" content="assets/icon-512.png">
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="stylesheet" href="styles.css">
@@ -40,6 +40,12 @@
     <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 13.500h6L10 21l8-10.500h-6z"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.500-4M4 4v4h4M4 13a8 8 0 0 0 14.500 4M20 20v-4h-4"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+    <symbol id="i-recipe" viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h3"/></symbol>
+    <symbol id="i-translate" viewBox="0 0 24 24"><path d="M4 6h9M8.500 4v2M6 6c0 4 3 7 6 8M12 6c0 4-3 7-7 8M13 20l4-9 4 9M14.500 17h5"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24"><path d="M5 19L15 9M14 6l1-3 1 3 3 1-3 1-1 3-1-3-3-1zM18 14l.6-1.600L20 12l-1.400-.4L18 10l-.6 1.600L16 12l1.400.4z"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.500"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.500 15.500h5"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.500"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.500l5 3.500-5 3.500z"/></symbol>
     <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20 4c-8 0-13 4-13 11l-3 5M20 4c0 8-4 12-11 12M13 11h5"/></symbol>
   </defs>
 </svg>
@@ -56,6 +62,7 @@
       <a href="#rapidite">Rapidité</a>
       <a href="#legerete">Veille</a>
       <a href="#interface">Palette</a>
+      <a href="#pages">Sur la page</a>
       <a href="#prive">Vie privée</a>
       <a href="#telechargements">Téléchargements</a>
       <a href="#faq">Questions</a>
@@ -211,7 +218,7 @@
     <article class="diff flip reveal" id="interface">
       <div class="diff-copy">
         <span class="num">02</span>
-        <h3>Une seule barre pour tout. <kbd>⌘T</kbd></h3>
+        <h3>Une seule barre pour tout. <kbd>⌘K</kbd></h3>
         <p>Onglets, historique, favoris, actions, web. Tout au clavier.</p>
       </div>
       <div class="pal-demo" aria-hidden="true">
@@ -297,6 +304,60 @@
   </div>
 </section>
 
+<!-- SUR LA PAGE -->
+<section class="sec" id="pages">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <p class="eyebrow">Sur la page</p>
+      <h2>Il t’aide aussi <em>sur la page</em> elle-même.</h2>
+      <p class="lead">Tout se passe sur ton Mac : la traduction et les résumés utilisent les modèles d’Apple, rien n’est envoyé nulle part.</p>
+    </div>
+    <ul class="feat reveal">
+      <li>
+        <svg class="ic" aria-hidden="true"><use href="#i-recipe"/></svg>
+        <h3>L’essentiel d’une recette</h3>
+        <p>Les ingrédients, les étapes et les temps, sans les 2 000 mots de souvenirs. Un curseur change le nombre de personnes et les quantités suivent. Mode cuisine : gros texte, écran qui reste allumé.</p>
+        <small>Lu tel quel dans les données de la page quand elles existent ; sinon le modèle local la résume (environ 30 s) et peut se tromper : ce qui ne se retrouve pas dans la page est écarté.</small>
+      </li>
+      <li>
+        <svg class="ic" aria-hidden="true"><use href="#i-translate"/></svg>
+        <h3>Traduire la page</h3>
+        <p>Avec le framework de traduction d’Apple, hors ligne. Ce qui est à l’écran d’abord, le reste au défilement ; un clic remet l’original.</p>
+        <small>macOS 26. Rapide avec le modèle de traduction d’Apple installé, plus lent sinon.</small>
+      </li>
+      <li>
+        <svg class="ic" aria-hidden="true"><use href="#i-wand"/></svg>
+        <h3>Changer un site en une phrase</h3>
+        <p>« Cache les recommandations et agrandis le texte. » Le modèle écrit des règles de style pour ce site seulement, vérifiées, jamais de script, et tu peux annuler aussitôt. Un mode calme coupe la lecture automatique, les animations et les pastilles.</p>
+        <small>Demande Apple Intelligence. Le scroll infini n’est pas géré.</small>
+      </li>
+      <li>
+        <svg class="ic" aria-hidden="true"><use href="#i-calendar"/></svg>
+        <h3>Ajouter au Calendrier</h3>
+        <p>Un concert, un rendez-vous, une réservation : Orée trouve la date et ouvre Calendrier avec le titre, l’heure et le lieu remplis. Tu confirmes, Orée n’a aucun accès à tes agendas.</p>
+        <small>Date vérifiée dans la page avant d’être proposée.</small>
+      </li>
+      <li>
+        <svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg>
+        <h3>Mode nuit sur tous les sites</h3>
+        <p>Même ceux qui n’ont pas de thème sombre. Les photos et les vidéos gardent leurs couleurs, les sites déjà sombres ne sont pas touchés, un clic sur la lune en exclut un.</p>
+        <small>Suit le mode sombre du Mac. Les couleurs très saturées peuvent ternir.</small>
+      </li>
+      <li>
+        <svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg>
+        <h3>Un copier-coller qui marche</h3>
+        <p>Le texte arrive sans la police ni les liens du site. Un tableau copié se colle en vrai tableau dans Numbers ou Excel. En option, une citation garde sa source avec un lien vers le passage ; une adresse propose « Ouvrir dans Plans ».</p>
+      </li>
+      <li>
+        <svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>
+        <h3>Reprendre où tu en étais</h3>
+        <p>Une vidéo longue reprend à la minute, un long article au bon paragraphe, avec une fine ligne de progression. Rien n’est gardé en navigation privée.</p>
+      </li>
+    </ul>
+    <p class="fine reveal feat-note">Les fonctions qui demandent un modèle (résumé sans données de page, changement de site, date dans un texte) ont besoin de macOS 26 et d’Apple Intelligence. Tout le reste marche sans.</p>
+  </div>
+</section>
+
 <!-- INCLUS D'OFFICE -->
 <section class="sec sec-alt" id="inclus">
   <div class="wrap">
@@ -307,7 +368,7 @@
     <ul class="incl reveal">
       <li><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><b>Blocage des pubs et traceurs</b><span>Sans extension, avec des exceptions par site.</span></li>
       <li><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg><b>Mots de passe</b><span>Coffre local, Touch ID, import CSV.</span></li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg><b>Palette ⌘T</b><span>Onglets, historique, favoris, actions.</span></li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg><b>Palette ⌘K</b><span>Onglets, historique, favoris, actions.</span></li>
       <li><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><b>Espaces et groupes</b><span>Perso, Travail, Lecture, et les tiens.</span></li>
       <li><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><b>Mises à jour intégrées</b><span>Une proposition, un clic, Orée se relance.</span></li>
       <li><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><b>Liens nettoyés</b><span>utm, fbclid, gclid… retirés.</span></li>
@@ -322,7 +383,7 @@
   <div class="wrap honest-in reveal">
     <h3>Pas encore là</h3>
     <ul>
-      <li>Extensions</li><li>Synchronisation</li><li>Passkeys</li><li>Application notarisée</li><li>Windows, iPhone</li>
+      <li>Extensions</li><li>Synchronisation</li><li>Passkeys</li><li>Web hors ligne automatique</li><li>Fenêtres flottantes</li><li>Rappels</li><li>Application notarisée</li><li>Windows, iPhone</li>
     </ul>
   </div>
 </section>
@@ -358,6 +419,11 @@
       <details><summary>Que devient un onglet en pause, puis endormi ?</summary><p>En pause, la page reste en mémoire mais ne calcule plus : elle reprend d’un coup. Endormi, il ne reste que son image ; un clic (ou le survol) recharge la page, depuis le cache quand c’est possible.</p></details>
       <details><summary>Vais-je perdre ce que j’étais en train d’écrire ?</summary><p>Non : un onglet où tu as saisi du texte n’est jamais déchargé, seulement mis en pause. Si le Mac manque vraiment de mémoire, les champs (jamais les mots de passe) et la position d’une vidéo sont sauvegardés puis remis.</p></details>
       <details><summary>Puis-je garder un site toujours éveillé ?</summary><p>Oui : clic droit sur l’onglet → « Ne jamais mettre en veille ce site ». Les messageries courantes le sont déjà.</p></details>
+      <details><summary>Les fonctions avec IA envoient-elles mes pages quelque part ?</summary><p>Non. Elles utilisent le modèle d’Apple qui tourne sur ton Mac (Apple Intelligence), et la traduction aussi. Rien n’est envoyé, rien n’est gardé hors de ton Mac.</p></details>
+      <details><summary>Qu’est-ce qu’il me faut pour les utiliser ?</summary><p>macOS 26 pour la traduction. macOS 26 et Apple Intelligence pour les résumés écrits par le modèle, la personnalisation d’un site et la recherche d’une date dans un texte. Le reste d’Orée (nuit, copier-coller, reprise, recettes dont la page donne les données) marche dès macOS 15.4.</p></details>
+      <details><summary>Le modèle peut-il se tromper ?</summary><p>Oui, et Orée le dit. Un résumé garde seulement ce qui se retrouve dans la page, une date n’est proposée que si la page la cite, et tu confirmes avant qu’un événement soit ajouté.</p></details>
+      <details><summary>Une personnalisation peut-elle casser un site ?</summary><p>Elle ne peut changer que le style, pour ce site seulement. Les règles sont vérifiées avant d’être appliquées, jamais de script, et « Annuler » (ou ⌘K › « Retirer les changements ») remet la page comme avant.</p></details>
+      <details><summary>Pourquoi Calendrier me demande de confirmer ?</summary><p>Parce qu’Orée n’a aucun accès à tes agendas : il ouvre Calendrier avec un fichier d’événement, et c’est Calendrier qui te laisse choisir où l’ajouter.</p></details>
       <details><summary>Comment se mettent à jour les prochaines versions ?</summary><p>Orée vérifie une fois par jour s’il existe une nouvelle version (désactivable) et propose de l’installer, sans rien réinstaller à la main.</p></details>
       <details><summary>Un site s’affiche mal avec le blocage ?</summary><p>Clic droit sur l’onglet → « Désactiver les protections sur ce site ». Réversible à tout moment.</p></details>
       <details><summary>Ma musique ou ma visio s’endort ?</summary><p>Jamais : un onglet qui joue du son reste éveillé.</p></details>

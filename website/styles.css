@@ -355,3 +355,18 @@ html:not(.js) .bar i,.reveal.in .bar i{width:var(--w)}
 .bench-fine{display:grid;gap:10px;margin-top:28px;max-width:860px;font-size:13.5px;color:var(--ink-2)}
 .bench-fine code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;padding:1px 6px;border-radius:6px;background:var(--hover)}
 @media (max-width:900px){.bench{grid-template-columns:1fr}}
+
+/* ---- Sur la page : ce qu'Orée fait avec le contenu d'une page ---- */
+#pages .sec-head h2{max-width:760px}
+#pages .sec-head h2 em{color:var(--accent-text)}
+.feat{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:0;padding:0;list-style:none}
+.feat li{display:flex;flex-direction:column;gap:8px;padding:26px;border-radius:var(--r);background:var(--surface);box-shadow:0 0 0 1px var(--line)}
+.feat .ic{width:24px;height:24px;color:var(--accent-text);margin-bottom:6px}
+.feat h3{font-size:18px;line-height:1.25}
+.feat p{margin:0;font-size:15px;line-height:1.55;color:var(--ink-2)}
+.feat small{margin-top:auto;padding-top:10px;font-size:13px;line-height:1.45;color:var(--ink-2);border-top:1px solid var(--line)}
+.feat li:first-child{grid-column:span 2}
+@media (min-width:901px){.feat li:last-child{grid-column:span 2}}
+.feat-note{margin-top:20px;max-width:760px}
+@media (max-width:900px){.feat{grid-template-columns:repeat(2,1fr)}.feat li:first-child{grid-column:span 2}}
+@media (max-width:560px){.feat{grid-template-columns:1fr}.feat li:first-child{grid-column:auto}}
