@@ -106,3 +106,28 @@ import Foundation
         #expect(GhostMatcher.scrollDelta(ghost: ghost, real: real) == -60)
     }
 }
+
+@Suite struct GhostAssemblerTests {
+    @Test func parsesTheCaptureWithItsSlots() throws {
+        let json = #"{"v":2,"url":"https://e.com/","title":"T","scrollX":0,"scrollY":10,"vw":800,"vh":600,"html":"<p>x</p>","media":[{"n":0,"x":1,"y":2,"w":30,"h":40}],"frames":[{"n":1,"src":"https://f.com/","ox":5,"oy":6,"w":100,"h":50}]}"#
+        let capture = try #require(GhostCapture.parse(json))
+        #expect(capture.media == [.init(n: 0, x: 1, y: 2, w: 30, h: 40)])
+        #expect(capture.frames?.first?.src == "https://f.com/")
+        #expect(capture.record.scrollY == 10)
+        #expect(GhostCapture.parse(#"{"error":"boom"}"#) == nil)
+    }
+
+    @Test func fillsAnImagePlaceholder() {
+        let html = #"<p>a</p><img data-oree-media="0" width="10"><img data-oree-media="1" width="20">"#
+        let out = GhostAssembler.insertImage(into: html, slot: 1, dataURL: "data:image/jpeg;base64,AAAA")
+        #expect(out.contains(#"<img src="data:image/jpeg;base64,AAAA" data-oree-media="1" width="20">"#))
+        #expect(out.contains(#"<img data-oree-media="0" width="10">"#))   // slot 0 untouched
+    }
+
+    @Test func embedsAnIframeDocumentAsADataURL() throws {
+        let html = #"<iframe data-oree-frame="0" class="ad"></iframe><iframe data-oree-frame="1"></iframe>"#
+        let out = GhostAssembler.insertFrame(into: html, slot: 1, document: "<p>Fish & Chips é</p>")
+        let encoded = Data("<p>Fish & Chips é</p>".utf8).base64EncodedString()
+        #expect(out == #"<iframe data-oree-frame="0" class="ad"></iframe><iframe src="data:text/html;charset=utf-8;base64,\#(encoded)" data-oree-frame="1"></iframe>"#)
+    }
+}

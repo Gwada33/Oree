@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Web components</title></head>
+<body style="margin:8px;font:14px sans-serif">
+<h1>Components</h1>
+<button id="go">Go</button>
+<fx-open>slotted text</fx-open>
+<fx-closed></fx-closed>
+<fx-outer></fx-outer>
+<script>
+document.getElementById('go').addEventListener('click', function () {});
+class FxOpen extends HTMLElement { constructor() { super(); const r = this.attachShadow({ mode: 'open' });
+  r.innerHTML = '<style>.box{background:#2a7;color:#fff;padding:10px;width:220px;margin-top:6px}</style><div class="box">OPEN-SHADOW <slot></slot></div>'; } }
+class FxClosed extends HTMLElement { constructor() { super(); const r = this.attachShadow({ mode: 'closed' });
+  r.innerHTML = '<style>.c{background:#c33;color:#fff;padding:10px;width:220px;margin-top:6px}</style><div class="c">CLOSED-SHADOW</div>'; } }
+class FxInner extends HTMLElement { constructor() { super(); const r = this.attachShadow({ mode: 'closed' });
+  r.innerHTML = '<b style="background:#fc0;color:#000;padding:2px">NESTED-CLOSED</b>'; } }
+class FxOuter extends HTMLElement { constructor() { super(); const r = this.attachShadow({ mode: 'open' });
+  const sheet = new CSSStyleSheet(); sheet.replaceSync('.o{background:#36c;color:#fff;padding:10px;width:220px;margin-top:6px}');
+  r.adoptedStyleSheets = [sheet]; r.innerHTML = '<div class="o">OUTER <fx-inner></fx-inner></div>'; } }
+customElements.define('fx-open', FxOpen); customElements.define('fx-closed', FxClosed);
+customElements.define('fx-inner', FxInner); customElements.define('fx-outer', FxOuter);
+</script></body></html>

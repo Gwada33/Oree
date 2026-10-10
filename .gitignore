@@ -19,3 +19,4 @@ scripts/bench/compare-results*.json
 scripts/bench/ghost-report.json
 scripts/bench/ghost-swap-report.json
 __pycache__/
+scripts/bench/ghost_fixture/clip.mp4

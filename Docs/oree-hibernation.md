@@ -1,6 +1,6 @@
 # Hibernation invisible d'Orée — « Fantôme + Hydratation »
 
-Statut : **phases 1 et 2 terminées** (derrière le flag `oree.hibernation.ghost`, désactivé par défaut). Phases 3 à 6 : voir « Suite ».
+Statut : **phases 1 à 3 terminées** (derrière le flag `oree.hibernation.ghost`, désactivé par défaut). Phases 4 à 6 : voir « Suite ».
 
 ## Principe
 La veille actuelle remplace l'onglet par une image HEIC puis recharge la page derrière : l'image est morte et le remplacement se voit.
@@ -20,7 +20,9 @@ Repli : si quoi que ce soit échoue (flag éteint, onglet privé, page trop lour
 |---|---|---|
 | Rust | `Rust/adblock_bridge/src/ghost.rs` | `ghost_compress` / `ghost_decompress` (zstd, plafond 32 Mo à la décompression), `GhostStore` (fichiers opaques, écriture atomique, clés `[A-Za-z0-9_-]`, `purge`) |
 | BrowserCore | `GhostRecord.swift` | `GhostRecord` (DOM + scroll), `GhostPolicy` (jamais en privé, http/https seulement, ≤ 5 Mo de HTML), `GhostCodec` (JSON → zstd), `GhostBlobStore` (enveloppe Swift de `GhostStore`) |
-| BrowserUI | `GhostScript.swift` | script de capture (monde `oree-ghost`), restauration du scroll |
+| BrowserUI | `GhostBootstrap.swift` | script de capture dans le monde de la page (Shadow DOM, canvas, vidéo, iframes, `data-oree-live`) |
+| BrowserUI | `GhostScript.swift` | restauration du scroll, sondes « prête » / comparaison (monde `oree-ghost`) |
+| BrowserCore | `GhostCapture.swift`, `GhostMatcher.swift` | réponse de la capture, assemblage des espaces réservés, comparaison fantôme / vraie page |
 | BrowserUI | `GhostView.swift` | WebView du fantôme (JS coupé, pool de process dédié, annule toute navigation et la signale), `GhostStorage` (dossier `Caches/Orée/Ghosts`, vidé au lancement et à la fermeture) |
 | BrowserUI | `Tab.swift` | capture dans `suspend()`, affichage dans `wake()`, retrait dans `finishWakeReveal()` |
 | BrowserUI | `Tab+GhostHarness.swift` | outillage de développement (`ui.sh ghost`), uniquement via `--automation` |
@@ -164,6 +166,57 @@ Constat : sur 6 sites sur 10 rien ne bouge à l'écran au moment de l'échange (
 - **Ouvert** : (2) l'alignement du scroll s'accroche à un en-tête fixe (prendre le bloc du milieu de la fenêtre) ; (3) le journal affiche 100 % quand la comparaison a échoué ; (4) l'observateur de mutations relit la mise en page ; (5) `dumpSwap` à déplacer dans `Tab+GhostHarness.swift`.
 - **Non vérifié** : `_doAfterNextPresentationUpdate:` et la frame réellement dessinée, en fenêtre visible ; la saisie au clavier pendant que le fantôme couvre l'onglet (elle va à la vraie page cachée dessous) — phase 4.
 
+## Phase 3 — les contenus difficiles
+
+### Ce qui a été construit
+La capture ne tourne plus en monde isolé mais dans le **monde de la page** (`GhostBootstrap.swift`, script injecté à `documentStart` dans **toutes les frames**), parce qu'elle doit voir ce qu'un script isolé ne voit pas : les shadow roots **fermés** et les éléments qui ont de vrais écouteurs. Le point d'entrée `capture()` est exposé sous un nom aléatoire par lancement ; les crochets (`attachShadow`, `addEventListener`, `getContext`) gardent leurs notes dans des `WeakMap`/`WeakSet`, **sans toucher au DOM**.
+
+| Cas | Traitement |
+|---|---|
+| Shadow DOM (ouvert, **fermé**, imbriqué) | `<template shadowrootmode="open">` déclaratif, récursif, avec `<style>` et feuilles adoptées du shadow root |
+| Web components | la copie est faite dans un document **inerte** (`importNode`) : aucun élément personnalisé n'est construit, aucun script de la page ne tourne pendant la capture (en prime, 2 à 10 × plus rapide : Wikipédia 950 → 66 ms) |
+| Canvas 2D | `toDataURL` en image |
+| Canvas WebGL / vidéo cross-origin / DRM | **instantané du rectangle** de l'élément (`WKSnapshotConfiguration.rect`), inséré dans un espace réservé numéroté |
+| Vidéo lisible | image JPEG de la frame courante (ou son `poster` hors écran) |
+| Iframes | même origine : HTML lu directement ; **cross-origin** : l'app demande à la frame de se capturer elle-même (la frame s'annonce par un message, `WKFrameInfo` + `evaluateJavaScript(in: frame)`) ; le document est intégré dans l'iframe en URL `data:` |
+| Images `blob:` | converties en URL `data:` |
+| Images lazy | passées en eager **seulement dans l'écran** (les autres restent lazy : le fantôme ne charge pas toute la page) |
+| Éléments interactifs | `data-oree-live` (écouteurs réels, boutons, rôles ARIA…) — prêt pour la phase 4 |
+
+### Découvertes WebKit (à ne pas redécouvrir)
+- **WebKit ignore l'attribut `srcdoc` quand JavaScript est coupé** : l'iframe reste `about:blank` (vérifié sur un cas minimal, `scripts` du spike). La spec initiale (réassembler en `srcdoc`) était donc fausse.
+- Un **schéma d'URL personnalisé** (`WKURLSchemeHandler`) pour servir les frames échoue en silence sur les pages **https** : WebKit le bloque comme contenu mixte (le gestionnaire n'est jamais appelé), alors qu'il marche sur une page http de test. D'où les URL **`data:`**.
+- Un iframe `data:` est chargé sans JavaScript et sans contenu mixte ; ses ressources relatives passent par le `<base>` de la frame.
+- La capture dans le monde de la page expose un nom de fonction à la page (non devinable) ; une page pourrait théoriquement la falsifier, ce qui ne ferait que fausser **son propre** fantôme.
+
+### Résultats
+`scripts/bench/ghost_fixture_check.py` (hors ligne, **37 vérifications**) : vie privée et formulaires (16), web components (8), canvas 2D et WebGL (4), vidéos même origine et cross-origin (3), iframes même origine et cross-origin (4) — **toutes passent**, écart au pixel de 0,00 à 0,79 %.
+`scripts/bench/ghost_check.py` (10 vrais sites) : **les 10 sites à 0,0 % d'écart** (MDN 8,0 % → 0,0 % grâce au Shadow DOM ; Stack Overflow 5,0 % → 0,0 % grâce aux iframes cross-origin).
+
+| Site | Écart | HTML → compressé | Capture (avant → après) |
+|---|---|---|---|
+| BBC | 0,0 % | 287 → 42 Ko | 111 → 42 ms |
+| Wikipédia | 0,0 % | 1 329 → 177 Ko | 947 → 66 ms |
+| GitHub | 0,0 % | 178 → 24 Ko | 32 → 69 ms |
+| react.dev | 0,0 % | 286 → 46 Ko | 112 → 58 ms |
+| IKEA | 0,0 % | 672 → 184 Ko | 423 → 182 ms |
+| MDN | 0,0 % | 790 → 69 Ko | 80 → 159 ms |
+| Hacker News | 0,0 % | 61 → 10 Ko | 21 → 26 ms |
+| Stack Overflow | 0,0 % | 1 246 → 144 Ko | 279 → 315 ms |
+| vercel.com | 0,0 % | 1 929 → 62 Ko | 1 484 → 736 ms |
+| Tailwind | 0,0 % | 185 → 17 Ko | 138 → 30 ms |
+
+(MDN, GitHub et Stack Overflow capturent plus de contenu qu'avant : shadow roots, frames.)
+Le cycle de réveil (`ghost_swap_check.py`) fonctionne toujours : l'alignement du scroll corrige par exemple 700 pt sur GitHub quand la vraie page ne retrouve pas sa position.
+
+### Limites connues (phase 3)
+- **Les crochets ne sont installés que sur les onglets créés quand le flag est actif** : un onglet ouvert avant l'activation du flag n'a pas de ghost (repli sur l'image).
+- WebGL et vidéo non lisible : instantané seulement si l'élément est **dans l'écran** ; hors écran, une image vide ou le `poster`.
+- Un canvas animé est figé sur sa dernière frame (le score de fidélité de la phase 5 le détectera).
+- `addEventListener` est enveloppé : un site qui compare `addEventListener.toString()` à du code natif peut le remarquer (même remarque que pour les protections anti-empreinte existantes).
+- Une même origine imbriquée sur plus de 3 niveaux, ou plus de 24 frames / 12 médias, n'est pas capturée.
+- Un shadow root fermé est servi **ouvert** dans le fantôme (personne ne le script).
+
 ## Comment tester l'échange (fenêtre visible)
 ```
 defaults write com.nolhan.hyperbrowser oree.hibernation.ghost -bool true   # ou lancer avec HB_GHOST=1
@@ -171,7 +224,6 @@ defaults write com.nolhan.hyperbrowser oree.hibernation.ghost -bool true   # ou 
 Ouvrez une page longue, défilez, allez sur un autre onglet, endormez le premier (clic droit → Mettre en veille, ou ⌥⌘E), revenez dessus. Le journal (`log stream --predicate 'subsystem == "com.nolhan.hyperbrowser" AND category == "tabs"' --info`) affiche `Ghost: swap after … — ready=ready/painted/…/visible text=… position=…`. `painted` + `visible` = la vraie page a bien produit ses frames avant l'échange.
 
 ## Suite
-3. Contenus difficiles (Shadow DOM, canvas, vidéos, iframes) — corrigent MDN et Stack Overflow.
 4. Transfert de l'état utilisateur ; **préchargement au survol** (condition du bénéfice de réveil).
 5. Score de fidélité ; gel noyau `SIGSTOP`/`SIGCONT` (flag `oree.hibernation.kernelFreeze`).
 6. Chiffrement AES-GCM, banc automatique d'invisibilité.

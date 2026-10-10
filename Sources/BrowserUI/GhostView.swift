@@ -60,6 +60,11 @@ final class GhostView: NSObject, WKNavigationDelegate {
             didStart = true
             return (.allow, preferences)
         }
+        // Frames of the ghost itself: blank ones, and the captured documents (embedded as `data:` URLs).
+        if navigationAction.targetFrame?.isMainFrame == false, let url = navigationAction.request.url,
+           url.absoluteString == "about:blank" || url.scheme == "data" {
+            return (.allow, preferences)
+        }
         // A link to an anchor of the same page (a table of contents): the ghost scrolls there itself, no JavaScript needed.
         if navigationAction.navigationType == .linkActivated, navigationAction.targetFrame?.isMainFrame == true,
            let target = navigationAction.request.url, target.fragment != nil, Self.sameDocument(target, URL(string: record.url)) {

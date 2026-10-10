@@ -219,10 +219,29 @@ final class Tab: NSObject {
         Tab.trackedControllers.add(controller)
         controller.addUserScript(TabPageState.makeUserScript())
         controller.add(TabPageStateHandler(), contentWorld: TabPageState.world, name: TabPageState.handlerName)
+        // Ghost hibernation: the page-side capture needs hooks installed before the page's own scripts run, so it is only
+        // added to tabs created while the flag is on.
+        if SettingsStore.shared.hibernationGhost {
+            controller.addUserScript(GhostBootstrap.userScript)
+            controller.add(GhostFrameHandler(), contentWorld: .page, name: GhostBootstrap.frameHandler)
+        }
+    }
+
+    // MARK: Frames that announced themselves (cross-origin iframes can only be captured by asking them)
+    private var frameInfos: [WKFrameInfo] = []
+    func noteFrame(_ info: WKFrameInfo) {
+        guard !info.isMainFrame, frameInfos.count < 40 else { return }
+        frameInfos.append(info)
+    }
+    /// Removes and returns the frame whose address is `src` (the same address twice maps in order).
+    private func takeFrame(src: String) -> WKFrameInfo? {
+        guard let index = frameInfos.firstIndex(where: { $0.request.url?.absoluteString == src }) else { return nil }
+        return frameInfos.remove(at: index)
     }
 
     /// A new document replaced the old one: its unsaved input is gone with it.
     func pageDidCommit() {
+        frameInfos.removeAll()
         isDirty = false
         hasCommittedSinceWake = true
     }
@@ -246,7 +265,7 @@ final class Tab: NSObject {
 
     /// Runs a script in `world` and returns its string result, or nil on error or after `seconds`. A page that is
     /// stuck never answers: without this deadline one hung tab would block every other tab's sleep.
-    func evaluateWithTimeout(_ script: String, in target: WKWebView? = nil, world: WKContentWorld, seconds: Double) async -> String? {
+    func evaluateWithTimeout(_ script: String, in target: WKWebView? = nil, frame: WKFrameInfo? = nil, world: WKContentWorld, seconds: Double) async -> String? {
         guard let webView = target ?? webView else { return nil }
         return await withCheckedContinuation { continuation in
             var finished = false
@@ -256,7 +275,7 @@ final class Tab: NSObject {
                 continuation.resume(returning: value)
             }
             Task { @MainActor in
-                let value = try? await webView.evaluateJavaScript(script, in: nil, contentWorld: world)
+                let value = try? await webView.evaluateJavaScript(script, in: frame, contentWorld: world)
                 finish(value as? String)
             }
             Task { @MainActor in
@@ -404,6 +423,7 @@ final class Tab: NSObject {
         controller.removeAllUserScripts()
         scripts.forEach { controller.addUserScript($0) }
         controller.addUserScript(TabPageState.makeUserScript())
+        if SettingsStore.shared.hibernationGhost { controller.addUserScript(GhostBootstrap.userScript) }
     }
 
     /// Fully releases the page: unloads it (which stops any video/audio), cuts every
@@ -440,8 +460,7 @@ final class Tab: NSObject {
         guard SettingsStore.shared.hibernationGhost, let webView, GhostPolicy.canCapture(url: webView.url, isPrivate: isPrivate),
               let store = GhostStorage.store else { return false }
         let started = Date()
-        guard let json = await evaluateWithTimeout(GhostScript.capture, world: GhostScript.world, seconds: 2),
-              let record = GhostRecord.parse(scriptResult: json), GhostPolicy.accepts(record) else {
+        guard let record = await buildGhostRecord(), GhostPolicy.accepts(record) else {
             Log.tabs.notice("Ghost: not captured for \(webView.url?.host ?? "?", privacy: .public)")
             return false
         }
@@ -454,6 +473,71 @@ final class Tab: NSObject {
             Log.tabs.error("Ghost: storing failed (\(error.localizedDescription, privacy: .public))")
             return false
         }
+    }
+
+    /// The live page as a ghost: the page script's capture, then what it could not do itself — snapshots of canvases / videos
+    /// it could not read, and the documents of cross-origin frames (each asked to capture itself).
+    func buildGhostRecord(timeout: Double = 2) async -> GhostRecord? {
+        guard let json = await evaluateWithTimeout(GhostBootstrap.captureCall, world: .page, seconds: timeout),
+              let capture = GhostCapture.parse(json) else { return nil }
+        var record = capture.record
+        if let frames = capture.frames, !frames.isEmpty {
+            Log.tabs.notice("Ghost: \(frames.count) iframe(s): \(frames.map { ($0.html == nil ? "cross-origin " : "inline ") + String($0.src.prefix(50)) }.joined(separator: "; "), privacy: .public)")
+        }
+        record.html = await assemble(capture, originX: 0, originY: 0, depth: 0)
+        return record
+    }
+
+    /// Fills the placeholders of one capture and returns its main document. Each iframe's document (inline ones, and those of
+    /// cross-origin frames that are asked to capture themselves) is embedded in the iframe as a `data:` URL.
+    /// (originX, originY) is where this capture's viewport sits in the top-level view.
+    private func assemble(_ capture: GhostCapture, originX: Double, originY: Double, depth: Int) async -> String {
+        // 1. the document of every iframe of this capture
+        var frameDocs: [Int: String] = [:]
+        for slot in (capture.frames ?? []).prefix(24) {
+            if let html = slot.html {
+                frameDocs[slot.n] = html
+            } else if depth < 2, !slot.src.isEmpty {
+                guard let info = takeFrame(src: slot.src) else {
+                    Log.tabs.notice("Ghost: frame \(slot.src.prefix(70), privacy: .public) never announced itself (\(self.frameInfos.count) known)")
+                    continue
+                }
+                guard let json = await evaluateWithTimeout(GhostBootstrap.captureCall, frame: info, world: .page, seconds: 1.5),
+                      let sub = GhostCapture.parse(json) else {
+                    Log.tabs.notice("Ghost: frame \(slot.src.prefix(70), privacy: .public) did not answer its capture")
+                    continue
+                }
+                frameDocs[slot.n] = await assemble(sub, originX: originX + slot.ox, originY: originY + slot.oy, depth: depth + 1)
+            }
+        }
+        // 2. canvases / videos the page could not read: a snapshot of their rectangle, put in every document of this capture
+        var main = capture.html
+        for slot in (capture.media ?? []).prefix(12) {
+            let rect = CGRect(x: originX + slot.x, y: originY + slot.y, width: slot.w, height: slot.h)
+            guard let url = await snapshotDataURL(of: rect) else { continue }
+            main = GhostAssembler.insertImage(into: main, slot: slot.n, dataURL: url)
+            for (n, html) in frameDocs { frameDocs[n] = GhostAssembler.insertImage(into: html, slot: slot.n, dataURL: url) }
+        }
+        // 3. embed each frame in the document that holds it. A nested frame always has a higher number than its parent, so going
+        // from the highest down puts every frame in its parent before the parent is itself embedded.
+        for n in frameDocs.keys.sorted(by: >) {
+            guard let document = frameDocs[n] else { continue }
+            main = GhostAssembler.insertFrame(into: main, slot: n, document: document)
+            for m in frameDocs.keys where m < n { frameDocs[m] = GhostAssembler.insertFrame(into: frameDocs[m] ?? "", slot: n, document: document) }
+        }
+        return main
+    }
+
+    /// A JPEG of one rectangle of the web view (points, view coordinates), as a data URL; nil if empty or too big.
+    private func snapshotDataURL(of rect: CGRect) async -> String? {
+        guard let webView, rect.width >= 2, rect.height >= 2 else { return nil }
+        let configuration = WKSnapshotConfiguration()
+        configuration.rect = rect
+        configuration.snapshotWidth = NSNumber(value: Double(min(rect.width, 1280)))
+        guard let image = try? await webView.takeSnapshot(configuration: configuration), let tiff = image.tiffRepresentation,
+              let jpeg = NSBitmapImageRep(data: tiff)?.representation(using: .jpeg, properties: [.compressionFactor: 0.85]),
+              jpeg.count <= 1_500_000 else { return nil }
+        return "data:image/jpeg;base64," + jpeg.base64EncodedString()
     }
 
     /// Builds the ghost view from the stored file, or nil (no file, unreadable, flag off) → snapshot fallback.

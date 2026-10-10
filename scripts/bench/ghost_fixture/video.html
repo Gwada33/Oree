@@ -1,0 +1,11 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Video</title></head>
+<body style="margin:8px;font:14px sans-serif">
+<p>Same-origin video, then a cross-origin one (no CORS: its pixels cannot be read):</p>
+<video id="v1" src="clip.mp4" width="240" height="135" muted preload="auto"></video>
+<video id="v2" src="http://127.0.0.1:8782/clip.mp4" width="240" height="135" muted preload="auto"></video>
+<script>
+['v1', 'v2'].forEach(function (id) { var v = document.getElementById(id);
+  v.addEventListener('loadeddata', function () { v.currentTime = 1; });
+  v.addEventListener('seeked', function () { v.pause(); }); });
+</script></body></html>

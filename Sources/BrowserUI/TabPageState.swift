@@ -86,3 +86,10 @@ final class TabPageStateHandler: NSObject, WKScriptMessageHandler {
         MainActor.assumeIsolated { Tab.tabsByWebView.object(forKey: message.webView)?.isDirty = true }
     }
 }
+
+/// Receives "a frame is here" from `GhostBootstrap` (non-main frames only) so the tab can ask it to capture itself.
+final class GhostFrameHandler: NSObject, WKScriptMessageHandler {
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        MainActor.assumeIsolated { Tab.tabsByWebView.object(forKey: message.webView)?.noteFrame(message.frameInfo) }
+    }
+}

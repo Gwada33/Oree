@@ -16,8 +16,7 @@ extension Tab {
         }
         if let live = try? await webView.takeSnapshot(configuration: nil) { png(live, to: livePath) }
         let started = Date()
-        guard let json = await evaluateWithTimeout(GhostScript.capture, world: GhostScript.world, seconds: 5),
-              let record = GhostRecord.parse(scriptResult: json) else { return "capture failed" }
+        guard let record = await buildGhostRecord(timeout: 5) else { return "capture failed (is the flag on for this tab?)" }
         let captureMs = Int(Date().timeIntervalSince(started) * 1000)
         // A second live snapshot right after the capture: pages keep changing (banners, carousels), so the check
         // compares the ghost with whichever of the two live images it is closer to.
