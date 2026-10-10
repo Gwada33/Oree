@@ -20,6 +20,8 @@ print(json.dumps(d))' "$ID" "$2") ;;
   drag)     JSON="{\"id\":\"$ID\",\"cmd\":\"drag\",\"x\":$2,\"y\":$3,\"toX\":$4,\"toY\":$5}" ;;
   install)  JSON=$(python3 -c 'import json,sys;print(json.dumps({"id":sys.argv[1],"cmd":"install","path":sys.argv[2]}))' "$ID" "$2") ;;
   extop)    JSON="{\"id\":\"$ID\",\"cmd\":\"extop\",\"op\":\"$2\"}" ;;
+  tab)      JSON="{\"id\":\"$ID\",\"cmd\":\"tab\",\"op\":\"$2\",\"index\":$3}" ;;
+  ghost)    JSON=$(python3 -c 'import json,sys;print(json.dumps({"id":sys.argv[1],"cmd":"ghost","live":sys.argv[2],"ghost":sys.argv[3]}))' "$ID" "$2" "$3") ;;
   tree|state|front|webkit|gc|extensions) JSON="{\"id\":\"$ID\",\"cmd\":\"$1\"}" ;;
   *) echo "usage: see header"; exit 2 ;;
 esac

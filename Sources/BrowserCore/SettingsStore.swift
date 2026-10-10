@@ -43,6 +43,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let autoSuspendMinutes = "settings.autoSuspendMinutes"
         static let freezeAfterSeconds = "settings.freezeAfterSeconds"
         static let neverSleepHosts = "settings.neverSleepHosts"
+        static let hibernationGhost = "oree.hibernation.ghost"
         static let protectionExemptHosts = "settings.protectionExemptHosts"
         static let privateByDefault = "settings.privateByDefault"
         static let customHomepageURL = "settings.customHomepageURL"
@@ -89,6 +90,7 @@ public final class SettingsStore: @unchecked Sendable {
             Key.adBlockEnabled: true,
             Key.autoSuspendMinutes: 45,
             Key.freezeAfterSeconds: 120,
+            Key.hibernationGhost: false,
             Key.protectionExemptHosts: ProtectionPolicy.defaultExemptHosts,
             Key.privateByDefault: false,
             Key.customHomepageURL: "",
@@ -153,6 +155,12 @@ public final class SettingsStore: @unchecked Sendable {
     public var freezeAfterSeconds: Int {
         get { defaults.integer(forKey: Key.freezeAfterSeconds) }
         set { defaults.set(newValue, forKey: Key.freezeAfterSeconds) }
+    }
+
+    /// Experimental "ghost" hibernation (docs/oree-hibernation.md): off by default; `HB_GHOST=1` forces it on.
+    public var hibernationGhost: Bool {
+        get { GhostPolicy.isEnabled(stored: defaults.bool(forKey: Key.hibernationGhost)) }
+        set { defaults.set(newValue, forKey: Key.hibernationGhost) }
     }
 
     /// Sites with ad blocking and fingerprint noise switched off.

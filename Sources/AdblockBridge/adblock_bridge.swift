@@ -481,6 +481,38 @@ fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
+    typealias FfiType = Int32
+    typealias SwiftType = Int32
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int32 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int32, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterString: FfiConverter {
     typealias SwiftType = String
     typealias FfiType = RustBuffer
@@ -521,6 +553,24 @@ fileprivate struct FfiConverterString: FfiConverter {
         let len = Int32(value.utf8.count)
         writeInt(&buf, len)
         writeBytes(&buf, value.utf8)
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterData: FfiConverterRustBuffer {
+    typealias SwiftType = Data
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        let len: Int32 = try readInt(&buf)
+        return Data(try readBytes(&buf, count: Int(len)))
+    }
+
+    public static func write(_ value: Data, into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        writeBytes(&buf, value)
     }
 }
 
@@ -666,6 +716,201 @@ public func FfiConverterTypeCosmeticEngine_lower(_ value: CosmeticEngine) -> UIn
 
 
 
+
+
+/**
+ * A directory of opaque blobs addressed by key (a tab id). Writes are atomic (temp file + rename).
+ */
+public protocol GhostStoreProtocol: AnyObject, Sendable {
+    
+    /**
+     * `None` when there is no ghost for this key.
+     */
+    func get(key: String) throws  -> Data?
+    
+    /**
+     * Deletes every ghost (app start and quit).
+     */
+    func purge() throws 
+    
+    func put(key: String, bytes: Data) throws 
+    
+    func remove(key: String) throws 
+    
+    /**
+     * Total size of the stored ghosts, in bytes.
+     */
+    func totalBytes()  -> UInt64
+    
+}
+/**
+ * A directory of opaque blobs addressed by key (a tab id). Writes are atomic (temp file + rename).
+ */
+open class GhostStore: GhostStoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_adblock_bridge_fn_clone_ghoststore(self.handle, $0) }
+    }
+public convenience init(dir: String)throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeBridgeError_lift) {
+        uniffiCallStatus in
+    uniffi_adblock_bridge_fn_constructor_ghoststore_new(
+        FfiConverterString.lower(dir),uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_adblock_bridge_fn_free_ghoststore(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * `None` when there is no ghost for this key.
+     */
+open func get(key: String)throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeBridgeError_lift) {
+        uniffiCallStatus in
+    uniffi_adblock_bridge_fn_method_ghoststore_get(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(key),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Deletes every ghost (app start and quit).
+     */
+open func purge()throws   {try rustCallWithError(FfiConverterTypeBridgeError_lift) {
+        uniffiCallStatus in
+    uniffi_adblock_bridge_fn_method_ghoststore_purge(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+open func put(key: String, bytes: Data)throws   {try rustCallWithError(FfiConverterTypeBridgeError_lift) {
+        uniffiCallStatus in
+    uniffi_adblock_bridge_fn_method_ghoststore_put(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(key),
+        FfiConverterData.lower(bytes),uniffiCallStatus
+    )
+}
+}
+    
+open func remove(key: String)throws   {try rustCallWithError(FfiConverterTypeBridgeError_lift) {
+        uniffiCallStatus in
+    uniffi_adblock_bridge_fn_method_ghoststore_remove(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(key),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Total size of the stored ghosts, in bytes.
+     */
+open func totalBytes() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_adblock_bridge_fn_method_ghoststore_total_bytes(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGhostStore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = GhostStore
+
+    public static func lift(_ handle: UInt64) throws -> GhostStore {
+        return GhostStore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: GhostStore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GhostStore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: GhostStore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGhostStore_lift(_ handle: UInt64) throws -> GhostStore {
+    return try FfiConverterTypeGhostStore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGhostStore_lower(_ value: GhostStore) -> UInt64 {
+    return FfiConverterTypeGhostStore.lower(value)
+}
+
+
+
+
 public 
 enum BridgeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -676,6 +921,10 @@ enum BridgeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     case Serialization(message: String)
     
     case ChunkCapTooSmall(message: String)
+    
+    case Ghost(message: String)
+    
+    case InvalidGhostKey(message: String)
     
 
     
@@ -718,6 +967,14 @@ public struct FfiConverterTypeBridgeError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 4: return .Ghost(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 5: return .InvalidGhostKey(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -735,6 +992,10 @@ public struct FfiConverterTypeBridgeError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         case .ChunkCapTooSmall(_ /* message is ignored*/):
             writeInt(&buf, Int32(3))
+        case .Ghost(_ /* message is ignored*/):
+            writeInt(&buf, Int32(4))
+        case .InvalidGhostKey(_ /* message is ignored*/):
+            writeInt(&buf, Int32(5))
 
         
         }
@@ -754,6 +1015,30 @@ public func FfiConverterTypeBridgeError_lift(_ buf: RustBuffer) throws -> Bridge
 #endif
 public func FfiConverterTypeBridgeError_lower(_ value: BridgeError) -> RustBuffer {
     return FfiConverterTypeBridgeError.lower(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
+    typealias SwiftType = Data?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterData.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterData.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
 }
 
 #if swift(>=5.8)
@@ -798,6 +1083,29 @@ public func convertToContentBlocking(listTexts: [String], maxRulesPerChunk: UInt
     )
 })
 }
+/**
+ * Compresses `bytes` with zstd (`level` is clamped to 1...19; ~3 is a good speed/size balance for HTML).
+ */
+public func ghostCompress(bytes: Data, level: Int32)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeBridgeError_lift) {
+        uniffiCallStatus in
+    uniffi_adblock_bridge_fn_func_ghost_compress(
+        FfiConverterData.lower(bytes),
+        FfiConverterInt32.lower(level),uniffiCallStatus
+    )
+})
+}
+/**
+ * Decompresses a zstd payload, refusing anything that expands beyond 32 MiB.
+ */
+public func ghostDecompress(bytes: Data)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeBridgeError_lift) {
+        uniffiCallStatus in
+    uniffi_adblock_bridge_fn_func_ghost_decompress(
+        FfiConverterData.lower(bytes),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -817,10 +1125,34 @@ private let initializationResult: InitializationResult = {
     if (uniffi_adblock_bridge_checksum_func_convert_to_content_blocking() != 5127) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_adblock_bridge_checksum_func_ghost_compress() != 2945) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_adblock_bridge_checksum_func_ghost_decompress() != 16148) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_adblock_bridge_checksum_method_cosmeticengine_css_for_url() != 47109) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_adblock_bridge_checksum_method_ghoststore_get() != 32916) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_adblock_bridge_checksum_method_ghoststore_purge() != 4791) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_adblock_bridge_checksum_method_ghoststore_put() != 13365) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_adblock_bridge_checksum_method_ghoststore_remove() != 11899) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_adblock_bridge_checksum_method_ghoststore_total_bytes() != 44836) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_adblock_bridge_checksum_constructor_cosmeticengine_new() != 40886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_adblock_bridge_checksum_constructor_ghoststore_new() != 59359) {
         return InitializationResult.apiChecksumMismatch
     }
 

@@ -16,3 +16,4 @@ Oree-*.zip
 *.dmg
 graphify-out/
 scripts/bench/compare-results*.json
+scripts/bench/ghost-report.json

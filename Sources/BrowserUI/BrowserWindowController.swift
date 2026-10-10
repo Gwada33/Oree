@@ -327,6 +327,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             window: window,
             activeWebView: { [weak self] in self?.activeTab?.webView },
             overlays: { [weak self] in [self?.activeTab?.interstitial, self?.loadingBar, (self?.paletteLoaded == true ? self?.palette : nil), self?.addressDropdown, (self?.floatingShown == true ? self?.sidebarView : nil), self?.demoPanel, self?.drawer, self?.overview, self?.onboarding, self?.findBarContainer].compactMap { $0 } },
+            tabOperation: { [weak self] op, index in
+                guard let self, self.visibleTabs().indices.contains(index) else { return "no such tab" }
+                let tab = self.visibleTabs()[index]
+                switch op {
+                case "select": self.selectTab(tab); return "selected \(index)"
+                case "sleep": self.sleepTab(tab); return "sleeping \(index)"
+                default: return "unknown op"
+                }
+            },
+            ghostCheck: { [weak self] live, ghost in await self?.activeTab?.ghostSelfTest(livePath: live, ghostPath: ghost) ?? "no tab" },
             installExtension: { [weak self] url in
                 guard let manager = self?.extensionManager else { throw CancellationError() }
                 manager.autoApprove = true   // the channel can't click the permission sheet
@@ -1162,7 +1172,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Daily, silent unless a newer version exists.
-    public static func purgeSnapshots() { Tab.purgeSnapshots() }
+    public static func purgeSnapshots() { Tab.purgeSnapshots(); GhostStorage.purge() }
 
     public func checkForUpdatesInBackground() { AppUpdater.shared.checkInBackgroundIfDue() }
 
@@ -2022,6 +2032,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if self?.effectiveSidebarMode == .compact { self?.updateTabCount() }
             self?.extensionManager.tabChanged(tab, .title)
         }
+        tab.ghostRuleLists = { [weak self, weak tab] in self?.ruleLists(for: tab?.currentURL) ?? [] }
         tab.onURLChange = { [weak self, weak tab] in
             guard let self, let tab else { return }
             tab.tabButton.setTitle(tab.displayTitle, host: tab.badgeHost)
@@ -2542,12 +2553,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Carries out a plan; returns how many tabs were put to sleep.
     @discardableResult
-    private func apply(_ plan: TabLifecyclePolicy.Plan) async -> Int {
+    private func apply(_ plan: TabLifecyclePolicy.Plan, captureGhost: Bool = true) async -> Int {
         for id in plan.freeze { tabs.first { $0.id == id }?.freeze() }
         var slept = 0
         for id in plan.sleep {
             guard let tab = tabs.first(where: { $0.id == id }), !isOnScreen(tab) else { continue }
-            await tab.suspend()
+            await tab.suspend(captureGhost: captureGhost)
             slept += 1
         }
         return slept
@@ -3107,7 +3118,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                                  state: tab.isFrozen ? .frozen : .awake,
                                  exemption: await lifecycleExemption(of: tab)))
         }
-        await apply(TabLifecyclePolicy.emergencyPlan(entries: entries))
+        await apply(TabLifecyclePolicy.emergencyPlan(entries: entries), captureGhost: false)   // memory is short: no time for ghosts
     }
 
     // MARK: - WKNavigationDelegate

@@ -12,6 +12,8 @@ use adblock::lists::{FilterSet, ParseOptions};
 use adblock::Engine;
 use std::sync::{Arc, Mutex};
 
+mod ghost;
+
 uniffi::setup_scaffolding!();
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -23,6 +25,10 @@ pub enum BridgeError {
     Serialization(String),
     #[error("{exceptions} exception rules cannot fit in chunks of {cap} rules")]
     ChunkCapTooSmall { exceptions: u32, cap: u32 },
+    #[error("ghost storage failed: {0}")]
+    Ghost(String),
+    #[error("ghost key must be 1-128 characters of A-Z a-z 0-9 - _")]
+    InvalidGhostKey,
 }
 
 fn is_exception(rule: &CbRule) -> bool {

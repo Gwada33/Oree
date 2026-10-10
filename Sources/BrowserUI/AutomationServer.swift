@@ -18,15 +18,23 @@ final class AutomationServer {
     /// Views drawn above the web content (palette, find bar) — redrawn on top
     /// of the page snapshot, which would otherwise cover them.
     private let overlays: () -> [NSView]
+    /// Ghost hibernation dev harness: (live snapshot path, ghost snapshot path) → JSON report.
+    private let ghostCheck: (String, String) async -> String
+    /// Dev only: ("select" | "sleep", index of the tab in the current space) → what happened.
+    private let tabOperation: (String, Int) -> String
     private let installExtension: (URL) async throws -> Void
     private let extensionsReport: () -> String
     var extensionOperation: ((String) -> String)?
     private var timer: Timer?
 
     init(window: NSWindow, activeWebView: @escaping () -> WKWebView?, overlays: @escaping () -> [NSView],
+         tabOperation: @escaping (String, Int) -> String,
+         ghostCheck: @escaping (String, String) async -> String,
          installExtension: @escaping (URL) async throws -> Void, extensionsReport: @escaping () -> String,
          perform: @escaping (Selector) -> Bool) {
         self.installExtension = installExtension
+        self.ghostCheck = ghostCheck
+        self.tabOperation = tabOperation
         self.extensionsReport = extensionsReport
         self.window = window
         self.activeWebView = activeWebView
@@ -136,6 +144,11 @@ final class AutomationServer {
             return (true, extensionOperation?(c["op"] as? String ?? "") ?? "unavailable")
         case "extensions":
             return (true, extensionsReport())
+        case "tab":
+            return (true, tabOperation(c["op"] as? String ?? "", c["index"] as? Int ?? 0))
+        case "ghost":
+            let output = await ghostCheck(c["live"] as? String ?? "/tmp/ghost-live.png", c["ghost"] as? String ?? "/tmp/ghost-ghost.png")
+            return (output.hasPrefix("{"), output)
         case "gc":
             // Forces a JavaScript garbage collection in every web process (private WebKit call used by its own tests).
             guard let web = activeWebView() else { return (false, "no active web view") }

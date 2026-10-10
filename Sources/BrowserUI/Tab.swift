@@ -7,7 +7,7 @@ final class Tab: NSObject {
     let id = UUID()
     let tabButton = TabButtonView()
     let isPrivate: Bool
-    private let configuration: WKWebViewConfiguration
+    let configuration: WKWebViewConfiguration
 
     /// Stable view added once to the window's content container; hosts
     /// whichever of `webView` / the snapshot / the crash overlay applies.
@@ -60,6 +60,12 @@ final class Tab: NSObject {
     /// but is only torn down when the system really needs the memory.
     var isDirty = false
     private var usedPrivateFreeze = false
+    /// The ghost shown while this tab wakes (flag `oree.hibernation.ghost`), and a link clicked in it meanwhile.
+    private(set) var ghostView: GhostView?
+    private var pendingGhostURL: URL?
+    private var ghostShownFrom: Date?
+    /// Content-blocking lists for the ghost's own web view (set by the window controller).
+    var ghostRuleLists: (() -> [WKContentRuleList])?
     /// A sleep is in progress (it awaits): a second request must not start another.
     private var isSuspending = false
     /// Field values and video position saved just before a forced sleep, put back after the reload.
@@ -223,23 +229,7 @@ final class Tab: NSObject {
     /// Reads field values and the video position before a forced teardown.
     private func collectPageState() async {
         guard let webView, !webView.isLoading else { savedPageState = nil; return }
-        // A page that is stuck never answers: give up after 2 s instead of blocking every other tab's sleep.
-        let result: String? = await withCheckedContinuation { continuation in
-            var finished = false
-            let finish: (String?) -> Void = { value in
-                guard !finished else { return }
-                finished = true
-                continuation.resume(returning: value)
-            }
-            Task { @MainActor in
-                let value = try? await webView.evaluateJavaScript(TabPageState.collectCall, in: nil, contentWorld: TabPageState.world)
-                finish(value as? String)
-            }
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(2))
-                finish(nil)
-            }
-        }
+        let result = await evaluateWithTimeout(TabPageState.collectCall, world: TabPageState.world, seconds: 2)
         savedPageState = result.flatMap { $0 == "null" ? nil : $0 }
     }
 
@@ -252,6 +242,28 @@ final class Tab: NSObject {
 
     /// In (or entering/leaving) a native fullscreen video: never freeze or sleep such a tab.
     var isInFullscreen: Bool { webView.map { $0.fullscreenState != .notInFullscreen } ?? false }
+
+    /// Runs a script in `world` and returns its string result, or nil on error or after `seconds`. A page that is
+    /// stuck never answers: without this deadline one hung tab would block every other tab's sleep.
+    func evaluateWithTimeout(_ script: String, world: WKContentWorld, seconds: Double) async -> String? {
+        guard let webView else { return nil }
+        return await withCheckedContinuation { continuation in
+            var finished = false
+            let finish: (String?) -> Void = { value in
+                guard !finished else { return }
+                finished = true
+                continuation.resume(returning: value)
+            }
+            Task { @MainActor in
+                let value = try? await webView.evaluateJavaScript(script, in: nil, contentWorld: world)
+                finish(value as? String)
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(seconds))
+                finish(nil)
+            }
+        }
+    }
 
     /// Puts saved field values / video position back into the freshly reloaded page.
     func restorePageStateIfNeeded() {
@@ -405,6 +417,7 @@ final class Tab: NSObject {
         controller.removeAllContentRuleLists()
         controller.removeScriptMessageHandler(forName: CredentialScript.handlerName)
         try? FileManager.default.removeItem(at: snapshotFile)
+        dropGhost()
 
         guard let webView else { return }
         webView.navigationDelegate = nil
@@ -414,6 +427,69 @@ final class Tab: NSObject {
         webView.loadHTMLString("", baseURL: nil)   // unloading the document ends playback for certain
         webView.removeFromSuperview()
         self.webView = nil
+    }
+
+    // MARK: - Ghost (docs/oree-hibernation.md)
+
+    /// Freezes the live page into a compressed ghost on disk. False = no ghost (flag off, private tab, page too heavy,
+    /// script error…): the caller then relies on the snapshot image alone.
+    @discardableResult
+    private func captureGhost() async -> Bool {
+        guard SettingsStore.shared.hibernationGhost, let webView, GhostPolicy.canCapture(url: webView.url, isPrivate: isPrivate),
+              let store = GhostStorage.store else { return false }
+        let started = Date()
+        guard let json = await evaluateWithTimeout(GhostScript.capture, world: GhostScript.world, seconds: 2),
+              let record = GhostRecord.parse(scriptResult: json), GhostPolicy.accepts(record) else {
+            Log.tabs.notice("Ghost: not captured for \(webView.url?.host ?? "?", privacy: .public)")
+            return false
+        }
+        do {
+            let packed = try GhostCodec.encode(record)
+            try store.put(key: id.uuidString, data: packed)
+            Log.tabs.notice("Ghost: \(record.html.utf8.count / 1024) KB -> \(packed.count / 1024) KB in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            return true
+        } catch {
+            Log.tabs.error("Ghost: storing failed (\(error.localizedDescription, privacy: .public))")
+            return false
+        }
+    }
+
+    /// Builds the ghost view from the stored file, or nil (no file, unreadable, flag off) → snapshot fallback.
+    private func makeGhostView() -> GhostView? {
+        guard SettingsStore.shared.hibernationGhost, let store = GhostStorage.store,
+              let data = (try? store.get(key: id.uuidString)) ?? nil,
+              let record = try? GhostCodec.decode(data), GhostPolicy.accepts(record) else { return nil }
+        let ghost = GhostView(record: record, dataStore: configuration.websiteDataStore, ruleLists: ghostRuleLists?() ?? [])
+        ghost.onNavigate = { [weak self] url in self?.pendingGhostURL = url ?? self?.pendingGhostURL }
+        return ghost
+    }
+
+    private func showGhost(_ ghost: GhostView) {
+        ghostView = ghost
+        let view = ghost.webView
+        view.alphaValue = 0          // invisible until it has painted: the snapshot underneath covers the wait
+        contentSlot.addSubview(view, positioned: .below, relativeTo: interstitial)
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: contentSlot.topAnchor), view.leadingAnchor.constraint(equalTo: contentSlot.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: contentSlot.trailingAnchor), view.bottomAnchor.constraint(equalTo: contentSlot.bottomAnchor),
+        ])
+        let woke = Date()
+        ghost.onReady = { [weak view] in
+            view?.alphaValue = 1
+            Log.tabs.notice("Ghost: visible \(Int(Date().timeIntervalSince(woke) * 1000)) ms after the wake")
+        }
+        ghostShownFrom = woke
+        ghost.load()
+    }
+
+    private func dropGhost() {
+        if let from = ghostShownFrom, ghostView != nil {
+            Log.tabs.notice("Ghost: replaced by the real page \(Int(Date().timeIntervalSince(from) * 1000)) ms after the wake")
+        }
+        ghostShownFrom = nil
+        ghostView?.tearDown()
+        ghostView = nil
+        try? GhostStorage.store?.remove(key: id.uuidString)
     }
 
     /// Takes the snapshot of the page as the user last saw it. Called as the user leaves the tab,
@@ -432,12 +508,15 @@ final class Tab: NSObject {
     /// that is on screen (there's nothing to show instead). A frozen page is resumed first so its
     /// state can be read. Field values (never passwords) and the video position are saved and put
     /// back when the tab wakes.
-    func suspend() async {
+    /// - Parameter captureGhost: false under memory pressure (a ghost costs up to ~1 s per tab; the image is enough).
+    func suspend(captureGhost: Bool = true) async {
         guard !isSuspended, !isSuspending, let webView, let url = webView.url, url.absoluteString != "about:blank" else { return }
         isSuspending = true
         defer { isSuspending = false }
+        dropGhost()      // a ghost from a wake that never finished must not stay over the new snapshot
         thaw()
         await collectPageState()
+        if captureGhost { await self.captureGhost() }
 
         suspendedInteractionState = webView.interactionState as? Data
         suspendedURL = url
@@ -486,6 +565,8 @@ final class Tab: NSObject {
             snapshotImageView.isHidden = false
         }
 
+        dropGhost()
+        if let ghost = makeGhostView() { showGhost(ghost) }
         let webView = createWebView()
         if let state = suspendedInteractionState {
             webView.interactionState = state
@@ -513,6 +594,12 @@ final class Tab: NSObject {
         guard isAwaitingWakeReveal else { return }
         isAwaitingWakeReveal = false
         snapshotData = nil
+        if ghostView != nil {
+            dropGhost()
+            // A link clicked in the ghost before the real page was ready: follow it now.
+            if let url = pendingGhostURL { webView?.load(URLRequest(url: url)) }
+            pendingGhostURL = nil
+        }
         if let started = wakeStartedAt {
             Log.tabs.notice("Wake: live page visible after \(Int(Date().timeIntervalSince(started) * 1000)) ms")
             wakeStartedAt = nil
