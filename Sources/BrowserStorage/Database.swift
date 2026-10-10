@@ -164,6 +164,31 @@ public final class AppDatabase: @unchecked Sendable {
             }
         }
 
+        // Where the user was in each page (video position, reading position).
+        migrator.registerMigration("v10_resumePoints") { db in
+            try db.create(table: "resumePoints") { t in
+                t.primaryKey("key", .text)
+                t.column("title", .text).notNull()
+                t.column("videoSeconds", .double)
+                t.column("videoDuration", .double)
+                t.column("readFraction", .double)
+                t.column("anchor", .text)
+                t.column("updatedAt", .datetime).notNull().indexed()
+            }
+        }
+
+        // What the user changed on each site (CSS rules the local model wrote and the app checked).
+        migrator.registerMigration("v11_boosts") { db in
+            try db.create(table: "boosts") { t in
+                t.primaryKey("host", .text)
+                t.column("prompt", .text).notNull()
+                t.column("rulesJSON", .text).notNull()
+                t.column("calm", .boolean).notNull().defaults(to: false)
+                t.column("enabled", .boolean).notNull().defaults(to: true)
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }

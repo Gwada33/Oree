@@ -60,6 +60,23 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let extensionBar = NSStackView()
     private var extensionButtons: [String: ExtensionButton] = [:]
     private let loadingBar = LoadingBarView()
+    private let noticePill = NoticePill()
+    private let digestPanel = DigestPanelView()
+    private let digestButton = ChromeIconButton(symbol: "list.bullet.clipboard", label: "Afficher l'essentiel")
+    private let calendarButton = ChromeIconButton(symbol: "calendar.badge.plus", label: "Ajouter au Calendrier")
+    private var eventTask: Task<Void, Never>?
+    private var digestTask: Task<Void, Never>?
+    private var digestCache: [String: PageDigest] = [:]
+    /// The page the pop-up is about, and the pages whose pop-up the user closed (so a recipe does not keep reopening it).
+    private let boostRepo = BoostRepository()
+    private var boostTask: Task<Void, Never>?
+    private var lastBoostSignature = ""
+    private var digestKey: String?
+    private var digestDismissed: Set<String> = []
+    private let readingBar = SurfaceView()
+    private var readingBarWidth: NSLayoutConstraint?
+    private let resumeRepo = ResumeRepository()
+    private var aiResult = "none"
     private let addressPill = AddressPillView()
     private let spaceRail = SpaceRailView()
     private let spaceNameLabel = NSTextField(labelWithString: "")
@@ -102,6 +119,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var splitLeftWidth: NSLayoutConstraint?
     private var splitMonitor: Any?
     private let splitButton = ChromeIconButton(symbol: "rectangle.split.2x1", label: "Écran partagé  ⌘\\")
+    private let translateButton = ChromeIconButton(symbol: "translate", label: "Traduire la page")
+    private let nightButton = ChromeIconButton(symbol: "moon", label: "Mode nuit")
+    private var appearanceObservation: NSKeyValueObservation?
     private lazy var overview: SpacesOverviewView = {
         let view = SpacesOverviewView()
         installOverlay(view)
@@ -326,7 +346,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         automation = AutomationServer(
             window: window,
             activeWebView: { [weak self] in self?.activeTab?.webView },
-            overlays: { [weak self] in [self?.activeTab?.interstitial, self?.loadingBar, (self?.paletteLoaded == true ? self?.palette : nil), self?.addressDropdown, (self?.floatingShown == true ? self?.sidebarView : nil), self?.demoPanel, self?.drawer, self?.overview, self?.onboarding, self?.findBarContainer].compactMap { $0 } },
+            overlays: { [weak self] in [self?.activeTab?.interstitial, self?.loadingBar, self?.digestPanel, self?.noticePill, (self?.paletteLoaded == true ? self?.palette : nil), self?.addressDropdown, (self?.floatingShown == true ? self?.sidebarView : nil), self?.demoPanel, self?.drawer, self?.overview, self?.onboarding, self?.findBarContainer].compactMap { $0 } },
             tabOperation: { [weak self] op, index in
                 guard let self, self.visibleTabs().indices.contains(index) else { return "no such tab" }
                 let tab = self.visibleTabs()[index]
@@ -334,6 +354,97 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 case "select": self.selectTab(tab); return "selected \(index)"
                 case "sleep": self.sleepTab(tab); return "sleeping \(index)"
                 case "prewake": self.prewake(tab); return "prewoken \(index)"
+                case "translate": tab.translator.translate(); return tab.translator.report
+                case "untranslate": tab.translator.restore(); return tab.translator.report
+                case "translation": return tab.translator.report
+                case "copy":
+                    NSPasteboard.general.clearContents()
+                    NSApp.sendAction(NSSelectorFromString("copy:"), to: tab.webView, from: nil)
+                    return "copied"
+                case "aiask":
+                    // Dev: asks the local model a fixed question and stores the answer for `aiget`.
+                    self.aiResult = "pending"
+                    let started = Date()
+                    Task { @MainActor in
+                        do {
+                            let dir = "/tmp/oree-ai-"
+                            let instructions = (try? String(contentsOfFile: dir + "instructions.txt", encoding: .utf8)) ?? "Réponds en une phrase, en français."
+                            let prompt = (try? String(contentsOfFile: dir + "prompt.txt", encoding: .utf8)) ?? "Quelle est la capitale de la France ?"
+                            let text = try await LocalModel.respond(instructions: instructions, prompt: prompt, seconds: 150)
+                            self.aiResult = String(format: "%.1fs : ", Date().timeIntervalSince(started)) + text
+                        } catch { self.aiResult = String(format: "%.1fs : ERREUR ", Date().timeIntervalSince(started)) + "\(error)" }
+                    }
+                    return "asked (available=\(LocalModel.isAvailable) reason=\(LocalModel.unavailableReason ?? "none"))"
+                case "aiget": return self.aiResult
+                case "digestshot":
+                    let path = "/tmp/oree-digest.png"
+                    let scroll = Int((try? String(contentsOfFile: "/tmp/oree-digest-scroll.txt", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
+                    Task { @MainActor in await self.digestPanel.snapshot(to: path, scrollY: scroll) }
+                    return "saving \(path)"
+                case "eventget":
+                    guard let event = tab.eventCandidate else { return "candidate=none" }
+                    return "candidate=\(event.title) | \(ICSBuilder.build(event, uid: "test").replacingOccurrences(of: "\r\n", with: " / "))"
+                case "eventmodel":
+                    // Dev: the model path, result printed by `tab aiget` (no dialog, Calendar is never opened).
+                    guard let web = tab.webView else { return "no web view" }
+                    self.aiResult = "pending"
+                    Task { @MainActor in
+                        do {
+                            let event = try await self.findEventWithModel(in: web)
+                            self.aiResult = event.map { "event=\($0.title) start=\($0.start.ISO8601Format()) location=\($0.location ?? "-")" } ?? "event=none"
+                        } catch { self.aiResult = "error=\(error)" }
+                    }
+                    return "started (model available: \(LocalModel.isAvailable))"
+                case "boostapply":
+                    // Dev: applies the JSON rules in /tmp/oree-boost.json to the current site (the model's answer format), skipping the model.
+                    guard let host = tab.webView?.url?.host, let text = try? String(contentsOfFile: "/tmp/oree-boost.json", encoding: .utf8) else { return "no host or no file" }
+                    let proposed = BoostPolicy.rules(fromModel: text)
+                    try? self.boostRepo.save(Boost(host: host, prompt: "test", rules: proposed.rules, calm: proposed.calm))
+                    self.refreshBoosts()
+                    return "saved \(proposed.rules.count) rule(s) calm=\(proposed.calm)"
+                case "boostmodel":
+                    // Dev: the whole flow with the local model, the request read from /tmp/oree-boost-request.txt (no dialog).
+                    guard let request = try? String(contentsOfFile: "/tmp/oree-boost-request.txt", encoding: .utf8) else { return "no request file" }
+                    self.createBoost(request: request.trimmingCharacters(in: .whitespacesAndNewlines), for: tab)
+                    return "started (model available: \(LocalModel.isAvailable))"
+                case "boostreport":
+                    let boosts = (try? self.boostRepo.all()) ?? []
+                    return boosts.map { "\($0.host) rules=\($0.rules.count) calm=\($0.calm)" }.joined(separator: "; ") + " calmAll=\(SettingsStore.shared.calmModeEverywhere)"
+                case "boostremove": self.removeBoostAction(); return "removed"
+                case "digestservings":
+                    let count = Int((try? String(contentsOfFile: "/tmp/oree-digest-servings.txt", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 4
+                    self.aiResult = "pending"
+                    Task { @MainActor in self.aiResult = await self.digestPanel.debugSetServings(count) }
+                    return "set \(count) (read the result with `tab aiget`)"
+                case "digestcook": self.digestPanel.debugToggleCooking(); return "cooking=\(self.digestPanel.isCooking) screenHeld=\(self.digestPanel.isScreenHeld)"
+                case "digest": self.digestAction(); return "toggled state=\(self.digestPanel.state)"
+                case "digestget": return "state=\(self.digestPanel.state) candidate=\(tab.digestCandidate.map { "\($0.kind.rawValue):\($0.ingredients.count)i/\($0.steps.count)s" } ?? "none") text=\(self.digestPanel.shownText.replacingOccurrences(of: "\n", with: " | ").prefix(700))"
+                case "resume": return self.resumeReport(for: tab)
+                case "pressnotice": self.noticePill.pressAction(); return "pressed"
+                case "resumeforget":
+                    if let key = ResumePolicy.key(for: tab.webView?.url) { try? self.resumeRepo.remove(key: key) }
+                    return "forgotten"
+                case "night":
+                    let settings = SettingsStore.shared
+                    return "mode=\(settings.nightMode.rawValue) active=\(NightPolicy.isActive(mode: settings.nightMode, appearanceIsDark: self.appearanceIsDark)) excluded=\(settings.nightExcludedHosts) native=\(settings.nightNativeHosts)"
+                case "webshot":
+                    // Dev: what WebKit itself draws for the page right now, even while the web view lives in another window.
+                    guard let web = tab.webView else { return "no web view" }
+                    Task { @MainActor in
+                        guard let image = try? await web.takeSnapshot(configuration: nil), let tiff = image.tiffRepresentation,
+                              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
+                        try? png.write(to: URL(fileURLWithPath: "/tmp/oree-webshot.png"))
+                    }
+                    return "saving /tmp/oree-webshot.png"
+                case "geometry":
+                    guard let web = tab.webView else { return "no web view" }
+                    let slot = web.superview
+                    return "fullscreenState=\(web.fullscreenState.rawValue) frame=\(web.frame) window=\(web.window === self.window ? "main" : (web.window == nil ? "none" : "other:\(web.window!.frame)")) superview=\(slot.map { String(describing: type(of: $0)) } ?? "nil") hidden=\(web.isHidden) alpha=\(web.alphaValue) constraintsOnSlot=\(slot?.constraints.filter { $0.firstItem === web || $0.secondItem === web }.count ?? -1) translates=\(web.translatesAutoresizingMaskIntoConstraints) mask=\(web.autoresizingMask.rawValue) mainFrame=\(self.window?.frame ?? .zero) appActive=\(NSApp.isActive) fsWindowVisible=\(web.window?.occlusionState.contains(.visible) ?? false) fsKey=\(web.window?.isKeyWindow ?? false) fsLevel=\(web.window?.level.rawValue ?? -1) fsScreen=\(web.window?.screen?.frame ?? .zero) fsOpaque=\(web.window?.isOpaque ?? false) wantsLayer=\(web.wantsLayer) layerHidden=\(web.layer?.isHidden ?? false) layerOpacity=\(web.layer?.opacity ?? -1)"
+                case "nightsite": self.toggleNightForCurrentSite(); return "toggled"
+                case "notice": return self.noticePill.visibleMessage ?? "(none)"
+                case "pasteboard":
+                    let board = NSPasteboard.general
+                    return (["public.utf8-plain-text", "public.html"].map { type in "[\(type)]\n" + (board.string(forType: NSPasteboard.PasteboardType(type)) ?? "(none)") }).joined(separator: "\n")
                 default: return "unknown op"
                 }
             },
@@ -406,6 +517,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// when ad blocking is on, the cosmetic CSS matching this URL.
     private func userScripts(for url: URL?) -> [WKUserScript] {
         var scripts: [WKUserScript] = [CredentialScript.makeUserScript()]
+        if SettingsStore.shared.resumeEnabled { scripts.append(ResumeScript.makeUserScript()) }
+        scripts.append(BoostScript.makeUserScript(boostConfig()))
+        if SettingsStore.shared.nightMode != .off { scripts.append(NightScript.makeUserScript(nightConfig())) }
+        if SettingsStore.shared.cleanCopy { scripts.append(CleanCopyScript.makeUserScript(addSource: SettingsStore.shared.copyAddsSource)) }
         let exempt = ProtectionPolicy.isExempt(host: url?.host, list: SettingsStore.shared.protectionExemptHosts)
         if SettingsStore.shared.lightLongPages { scripts.append(LongPageScript.makeUserScript()) }
         if SettingsStore.shared.fingerprintProtection, !exempt {
@@ -420,6 +535,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Reacts to settings that need more than a re-read: the fingerprint
     /// toggle (scripts are baked into each tab) and Safe Browsing on/off/key.
+    private var lastNight = [] as [String]
+    private var lastCopySettings = [SettingsStore.shared.cleanCopy, SettingsStore.shared.copyAddsSource, SettingsStore.shared.resumeEnabled]
     private var lastShortcutOverrides = SettingsStore.shared.shortcutOverrides
     private var lastLook = LookProfile.capture(named: "", from: SettingsStore.shared)
     private var lastSidebarPrefs = [SettingsStore.shared.sidebarWidth, SettingsStore.shared.sidebarGlass ? 1 : 0]
@@ -435,9 +552,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         let fingerprint = SettingsStore.shared.fingerprintProtection
         let longPages = SettingsStore.shared.lightLongPages
-        if lastFingerprintSetting != fingerprint || lastLongPagesSetting != longPages {
+        let boosts = boostSignature()
+        if boosts != lastBoostSignature { lastBoostSignature = boosts; refreshBoosts() }
+        let night = nightSignature()
+        if night != lastNight { lastNight = night; refreshNightMode() }
+        let copySettings = [SettingsStore.shared.cleanCopy, SettingsStore.shared.copyAddsSource, SettingsStore.shared.resumeEnabled]
+        if lastFingerprintSetting != fingerprint || lastLongPagesSetting != longPages || lastCopySettings != copySettings {
             lastFingerprintSetting = fingerprint
             lastLongPagesSetting = longPages
+            lastCopySettings = copySettings
             for tab in tabs { tab.setUserScripts(userScripts(for: tab.currentURL)) }
         }
         refreshSafeBrowsing()
@@ -639,6 +762,25 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         toolbar = bar
         [toggleSidebarButton, backButton, forwardButton, reloadButton].forEach(bar.leftStack.addArrangedSubview)
         splitButton.onClick = { [weak self] in self?.toggleSplit() }
+        Tab.nativeDarkReported = { [weak self] host in
+            let settings = SettingsStore.shared
+            let updated = NightPolicy.adding(host, to: settings.nightNativeHosts)
+            guard updated != settings.nightNativeHosts else { return }
+            settings.nightNativeHosts = updated
+            self?.lastNight = self?.nightSignature() ?? []
+            self?.refreshNightMode()
+        }
+        appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
+            Task { @MainActor in self?.settingsChanged() }
+        }
+        digestButton.isHidden = true
+        digestButton.onClick = { [weak self] in self?.digestAction() }
+        calendarButton.isHidden = true
+        calendarButton.onClick = { [weak self] in self?.addToCalendarAction() }
+        nightButton.isHidden = true
+        nightButton.onClick = { [weak self] in self?.toggleNightForCurrentSite() }
+        translateButton.isHidden = true
+        translateButton.onClick = { [weak self] in self?.translatePageAction() }
         downloadsButton.isHidden = true
         downloadsButton.onClick = { [weak self] in self?.toggleDownloads() }
         downloads.onChange = { [weak self] in self?.downloadsChanged() }
@@ -651,13 +793,41 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         downloads.resumeWebView = { [weak self] in self?.activeTab?.webView }
         downloads.start()
-        [splitButton, customizeButton, downloadsButton, moreButton].forEach(bar.rightStack.addArrangedSubview)
+        [calendarButton, digestButton, nightButton, translateButton, splitButton, customizeButton, downloadsButton, moreButton].forEach(bar.rightStack.addArrangedSubview)
 
         // Page sheet: top-left corner rounded, flush against the right and bottom edges.
         contentContainer.cornerRadius = Theme.pageCornerRadius
         contentContainer.maskedCorners = [.layerMinXMaxYCorner]
         contentContainer.clips = true
         contentContainer.addSubview(loadingBar)
+        contentContainer.addSubview(digestPanel)
+        NSLayoutConstraint.activate([
+            digestPanel.topAnchor.constraint(equalTo: contentContainer.topAnchor), digestPanel.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+            digestPanel.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor), digestPanel.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+        ])
+        digestPanel.onClose = { [weak self] byUser in
+            guard let self else { return }
+            self.digestTask?.cancel(); self.digestTask = nil
+            if byUser, let key = self.digestKey { self.digestDismissed.insert(key) }       // closed on purpose: not reopened by itself on this page
+            self.digestKey = nil
+            if let tab = self.activeTab { self.updateDigestButton(for: tab) }
+        }
+        contentContainer.addSubview(noticePill)
+        readingBar.fill = Theme.accent
+        readingBar.isHidden = true
+        contentContainer.addSubview(readingBar)
+        let barWidth = readingBar.widthAnchor.constraint(equalToConstant: 0)
+        readingBarWidth = barWidth
+        NSLayoutConstraint.activate([
+            readingBar.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
+            readingBar.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+            readingBar.heightAnchor.constraint(equalToConstant: 2), barWidth,
+        ])
+        Tab.resumeReported = { [weak self] tab, json in self?.handleResume(tab: tab, json: json) }
+        NSLayoutConstraint.activate([
+            noticePill.centerXAnchor.constraint(equalTo: contentContainer.centerXAnchor),
+            noticePill.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor, constant: -24),
+        ])
         NSLayoutConstraint.activate([
             loadingBar.topAnchor.constraint(equalTo: contentContainer.topAnchor),
             loadingBar.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
@@ -1903,7 +2073,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                             trailing: "⌃\(index + 1)", perform: { [weak self] _ in self?.selectSpace(index) })
             }
             if !spaceItems.isEmpty { sections.append(PaletteSection(title: "Espaces", items: Array(spaceItems.prefix(filter == .all && q.isEmpty ? 3 : 12)))) }
-            let actions: [(String, String, @MainActor (BrowserWindowController) -> Void)] = [
+            var actions: [(String, String, @MainActor (BrowserWindowController) -> Void)] = [
                 ("Écran partagé", "rectangle.split.2x1", { $0.toggleSplit() }),
                 ("Ajouter à la liste de lecture", "text.book.closed", { if let tab = $0.activeTab { $0.addToReadingList(tab) } }),
                 ("Afficher l'historique", "clock", { $0.openHistoryPanel() }),
@@ -1921,6 +2091,30 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 ("Fermer l'onglet", "xmark", { $0.closeActiveTabAction() }),
                 ("Réglages", "gearshape", { $0.openSettings() }),
             ]
+            if PageTranslator.isAvailable, TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
+                let showing = activeTab?.translator.state != .idle
+                actions.append((showing ? "Afficher la page d'origine" : "Traduire la page", "translate", { $0.translatePageAction() }))
+            }
+            if TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
+                actions.append((digestPanel.state == "closed" ? "L'essentiel" : "Fermer « L'essentiel »", "list.bullet.clipboard", { $0.digestAction() }))
+            }
+            if TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
+                actions.append(("Ajouter au Calendrier", "calendar.badge.plus", { $0.addToCalendarAction() }))
+                actions.append(("Personnaliser ce site…", "wand.and.stars", { $0.customizeSiteAction() }))
+                let boost = try? boostRepo.boost(for: activeTab?.webView?.url?.host)
+                if boost?.rules.isEmpty == false { actions.append(("Retirer les changements de ce site", "arrow.uturn.backward.circle", { $0.removeBoostAction() })) }
+                actions.append((boost?.calm == true ? "Mode calme : le quitter sur ce site" : "Mode calme sur ce site", "leaf", { $0.toggleCalmForSiteAction() }))
+            }
+            let night = SettingsStore.shared.nightMode
+            for (mode, title) in [(NightMode.always, "Mode nuit : toujours"), (.auto, "Mode nuit : automatique (suit le Mac)"), (.off, "Mode nuit : désactivé")] where mode != night {
+                actions.append((title, "moon", { $0.setNightMode(mode) }))
+            }
+            if night != .off, TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
+                actions.append(("Mode nuit : ce site clair ou sombre", "moon.circle", { $0.toggleNightForCurrentSite() }))
+            }
+            if PageTranslator.isAvailable, activeTab?.translator.pageLanguage.map({ $0 != "und" }) == true {
+                actions.append(("Télécharger la traduction rapide", "arrow.down.circle", { $0.downloadFastTranslationAction() }))
+            }
             let found = actions.filter { matches($0.0) }
             sections.append(PaletteSection(title: "Actions", items: found.prefix(filter == .all && q.isEmpty ? 4 : 12).map { action in
                 PaletteItem(icon: .symbol(action.1), title: action.0, subtitle: nil, trailing: nil,
@@ -1993,6 +2187,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             config.userContentController.addUserScript(FingerprintProtection.makeUserScript(sessionSeed: fingerprintSeed))
         }
         config.userContentController.addUserScript(CredentialScript.makeUserScript())
+        if SettingsStore.shared.resumeEnabled { config.userContentController.addUserScript(ResumeScript.makeUserScript()) }
+        config.userContentController.addUserScript(BoostScript.makeUserScript(boostConfig()))
         if SettingsStore.shared.lightLongPages {
             config.userContentController.addUserScript(LongPageScript.makeUserScript())
         }
@@ -2134,6 +2330,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     func selectTab(_ tab: Tab) {
+        if digestPanel.state != "closed" { digestPanel.close() }     // the essentials belong to the page they were made from
         // Picking a tab that isn't one of the two sides leaves the split screen.
         if let pair = splitPair, tab.id != pair.left, tab.id != pair.right { endSplit(keeping: tab.id) }
         if tab.spaceIndex != currentSpace { setCurrentSpace(tab.spaceIndex, animated: true) }
@@ -2339,7 +2536,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
         field.stringValue = initial
         alert.accessoryView = field
-        alert.beginSheetModal(for: window) { response in
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
             guard response == .alertFirstButtonReturn else { return }
             let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return }
@@ -3065,6 +3263,531 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         forwardButton.isEnabled = tab.webView?.canGoForward ?? false
         window?.title = tab.displayTitle
         updateLoadingIndicator(for: tab)
+        bindTranslator(of: tab)
+    }
+
+    // MARK: - Boosts (change a site with one sentence) and calm mode
+
+    private func boostConfig() -> BoostScript.Config {
+        BoostScript.config(boosts: (try? boostRepo.all()) ?? [], calmAll: SettingsStore.shared.calmModeEverywhere)
+    }
+
+    private func boostSignature() -> String {
+        let boosts = (try? boostRepo.all()) ?? []
+        return "\(SettingsStore.shared.calmModeEverywhere)|" + boosts.map { "\($0.host):\($0.enabled):\($0.calm):\($0.rules.count):\($0.updatedAt.timeIntervalSince1970)" }.joined(separator: ",")
+    }
+
+    /// Hands the boosts to every tab: future pages through their scripts, the page on screen at once.
+    private func refreshBoosts() {
+        let config = boostConfig()
+        lastBoostSignature = boostSignature()
+        for tab in tabs {
+            tab.setUserScripts(userScripts(for: tab.currentURL))
+            if let web = tab.webView { Task { _ = try? await web.evaluateJavaScript(BoostScript.source(config), in: nil, contentWorld: BoostScript.world) } }
+        }
+    }
+
+    /// ⌘K › « Personnaliser ce site… »: asks what to change, has the local model write the rules, checks them against the page, applies them.
+    @objc func customizeSiteAction() {
+        guard let tab = activeTab, let web = tab.webView, let host = web.url?.host, TranslationPolicy.canTranslate(url: web.url) else { return }
+        if let reason = LocalModel.unavailableReason {
+            showSimpleAlert("Personnaliser ce site a besoin du modèle local d'Apple Intelligence.", reason)
+            return
+        }
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        field.placeholderString = "par exemple : cache les recommandations et agrandis le texte"
+        let alert = NSAlert()
+        alert.messageText = "Personnaliser \(host)"
+        alert.informativeText = "Décrivez en une phrase ce que vous voulez changer sur ce site. Seul le style est modifié, et seulement ici."
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Créer")
+        alert.addButton(withTitle: "Annuler")
+        guard let window else { return }
+        alert.beginSheetModal(for: window) { [weak self] response in
+            let request = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard response == .alertFirstButtonReturn, !request.isEmpty else { return }
+            self?.createBoost(request: request, for: tab)
+        }
+        DispatchQueue.main.async { field.becomeFirstResponder() }
+    }
+
+    private func createBoost(request: String, for tab: Tab) {
+        guard let web = tab.webView, let host = web.url?.host else { return }
+        boostTask?.cancel()
+        noticePill.show(message: "Création du boost…", button: "Annuler", seconds: 150) { [weak self] in self?.boostTask?.cancel(); self?.noticePill.dismiss() }
+        boostTask = Task { [weak self] in
+            guard let self else { return }
+            guard let reply = await web.callJSON(BoostScript.survey, world: BoostScript.world, seconds: 15) as? [String: Any],
+                  let raw = reply["candidates"] as? [[String: Any]], !raw.isEmpty else {
+                if !Task.isCancelled { self.noticePill.dismiss(); self.showSimpleAlert("Personnalisation impossible", "Je n'ai pas pu lire la structure de cette page.") }
+                return
+            }
+            let candidates = raw.compactMap { item -> BoostPrompt.Candidate? in
+                guard let selector = item["s"] as? String, let count = (item["n"] as? NSNumber)?.intValue else { return nil }
+                return .init(selector: selector, count: count, text: (item["t"] as? String) ?? "")
+            }
+            do {
+                let answer = try await LocalModel.respond(instructions: BoostPrompt.instructions,
+                                                          prompt: BoostPrompt.prompt(request: request, host: host, candidates: candidates), seconds: 150)
+                guard !Task.isCancelled else { return }
+                let proposed = BoostPolicy.rules(fromModel: answer)
+                // Dry run on the page: a rule must match something, and not nearly everything.
+                let call = BoostScript.countCall(selectors: proposed.rules.map(\.selector))
+                let counted = await web.callJSON(call.body, arguments: call.arguments, world: BoostScript.world, seconds: 15) as? [String: Any]
+                let counts = (counted?["counts"] as? [NSNumber])?.map(\.intValue) ?? []
+                let texts = (counted?["texts"] as? [NSNumber])?.map(\.intValue) ?? []
+                let elements = (counted?["elements"] as? NSNumber)?.intValue ?? 1000
+                let pageText = (counted?["pageText"] as? NSNumber)?.intValue ?? 0
+                let rules = proposed.rules.enumerated().filter { index, rule in
+                    index < counts.count && index < texts.count
+                        && BoostPolicy.isAcceptable(rule, matches: counts[index], pageElements: elements, matchedText: texts[index], pageText: pageText)
+                }.map(\.element)
+                guard !rules.isEmpty || proposed.calm else {
+                    self.noticePill.dismiss()
+                    self.showSimpleAlert("Rien à changer", "Je n'ai trouvé sur cette page aucun élément qui corresponde à « \(request) ». Essayez avec d'autres mots.")
+                    return
+                }
+                let previous = try? self.boostRepo.boost(for: host)
+                try? self.boostRepo.save(Boost(host: host, prompt: request, rules: rules, calm: proposed.calm || (previous?.calm ?? false)))
+                self.refreshBoosts()
+                let what = rules.isEmpty ? "mode calme" : "\(rules.count) règle\(rules.count > 1 ? "s" : "")"
+                self.noticePill.show(message: "Boost appliqué à \(host) (\(what))", button: "Annuler", seconds: 15) { [weak self] in
+                    guard let self else { return }
+                    if let previous { try? self.boostRepo.save(previous) } else { try? self.boostRepo.remove(host: host) }
+                    self.refreshBoosts()
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.noticePill.dismiss()
+                self.showSimpleAlert("Personnalisation impossible", error as? LocalModel.Failure == .timedOut ? "Le modèle a mis trop de temps à répondre." : "Le modèle n'a pas pu écrire de règles.")
+            }
+        }
+    }
+
+    @objc func removeBoostAction() {
+        guard let host = activeTab?.webView?.url?.host else { return }
+        try? boostRepo.remove(host: host)
+        refreshBoosts()
+    }
+
+    /// Calm mode on the current site: on if it was off, off if it was on (the boost's own rules stay).
+    @objc func toggleCalmForSiteAction() {
+        guard let host = activeTab?.webView?.url?.host, TranslationPolicy.canTranslate(url: activeTab?.webView?.url) else { return }
+        var boost = (try? boostRepo.boost(for: host)) ?? Boost(host: host)
+        boost.calm.toggle()
+        if !boost.calm && boost.rules.isEmpty { try? boostRepo.remove(host: host) } else { try? boostRepo.save(boost) }
+        refreshBoosts()
+    }
+
+    private func showSimpleAlert(_ title: String, _ text: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = text
+        guard let window else { alert.runModal(); return }
+        alert.beginSheetModal(for: window)
+    }
+
+    // MARK: - L'essentiel
+
+    private func updateDigestButton(for tab: Tab) {
+        digestButton.isHidden = tab.digestCandidate == nil
+        digestButton.isActive = digestPanel.state != "closed"
+        calendarButton.isHidden = tab.eventCandidate == nil
+    }
+
+    /// What a page says about itself in its JSON-LD: a recipe or how-to, an event or booking.
+    private struct StructuredData { var digest: PageDigest?; var event: CalendarEvent? }
+
+    /// Reads the page's JSON-LD. A busy page can answer late (ads, trackers), so it asks again a couple of times; a reply — even one with
+    /// nothing in it — is final. nil only when the page never answered.
+    private func readStructuredData(in web: WKWebView, attempts: Int) async -> StructuredData? {
+        for attempt in 0..<attempts {
+            if let reply = await web.callJSON(DigestScript.probe, world: DigestScript.world, seconds: 12) as? [String: Any],
+               let blocks = reply["jsonld"] as? [String] {
+                let data = StructuredData(digest: DigestParser.fromStructuredData(blocks, pageTitle: (reply["title"] as? String) ?? ""),
+                                          event: EventParser.fromStructuredData(blocks))
+                Log.tabs.notice("Page data: \(blocks.count) block(s), recipe/how-to \(data.digest == nil ? "none" : "found"), event \(data.event == nil ? "none" : "found") (attempt \(attempt + 1))")
+                return data
+            }
+            Log.tabs.notice("Page data: the page did not answer (attempt \(attempt + 1))")
+            try? await Task.sleep(for: .seconds(2))
+        }
+        return nil
+    }
+
+    /// After a page has loaded: does it carry its own recipe / how-to or event data? If so the buttons appear; a recipe opens its essentials
+    /// at once (default; no model, instant), the rest gets a one-line offer.
+    private func probeDigest(for tab: Tab) {
+        guard TranslationPolicy.canTranslate(url: tab.webView?.url), let web = tab.webView else { return }
+        let key = ResumePolicy.key(for: web.url)
+        Task {
+            let data = await readStructuredData(in: web, attempts: 3)
+            guard ResumePolicy.key(for: web.url) == key else { return }       // the tab moved on meanwhile
+            tab.digestCandidate = data?.digest
+            tab.eventCandidate = data?.event
+            if tab.id == activeTabID { updateDigestButton(for: tab) }
+            guard tab.id == activeTabID, digestPanel.state == "closed", let key else { return }
+            if let candidate = data?.digest, !digestDismissed.contains(key) {
+                if SettingsStore.shared.digestAutoRecipes, candidate.kind == .recipe {
+                    noticePill.dismiss()                                          // a "resume reading" offer makes no sense over the essentials
+                    openDigest(for: tab)                                          // also after a reload or back/forward: the page is the same recipe
+                } else if noticePill.visibleMessage == nil, tab.lastNavigationType == .linkActivated || tab.lastNavigationType == .other {
+                    noticePill.show(message: candidate.kind == .recipe ? "Recette détectée" : "Tutoriel détecté", button: "Aller à l'essentiel", seconds: 10) { [weak self, weak tab] in
+                        if let tab { self?.openDigest(for: tab); self?.updateDigestButton(for: tab) }
+                    }
+                }
+            } else if let event = data?.event, noticePill.visibleMessage == nil, tab.lastNavigationType == .linkActivated || tab.lastNavigationType == .other {
+                noticePill.show(message: "Événement détecté", button: "Ajouter au Calendrier", seconds: 12) { [weak self] in self?.confirmAndAdd(event, page: tab.webView?.url) }
+            }
+        }
+    }
+
+    /// Button, palette and menu: show the essentials of the page, or close them.
+    @objc func digestAction() {
+        guard let tab = activeTab else { return }
+        if digestPanel.state != "closed" { digestPanel.close(byUser: true) } else { openDigest(for: tab) }
+        updateDigestButton(for: tab)
+    }
+
+    /// The page's own data when it has some (instant); else the local model reads the page's text (about half a minute).
+    private func openDigest(for tab: Tab) {
+        guard let web = tab.webView, let key = ResumePolicy.key(for: web.url) else { return }
+        digestTask?.cancel()
+        digestKey = key
+        digestDismissed.remove(key)                       // asked for again: the user wants it
+        if let cached = digestCache[key] { digestPanel.show(cached, notice: cached.source == .structured ? nil : "Écrit par le modèle local.") ; return }
+        if let page = tab.digestCandidate {
+            digestCache[key] = page
+            digestPanel.show(page, notice: nil)
+            return
+        }
+        // No data seen at load (the page may have been slow to answer): look again now, before spending half a minute on the model.
+        digestPanel.showBusy("Lecture de la page…") { [weak self] in self?.digestTask?.cancel() }
+        digestTask = Task { [weak self, weak tab] in
+            guard let self, let tab, let web = tab.webView else { return }
+            if let page = await self.readStructuredData(in: web, attempts: 2)?.digest, !Task.isCancelled {
+                tab.digestCandidate = page
+                self.digestCache[key] = page
+                self.digestPanel.show(page, notice: nil)
+                self.updateDigestButton(for: tab)
+                return
+            }
+            guard !Task.isCancelled else { return }
+            self.digestWithModel(tab: tab, key: key)
+        }
+    }
+
+    /// The local model reads the page's text.
+    private func digestWithModel(tab: Tab, key: String) {
+        if let reason = LocalModel.unavailableReason {
+            digestPanel.showMessage("L'essentiel a besoin du modèle local d'Apple Intelligence. " + reason)
+            return
+        }
+        digestPanel.showBusy("Lecture de la page par le modèle local… (environ 30 secondes)") { [weak self] in self?.digestTask?.cancel() }
+        digestTask = Task { [weak self, weak tab] in
+            guard let self, let web = tab?.webView else { return }
+            guard let page = await web.callJSON(DigestScript.text, world: DigestScript.world, seconds: 15) as? [String: Any],
+                  let text = page["text"] as? String, text.count > 200 else {
+                if !Task.isCancelled { self.digestPanel.showMessage("Cette page ne contient pas assez de texte à résumer.") }
+                return
+            }
+            let title = (page["title"] as? String) ?? ""
+            do {
+                let answer = try await LocalModel.respond(instructions: DigestPrompt.instructions, prompt: DigestPrompt.prompt(title: title, text: text), seconds: 150)
+                guard !Task.isCancelled else { return }
+                guard let raw = DigestParser.fromModel(answer, pageTitle: title) else {
+                    self.digestPanel.showMessage("Je n'ai trouvé ni recette, ni étapes, ni verdict dans cette page.")
+                    return
+                }
+                let (checked, dropped) = DigestValidator.checked(raw, against: text)
+                guard checked.hasContent else { self.digestPanel.showMessage("Le modèle n'a rien produit qui se retrouve dans la page : rien n'est affiché."); return }
+                self.digestCache[key] = checked
+                if self.digestCache.count > 30 { self.digestCache.removeValue(forKey: self.digestCache.keys.first ?? key) }
+                self.digestPanel.show(checked, notice: dropped > 0 ? "\(dropped) élément\(dropped > 1 ? "s" : "") du résumé, introuvable\(dropped > 1 ? "s" : "") dans la page, \(dropped > 1 ? "ont" : "a") été écarté\(dropped > 1 ? "s" : "")." : nil)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.digestPanel.showMessage(error as? LocalModel.Failure == .timedOut ? "Le modèle a mis trop de temps à répondre." : "Le résumé a échoué.")
+            }
+        }
+    }
+
+    // MARK: - Add to Calendar
+
+    /// ⌘K › « Ajouter au Calendrier » (or the calendar button): the page's own event data when it has some, else the local model looks for a
+    /// date in the text. Always asks before anything leaves the app.
+    @objc func addToCalendarAction() {
+        guard let tab = activeTab, let web = tab.webView, TranslationPolicy.canTranslate(url: web.url) else { return }
+        if let event = tab.eventCandidate { confirmAndAdd(event, page: web.url); return }
+        if let reason = LocalModel.unavailableReason {
+            showSimpleAlert("Ajouter au Calendrier a besoin du modèle local d'Apple Intelligence.", reason + " Sur les pages qui annoncent leur événement dans leurs données, il fonctionne sans.")
+            return
+        }
+        eventTask?.cancel()
+        noticePill.show(message: "Recherche d'une date dans la page…", button: "Annuler", seconds: 150) { [weak self] in self?.eventTask?.cancel(); self?.noticePill.dismiss() }
+        eventTask = Task { [weak self] in
+            guard let self else { return }
+            let event = try? await self.findEventWithModel(in: web)
+            guard !Task.isCancelled else { return }
+            self.noticePill.dismiss()
+            if let event { self.confirmAndAdd(event, page: web.url) }
+            else { self.showSimpleAlert("Aucun événement trouvé", "Je n'ai pas trouvé de rendez-vous ou d'événement avec une date claire dans cette page.") }
+        }
+    }
+
+    /// The local model reads the page's text and names its main event; the date is kept only if the page really mentions that day and month.
+    private func findEventWithModel(in web: WKWebView) async throws -> CalendarEvent? {
+        guard let page = await web.callJSON(DigestScript.text, world: DigestScript.world, seconds: 15) as? [String: Any],
+              let text = page["text"] as? String, text.count > 40 else { return nil }
+        let now = Date()
+        let answer = try await LocalModel.respond(instructions: EventPrompt.instructions(now: now), prompt: "Titre de la page : \((page["title"] as? String) ?? "")\n\nTexte de la page :\n\(DigestValidator.budget(text))", seconds: 150)
+        guard var event = EventParser.fromModel(answer), EventValidator.isPlausible(event, pageText: text, now: now) else { return nil }
+        if event.url == nil { event.url = web.url?.absoluteString }
+        return event
+    }
+
+    /// Shows what will be added (title, when, where) and, on "Ajouter", opens Calendar with it.
+    private func confirmAndAdd(_ event: CalendarEvent, page: URL?) {
+        var event = event
+        if event.url == nil { event.url = page?.absoluteString }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.dateStyle = .full
+        formatter.timeStyle = event.allDay ? .none : .short
+        var lines = [formatter.string(from: event.start)]
+        if let end = event.end, !event.allDay, Calendar.current.isDate(end, inSameDayAs: event.start) {
+            let time = DateFormatter(); time.locale = formatter.locale; time.timeStyle = .short; time.dateStyle = .none
+            lines[0] += " – " + time.string(from: end)
+        }
+        if let location = event.location { lines.append(location) }
+        let alert = NSAlert()
+        alert.messageText = event.title
+        alert.informativeText = lines.joined(separator: "\n") + "\n\nCalendrier s'ouvre avec cet événement : vous choisissez le calendrier et confirmez."
+        alert.addButton(withTitle: "Ajouter au Calendrier")
+        alert.addButton(withTitle: "Annuler")
+        guard let window else { return }
+        alert.beginSheetModal(for: window) { [weak self] response in
+            if response == .alertFirstButtonReturn { self?.openInCalendar(event) }
+        }
+    }
+
+    /// Writes the event as a .ics file and opens it with Calendar (which shows its own "add" window; the app never touches the calendars).
+    private func openInCalendar(_ event: CalendarEvent) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Oree-Events", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("Événement-\(UUID().uuidString.prefix(8)).ics")
+        guard (try? ICSBuilder.build(event).write(to: file, atomically: true, encoding: .utf8)) != nil else { return }
+        NSWorkspace.shared.open([file], withApplicationAt: URL(fileURLWithPath: "/System/Applications/Calendar.app"), configuration: NSWorkspace.OpenConfiguration())
+        Task { try? await Task.sleep(for: .seconds(180)); try? FileManager.default.removeItem(at: file) }
+    }
+
+    // MARK: - Resume where you left off
+
+    /// A report from the page: a video position and/or a reading position. Stored per page (never in a private tab).
+    private func handleResume(tab: Tab, json: String) {
+        guard SettingsStore.shared.resumeEnabled, !tab.isPrivate,
+              let data = json.data(using: .utf8), let report = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let key = ResumePolicy.key(for: (report["u"] as? String).flatMap { URL(string: $0) }) else { return }
+        let title = (report["ti"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? key
+        let isCurrentPage = ResumePolicy.key(for: tab.webView?.url) == key      // a late report about a page already left
+        if let video = report["video"] as? [String: Any] {
+            if video["done"] as? Bool == true { try? resumeRepo.clearVideo(key: key) }
+            else if let t = (video["t"] as? NSNumber)?.doubleValue, let d = (video["d"] as? NSNumber)?.doubleValue,
+                    ResumePolicy.isWorthKeeping(videoSeconds: t, duration: d) {
+                try? resumeRepo.update(key: key, title: title, video: (t, d))
+            }
+        }
+        if let reading = report["reading"] as? [String: Any],
+           let f = (reading["f"] as? NSNumber)?.doubleValue, let screens = (reading["screens"] as? NSNumber)?.doubleValue {
+            if isCurrentPage { tab.readFraction = screens >= ResumePolicy.minimumScreens ? f : nil }
+            if f > ResumePolicy.readRange.upperBound { try? resumeRepo.clearReading(key: key) }          // read to the end: done
+            else if ResumePolicy.isWorthKeeping(readFraction: f, screens: screens) {
+                try? resumeRepo.update(key: key, title: title, reading: (f, (reading["a"] as? String).flatMap { $0.isEmpty ? nil : $0 }))
+            }
+            if isCurrentPage, tab.id == activeTabID { updateReadingBar(for: tab) }
+        }
+    }
+
+    /// Dev tooling (automation channel): what is stored for the page and what is on offer.
+    private func resumeReport(for tab: Tab) -> String {
+        guard let key = ResumePolicy.key(for: tab.webView?.url) else { return "no key" }
+        var parts = ["key=\(key)"]
+        if let point = try? resumeRepo.point(for: key) {
+            parts.append("video=\(point.videoSeconds.map { String($0) } ?? "-")")
+            parts.append("read=\(point.readFraction.map { String($0) } ?? "-")")
+            parts.append("anchor=\(point.anchor ?? "-")")
+        } else {
+            parts.append("point=none")
+        }
+        parts.append("notice=\(noticePill.visibleMessage ?? "(none)")")
+        parts.append("bar=\(tab.readFraction.map { String($0) } ?? "-")")
+        return parts.joined(separator: " ")
+    }
+
+    /// The thin line at the bottom of the page: how far down the user is in a long article.
+    private func updateReadingBar(for tab: Tab?) {
+        guard let tab, let fraction = tab.readFraction, SettingsStore.shared.resumeEnabled else { readingBar.isHidden = true; return }
+        readingBar.isHidden = false
+        readingBar.fill = Theme.accent
+        readingBarWidth?.constant = contentContainer.bounds.width * CGFloat(min(max(fraction, 0), 1))
+    }
+
+    /// On a fresh visit to a page the user had left half-way, offers to go back to the video position or to the paragraph.
+    private func offerResume(for tab: Tab) {
+        guard SettingsStore.shared.resumeEnabled, !tab.isPrivate, !tab.isAwaitingWakeReveal,
+              tab.lastNavigationType == .linkActivated || tab.lastNavigationType == .other,
+              let key = ResumePolicy.key(for: tab.webView?.url), let point = try? resumeRepo.point(for: key),
+              let offer = ResumePolicy.offer(for: point) else { return }
+        let message: String, call: (body: String, arguments: [String: Any])
+        switch offer {
+        case .video(let seconds):
+            message = "Reprendre la vidéo à \(ResumePolicy.clock(seconds)) ?"
+            call = ResumeScript.goCall(seconds: seconds, fraction: nil, anchor: nil)
+        case .reading(let percent):
+            message = "Reprendre la lecture (\(percent) %) ?"
+            call = ResumeScript.goCall(seconds: nil, fraction: point.readFraction, anchor: point.anchor)
+        }
+        noticePill.show(message: message, button: "Reprendre", seconds: 12) { [weak tab] in
+            guard let web = tab?.webView else { return }
+            Task { _ = try? await web.callAsyncJavaScript(call.body, arguments: call.arguments, in: nil, contentWorld: ResumeScript.world) }
+        }
+    }
+
+    // MARK: - Night mode
+
+    private var appearanceIsDark: Bool { NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
+
+    private func nightConfig() -> NightScript.Config {
+        let settings = SettingsStore.shared
+        return .init(enabled: NightPolicy.isActive(mode: settings.nightMode, appearanceIsDark: appearanceIsDark),
+                     excluded: settings.nightExcludedHosts, native: settings.nightNativeHosts)
+    }
+
+    /// Everything that should make the pages re-read the night settings.
+    private func nightSignature() -> [String] {
+        let settings = SettingsStore.shared
+        return [settings.nightMode.rawValue, appearanceIsDark ? "dark" : "light"] + settings.nightExcludedHosts + ["|"] + settings.nightNativeHosts
+    }
+
+    /// Hands the current night settings to every tab: future pages through their scripts, the page on screen at once.
+    private func refreshNightMode() {
+        let config = nightConfig()
+        for tab in tabs {
+            tab.setUserScripts(userScripts(for: tab.currentURL))
+            if let web = tab.webView {
+                Task { _ = try? await web.evaluateJavaScript(NightScript.source(config), in: nil, contentWorld: NightScript.world) }
+            }
+        }
+        if let tab = activeTab { updateNightButton(for: tab) }
+    }
+
+    /// The moon next to the address: visible while night mode is on; pressed = this site is being darkened.
+    private func updateNightButton(for tab: Tab) {
+        let settings = SettingsStore.shared
+        let host = tab.webView?.url?.host ?? tab.currentURL?.host
+        nightButton.isHidden = settings.nightMode == .off || !TranslationPolicy.canTranslate(url: tab.webView?.url ?? tab.currentURL)
+        let active = NightPolicy.isActive(mode: settings.nightMode, appearanceIsDark: appearanceIsDark)
+        let excluded = NightPolicy.contains(host, in: settings.nightExcludedHosts)
+        nightButton.isActive = active && !excluded
+        let label = !active ? "Mode nuit en attente (le Mac est en mode clair)" : excluded ? "Assombrir ce site" : "Laisser ce site clair"
+        nightButton.setAccessibilityLabel(label)
+        nightButton.toolTip = label
+    }
+
+    /// One click: leave this site light, or darken it again.
+    @objc func toggleNightForCurrentSite() {
+        guard let tab = activeTab, let host = tab.webView?.url?.host ?? tab.currentURL?.host else { return }
+        let settings = SettingsStore.shared
+        settings.nightExcludedHosts = NightPolicy.contains(host, in: settings.nightExcludedHosts)
+            ? NightPolicy.removing(host, from: settings.nightExcludedHosts)
+            : NightPolicy.adding(host, to: settings.nightExcludedHosts)
+        lastNight = nightSignature()
+        refreshNightMode()
+    }
+
+    private func setNightMode(_ mode: NightMode) {
+        SettingsStore.shared.nightMode = mode
+        lastNight = nightSignature()
+        refreshNightMode()
+    }
+
+    // MARK: - Page translation
+
+    /// Keeps the translate button in step with the active tab's translator, and starts recognizing the page language.
+    private func bindTranslator(of tab: Tab) {
+        updateNightButton(for: tab)
+        updateReadingBar(for: tab)
+        updateDigestButton(for: tab)
+        tab.onAddressCopied = { [weak self] address in
+            self?.noticePill.show(message: "Adresse copiée", button: "Ouvrir dans Plans") {
+                if let url = CopyPolicy.mapsURL(for: address) { NSWorkspace.shared.open(url) }
+            }
+        }
+        guard PageTranslator.isAvailable else { return }
+        tab.translator.onChange = { [weak self, weak tab] in
+            guard let self, let tab, tab.id == self.activeTabID else { return }
+            self.updateTranslateButton(for: tab)
+        }
+        tab.translator.onFailure = { [weak self] failure in self?.showTranslationFailure(failure) }
+        tab.translator.detectIfNeeded()
+        updateTranslateButton(for: tab)
+    }
+
+    private func updateTranslateButton(for tab: Tab) {
+        let translator = tab.translator
+        translateButton.isHidden = !translator.shouldOffer || !TranslationPolicy.canTranslate(url: tab.webView?.url)
+        translateButton.isActive = translator.state != .idle
+        translateButton.ringIndeterminate = translator.isWorking
+        let label = translator.state == .idle ? "Traduire la page" : "Afficher la page d'origine"
+        translateButton.setAccessibilityLabel(label)
+        translateButton.toolTip = label
+    }
+
+    /// Translates the active page, or puts the original back when it is already translated.
+    @objc func translatePageAction() {
+        guard PageTranslator.isAvailable, let tab = activeTab else { return }
+        bindTranslator(of: tab)
+        tab.translator.toggle()
+    }
+
+    /// Asks the system to install the fast translation model for the current page's language (its own download sheet appears).
+    @objc func downloadFastTranslationAction() { downloadFastTranslationAction(thenTranslate: false) }
+
+    private func downloadFastTranslationAction(thenTranslate: Bool) {
+        guard PageTranslator.isAvailable, let window, let tab = activeTab else { return }
+        guard let source = tab.translator.pageLanguage, source != "und" else {
+            showTranslationFailure(.unknownLanguage)
+            return
+        }
+        TranslationDownload.requestFastModel(source: source, in: window) { [weak tab] error in
+            if error == nil, thenTranslate { tab?.translator.translate() }
+        }
+    }
+
+    private func showTranslationFailure(_ failure: PageTranslator.Failure) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        switch failure {
+        case .sameLanguage(let name):
+            alert.messageText = "Cette page est déjà en \(name)."
+        case .unknownLanguage:
+            alert.messageText = "Langue de la page non reconnue."
+            alert.informativeText = "Il n'y a pas assez de texte pour savoir dans quelle langue elle est écrite."
+        case .unsupported(let source, let target):
+            alert.messageText = "Traduction impossible"
+            alert.informativeText = "Le système ne sait pas traduire de « \(source) » vers « \(target) »."
+        case .notInstalled(let source, let target):
+            alert.messageText = "Langues à télécharger"
+            alert.informativeText = "Pour traduire de « \(source) » vers « \(target) », le système doit d'abord télécharger ces langues."
+            alert.addButton(withTitle: "Télécharger")
+            alert.addButton(withTitle: "Annuler")
+        case .failed(let message):
+            alert.messageText = "La traduction a échoué"
+            alert.informativeText = message
+        }
+        guard let window else { return }
+        alert.beginSheetModal(for: window) { response in
+            if case .notInstalled = failure, response == .alertFirstButtonReturn { self.downloadFastTranslationAction(thenTranslate: true) }
+        }
     }
 
     func recentHistoryForMenu(limit: Int = 15) -> [HistoryEntry] {
@@ -3127,6 +3850,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Main-frame gatekeeper: URL cleaning, HTTPS-only upgrade, Safe Browsing,
     /// then per-page scripts. Sub-frames and non-web schemes pass straight through.
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, preferences: WKWebpagePreferences) async -> (WKNavigationActionPolicy, WKWebpagePreferences) {
+        if navigationAction.targetFrame?.isMainFrame == true { tab(for: webView)?.lastNavigationType = navigationAction.navigationType }
         let policy = await decideNavigation(webView, navigationAction, preferences)
         return (policy, preferences)
     }
@@ -3279,6 +4003,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard let tab = tab(for: webView) else { return }
         tab.interstitial.hide()
         tab.pageDidCommit()
+        // A reload keeps the pop-up; another page takes it away.
+        if tab.id == activeTabID, digestPanel.state != "closed", ResumePolicy.key(for: webView.url) != digestKey { digestPanel.close() }
         tab.revealWebView()
         if !firstCommitTraced { firstCommitTraced = true; LaunchTrace.mark("first page committed") }
         extensionManager.tabChanged(tab, [.URL, .loading, .title])
@@ -3320,7 +4046,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             menuBuilder?.refreshHistoryMenu()
         }
         if tab.id == activeTabID {
-            syncToolbar(for: tab)
+            syncToolbar(for: tab)    // also recognizes the page language for the translate button
+            offerResume(for: tab)
+            probeDigest(for: tab)
         }
         saveSession()
     }

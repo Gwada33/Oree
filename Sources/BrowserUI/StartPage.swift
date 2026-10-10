@@ -137,12 +137,18 @@ enum StartPage {
 
     // MARK: CSS from tokens
 
-    private static func rgba(_ c: RGBA) -> String {
+    /// The bundled fonts, served by `OreeSchemeHandler` (also used by the "l'essentiel" page).
+    static let fontFaceCSS = """
+    @font-face{font-family:"Instrument Sans";src:url("oree://home/fonts/InstrumentSans.ttf") format("truetype");font-weight:400 700;}
+    @font-face{font-family:"Instrument Serif";font-style:italic;src:url("oree://home/fonts/InstrumentSerif-Italic.ttf") format("truetype");}
+    """
+
+    static func rgba(_ c: RGBA) -> String {
         let r = Int((c.r * 255).rounded()), g = Int((c.g * 255).rounded()), b = Int((c.b * 255).rounded())
         return c.a >= 1 ? String(format: "#%02X%02X%02X", r, g, b) : "rgba(\(r),\(g),\(b),\(String(format: "%.3f", c.a)))"
     }
 
-    private static func vars(dark: Bool, hue: OreeTokens.Hue) -> String {
+    static func vars(dark: Bool, hue: OreeTokens.Hue) -> String {
         let T = OreeTokens.self
         let entries: [(String, RGBA)] = [
             ("chrome", T.chrome.resolved(dark: dark)), ("page", T.page.resolved(dark: dark)),
@@ -166,10 +172,7 @@ enum StartPage {
 
     private static func css(hue: OreeTokens.Hue) -> String {
         let radius = OreeTokens.radii(base: SettingsStore.shared.cornerRadius)
-        let fontFace = """
-        @font-face{font-family:"Instrument Sans";src:url("oree://home/fonts/InstrumentSans.ttf") format("truetype");font-weight:400 700;}
-        @font-face{font-family:"Instrument Serif";font-style:italic;src:url("oree://home/fonts/InstrumentSerif-Italic.ttf") format("truetype");}
-        """
+        let fontFace = fontFaceCSS
         return """
         \(fontFace)
         :root{\(vars(dark: false, hue: hue))--sans:"Instrument Sans",-apple-system,"SF Pro Text",sans-serif;--serif:"Instrument Serif",Georgia,serif;--r:\(Int(radius.base))px;--r-sm:\(Int(radius.sm))px;--r-lg:\(Int(radius.lg))px;--s2:0 2px 8px -2px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.06);}

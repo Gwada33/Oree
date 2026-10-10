@@ -72,6 +72,7 @@ public final class MenuBuilder {
         addResponderItem(to: editMenu, title: "Tout sélectionner", selector: #selector(NSText.selectAll(_:)), key: "a")
         editMenu.addItem(.separator())
         addCommand("find", to: editMenu, selector: #selector(BrowserWindowController.findInPage))
+        addCommand("translate", to: editMenu, selector: #selector(BrowserWindowController.translatePageAction))
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 

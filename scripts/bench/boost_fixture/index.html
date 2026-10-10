@@ -1,0 +1,18 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>(3) Boîte de réception</title>
+<style>
+ body{font:16px/1.5 system-ui;margin:0;padding:24px;max-width:760px}
+ .promo{background:#fde68a;padding:16px;margin:8px 0}
+ #sidebar{border:1px solid #ccc;padding:8px;font-size:14px}
+ ad-slot{display:block;background:#fcc;padding:12px;margin:8px 0}
+ .pulse{animation:pulse 1s infinite alternate;display:inline-block}
+ @keyframes pulse{from{opacity:.3}to{opacity:1}}
+ .badge-count{background:red;color:#fff;border-radius:9px;padding:0 6px}
+</style></head><body>
+<h1 class="headline">Une page de test</h1>
+<div class="promo">Publicité : achetez maintenant, offre limitée !</div>
+<ad-slot>Encart sponsorisé</ad-slot>
+<p class="article">Le texte de l'article, assez long pour être lu : le jardin, les tomates, l'été.</p>
+<aside id="sidebar">Barre latérale : articles liés</aside>
+<span class="pulse">●</span> <span class="badge-count">3</span>
+<video id="v" src="clip.mp4" autoplay muted loop playsinline width="320" height="180"></video>
+</body></html>

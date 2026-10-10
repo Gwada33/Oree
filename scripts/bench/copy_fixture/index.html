@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Carnet de jardin</title>
+<style>
+  body { font: 15px Georgia; color: #123456; padding: 24px; max-width: 700px }
+  .brand { font-family: "Comic Sans MS"; color: rgb(200, 30, 30); font-size: 22px }
+  a { color: green; text-decoration: underline }
+  table { border-collapse: collapse } td, th { border: 1px solid #999; padding: 4px 10px }
+</style></head><body>
+<p id="styled" class="brand" style="background:yellow">Les <b>tomates</b> aiment le <a href="https://example.com/soleil">soleil</a> et l'eau<span style="display:none"> TEXTE-CACHE</span>.</p>
+<ul id="list"><li>Arroser le matin</li><li>Pailler le sol</li></ul>
+<h2 id="title">Récolte de l'été</h2>
+<table id="table"><tr><th>Variété</th><th>Poids (g)</th><th>Date</th></tr>
+<tr><td>Coeur de boeuf</td><td>420</td><td>12 juillet</td></tr>
+<tr><td>Cerise</td><td></td><td>3 août</td></tr></table>
+<p id="quote">Le jardinier patient récolte toujours plus que le jardinier pressé, surtout quand l'été est long et chaud.</p>
+<p id="addr">12 rue de Rivoli, 75001 Paris</p>
+<p id="own">Ce texte est copié par la page elle-même.</p>
+<input id="field" value="champ de saisie">
+<script>
+  document.getElementById('own').addEventListener('copy', e => { e.clipboardData.setData('text/plain', 'COPIE-PAR-LA-PAGE'); e.preventDefault(); });
+</script>
+</body></html>

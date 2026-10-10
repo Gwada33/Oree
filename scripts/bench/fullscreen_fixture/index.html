@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Plein écran</title>
+<style>body{margin:0;background:#fff;font:18px system-ui} #go{position:absolute;left:20px;top:20px;width:260px;height:60px;font-size:20px}
+video{position:absolute;left:20px;top:110px;width:480px;height:270px;background:#222}</style></head>
+<body><button id="go" onclick="document.getElementById('v').requestFullscreen()">Plein écran</button>
+<video id="v" src="clip.mp4" muted loop autoplay playsinline></video>
+<script>document.addEventListener('fullscreenchange',()=>{document.title='fs='+(!!document.fullscreenElement)+' paused='+document.getElementById('v').paused})</script>
+</body></html>

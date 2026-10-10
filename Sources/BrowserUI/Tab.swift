@@ -132,6 +132,26 @@ final class Tab: NSObject {
 
     /// Full-page warning/recovery screen (crash, insecure HTTP, unsafe site).
     let interstitial = InterstitialView()
+    /// Set by the window: the page's resume script reported a video position or a reading position (JSON).
+    static var resumeReported: ((Tab, String) -> Void)?
+    /// The page's own event or booking data, read after load; nil when it has none.
+    var eventCandidate: CalendarEvent?
+    /// The page's own recipe or how-to data, read after load (instant to show); nil when it has none.
+    var digestCandidate: PageDigest?
+    /// How far down the user has read this page (0…1), for the progress line; nil on short pages.
+    var readFraction: Double?
+    /// How the current page was reached (set when the navigation starts): only a fresh visit gets a "resume" offer, not
+    /// back/forward or reload, where WebKit already restores the position.
+    var lastNavigationType: WKNavigationType = .other
+    /// Set by the window: a page's night-mode script found its site already dark (the host is passed).
+    static var nativeDarkReported: ((String) -> Void)?
+    /// Set by the window: called when the user copies something that is one postal address.
+    var onAddressCopied: ((String) -> Void)?
+    func copiedText(_ text: String) {
+        if let address = CopyPolicy.postalAddress(in: text) { onAddressCopied?(address) }
+    }
+    /// Translates this tab's page with the system Translation framework (macOS 26+; inert elsewhere).
+    lazy var translator = PageTranslator { [weak self] in self?.webView }
 
     /// Set when we silently upgraded `http://` to `https://` for this tab, so
     /// a connection failure can offer the user the original HTTP address.
@@ -219,6 +239,10 @@ final class Tab: NSObject {
         Tab.trackedControllers.add(controller)
         controller.addUserScript(TabPageState.makeUserScript())
         controller.add(TabPageStateHandler(), contentWorld: TabPageState.world, name: TabPageState.handlerName)
+        controller.add(TranslationMessageHandler(), contentWorld: TranslationScript.world, name: TranslationScript.handlerName)
+        controller.add(CleanCopyMessageHandler(), contentWorld: CleanCopyScript.world, name: CleanCopyScript.handlerName)
+        controller.add(NightMessageHandler(), contentWorld: NightScript.world, name: NightScript.handlerName)
+        controller.add(ResumeMessageHandler(), contentWorld: ResumeScript.world, name: ResumeScript.handlerName)
         // Ghost hibernation: the page-side capture needs hooks installed before the page's own scripts run, so it is only
         // added to tabs created while the flag is on.
         if SettingsStore.shared.hibernationGhost {
@@ -242,6 +266,10 @@ final class Tab: NSObject {
     /// A new document replaced the old one: its unsaved input is gone with it.
     func pageDidCommit() {
         frameInfos.removeAll()
+        translator.reset()
+        readFraction = nil
+        digestCandidate = nil
+        eventCandidate = nil
         isDirty = false
         hasCommittedSinceWake = true
     }
@@ -752,7 +780,8 @@ final class Tab: NSObject {
         dropGhost()      // a ghost view from a wake that never finished must not stay over the new snapshot, nor a stale file survive
         thaw()
         await collectPageState()
-        if captureGhost { await self.captureGhost() }
+        // A translated page would be captured in the translated text, then replaced by the untranslated real page.
+        if captureGhost, translator.state == .idle { await self.captureGhost() }
 
         suspendedInteractionState = webView.interactionState as? Data
         suspendedURL = url
@@ -783,6 +812,7 @@ final class Tab: NSObject {
         webView.removeFromSuperview()
         self.webView = nil
 
+        translator.reset()
         isDirty = false
         isSuspended = true
     }

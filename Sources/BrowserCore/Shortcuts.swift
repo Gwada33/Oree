@@ -70,6 +70,7 @@ public enum ShortcutRegistry {
         c("forward", "Page suivante", "Navigation", "]"),
         c("reload", "Recharger", "Navigation", "r"),
         c("find", "Rechercher dans la page", "Navigation", "f"),
+        c("translate", "Traduire la page", "Navigation", nil),
         c("history", "Historique", "Navigation", "y"),
         c("bookmark", "Ajouter aux favoris", "Navigation", "d"),
         c("split", "Écran partagé", "Fenêtre", "\\"),

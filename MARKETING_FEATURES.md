@@ -15,7 +15,7 @@
 - « Léger par conception : il libère la mémoire des onglets que tu n'utilises pas. »
 - « Vie privée par défaut. Zéro télémétrie. Zéro réglage compliqué. »
 - « Un navigateur natif, rapide à ouvrir, qui range ta vie en espaces. »
-- « Tapez ⌘T. Tout est là : onglets, historique, favoris, actions. »
+- « Tapez ⌘K. Tout est là : onglets, historique, favoris, actions. »
 
 ## 2. Ce qui le distingue (le cœur de la pub)
 
@@ -39,7 +39,7 @@
 ### 2.2 Interface : espaces, palette, barre latérale — ⭐⭐
 | Fonction | Détail | Statut |
 |---|---|---|
-| **Palette de commandes ⌘T / ⌘L** | Une seule barre pour : aller sur un onglet ouvert, rechercher l'historique, ouvrir un favori, lancer une action, rechercher sur le web. Filtres (Tout / Onglets / Historique / Favoris / Actions), mise en évidence de la saisie, tout au clavier. | ✅ |
+| **Palette de commandes ⌘K (et ⌘L pour l'adresse)** | Une seule barre pour : aller sur un onglet ouvert, rechercher l'historique, ouvrir un favori, lancer une action, rechercher sur le web. Filtres (Tout / Onglets / Historique / Favoris / Actions), mise en évidence de la saisie, tout au clavier. | ✅ |
 | **Espaces** Perso / Travail / Lecture | Trois groupes d'onglets à pastille de couleur, renommables, raccourcis ⌃1–⌃3, déplacement d'un onglet entre espaces. | ✅ |
 | **Barre latérale verticale** | Favoris en grille, onglets en liste, repliable (⌘⇧S). | ✅ |
 | **Favoris** | Ajout en un clic (+), retrait par clic droit. | ✅ |
@@ -53,6 +53,13 @@
 | **Groupes d'onglets repliables** | Par espace, avec « Pages libres ». | ✅ |
 | **Écran partagé** | Deux pages côte à côte (⌘\), répartition ⅓ ½ ⅔, glisser la charnière. Non conservé au redémarrage. | ✅ (rendu du côté non actif non vérifié visuellement) |
 | **Raccourcis clavier éditables** | Réglages → Raccourcis clavier, avec détection des conflits. | ✅ |
+| **Traduction de page** | Traduit la page sur le Mac avec le framework Translation d'Apple (hors ligne, rien n'est envoyé). Bouton proposé quand la langue de la page diffère de la vôtre ; « Afficher la page d'origine » restitue tout. macOS 26 et plus. Lente avec le modèle Apple Intelligence (~3 textes/s, traduit autour de l'écran puis au défilement). | 🔶 (testé sur une page de test ; pas sur de vrais sites ; modèle rapide non mesuré) |
+| **Copier-coller propre** | Le texte copié arrive sans la police, les couleurs ni les liens du site ; une sélection sur plusieurs cellules d'un tableau se colle en vrai tableau dans Numbers ou Excel ; option pour ajouter la source avec un lien vers le passage ; une adresse copiée propose « Ouvrir dans Plans ». | ✅ testé sur une page de test ; 🔶 pas sur de vrais sites ni dans Numbers/Excel |
+| **Mode nuit universel** | Assombrit tous les sites, même sans thème sombre : photos, vidéos et grands visuels restent naturels, les sites déjà sombres ne sont pas touchés, un clic sur la lune laisse un site clair. Désactivé par défaut ; « automatique » suit le mode sombre du Mac. | ✅ testé sur pages de test et 3 vrais sites (Wikipédia, BBC, GitHub) ; 🔶 consommation non mesurée ; Night Shift non pris en charge |
+| **Reprendre où tu en étais** | Sur n'importe quel site, Orée retient la position d'une vidéo longue et le paragraphe d'un article long, et propose de reprendre à votre retour ; une fine ligne montre l'avancée de la lecture. Local, jamais en navigation privée, effacé avec les données de navigation. | ✅ testé sur pages de test ; 🔶 pas sur de vrais sites ; vidéos en iframe non suivies |
+| **L'essentiel** | Un bouton affiche seulement l'essentiel d'une page : ingrédients, étapes et temps d'une recette, étapes d'un tutoriel, verdict d'un comparatif — sans les 2 000 mots de souvenirs. Mode cuisine : gros texte, écran qui reste allumé. Données de la page lues exactement quand elles existent ; sinon modèle local d'Apple Intelligence (≈ 30 s, macOS 26, peut contenir des erreurs ; ce qui ne se retrouve pas dans la page est écarté). | ✅ testé sur pages de test et un essai sur une vraie recette ; 🔶 pas sur beaucoup de sites ; lent avec le modèle |
+| **Boosts : changer un site en une phrase** | « Cache les recommandations et agrandis le texte » : le modèle local d'Apple Intelligence écrit des règles de style pour ce site seulement, vérifiées par l'app (jamais de JavaScript, rien ne peut être chargé ou cacher l'article), avec annulation immédiate. Mode calme (sans lecture automatique, sans animations, sans pastilles) par site ou partout. | ✅ testé sur page de test ; 🔶 pas sur de vrais sites (essai YouTube non concluant) ; scroll infini non géré |
+| **Ajouter au Calendrier** | Un événement annoncé par la page, ou un rendez-vous écrit en texte (modèle local, date vérifiée dans la page), s'ouvre dans Calendrier avec le titre, l'heure et le lieu remplis. Aucune autorisation d'accès au calendrier. | ✅ testé sur pages de test ; 🔶 pas sur de vrais sites ; Rappels non faits |
 | **Page d'accueil** | Date en serif, favoris numérotés (⌥1–⌥8), « Reprendre », fonds uni/papier/horizon/photo. | ✅ |
 
 ### 2.3 Vie privée et sécurité intégrées (sans extension) — ⭐⭐

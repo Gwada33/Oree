@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Weekly gardening news</title>
+<style>
+  body { font: 16px/1.5 system-ui; margin: 0; padding: 24px; max-width: 760px }
+  nav a { margin-right: 16px }
+  .spacer { height: 2400px }
+  #menu { display: none; border: 1px solid #888; padding: 8px }
+  #menu.open { display: block }
+</style>
+</head>
+<body>
+<nav><a href="#">Home</a><a href="#">Subscribe to our newsletter</a><a href="#">Contact us</a></nav>
+<h1 id="h1">The committee will meet on Tuesday to discuss the garden budget</h1>
+<p id="p1">Our team has been working hard to improve your experience. Read the full story below.</p>
+<p id="inline">Click <b>here</b> to continue reading about tomatoes.</p>
+<p id="price">12,99 € — 2026</p>
+<p id="skip" translate="no">DO-NOT-TRANSLATE brand name</p>
+<p class="notranslate" id="skip2">Another protected sentence</p>
+<pre id="pre">const greeting = "hello world"</pre>
+<p><code id="code">npm install tomatoes</code></p>
+<input id="field" placeholder="Search the archive" value="typed by the user">
+<button id="btn" title="Open the settings panel">Settings</button>
+<img id="img" alt="A red tomato on a wooden table" width="40" height="40" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+<div contenteditable="true" id="editable">This sentence is being edited by the reader</div>
+<button id="open" onclick="document.getElementById('menu').classList.add('open')">Open menu</button>
+<div id="menu"><a href="#">Terms of service</a> <a href="#">Privacy policy</a></div>
+<div id="host"></div>
+<section id="live"></section>
+<div class="spacer"></div>
+<p id="far">This paragraph is far below the screen and should be translated later.</p>
+<script>
+  const root = document.getElementById('host').attachShadow({ mode: 'open' });
+  root.innerHTML = '<p id="shadow">Welcome to the shadow garden</p>';
+  setTimeout(() => {                      // content added by the page after load (infinite scroll, ads, widgets)
+    const p = document.createElement('p'); p.id = 'late';
+    p.textContent = 'This news was loaded after the page finished.';
+    document.getElementById('live').appendChild(p);
+  }, 6000);
+</script>
+</body>
+</html>

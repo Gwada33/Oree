@@ -46,6 +46,14 @@ public final class SettingsStore: @unchecked Sendable {
         static let hibernationGhost = "oree.hibernation.ghost"
         static let protectionExemptHosts = "settings.protectionExemptHosts"
         static let privateByDefault = "settings.privateByDefault"
+        static let nightMode = "settings.nightMode"
+        static let nightExcludedHosts = "settings.nightExcludedHosts"
+        static let nightNativeHosts = "settings.nightNativeHosts"
+        static let calmModeEverywhere = "settings.calmModeEverywhere"
+        static let digestAutoRecipes = "settings.digestAutoRecipes"
+        static let resumeEnabled = "settings.resumeEnabled"
+        static let cleanCopy = "settings.cleanCopy"
+        static let copyAddsSource = "settings.copyAddsSource"
         static let customHomepageURL = "settings.customHomepageURL"
         static let autoplayMediaAllowed = "settings.autoplayMediaAllowed"
         static let httpsOnly = "settings.httpsOnly"
@@ -93,6 +101,10 @@ public final class SettingsStore: @unchecked Sendable {
             Key.hibernationGhost: false,
             Key.protectionExemptHosts: ProtectionPolicy.defaultExemptHosts,
             Key.privateByDefault: false,
+            Key.digestAutoRecipes: true,
+            Key.resumeEnabled: true,
+            Key.cleanCopy: true,
+            Key.copyAddsSource: false,
             Key.customHomepageURL: "",
             Key.autoplayMediaAllowed: false,
             Key.httpsOnly: true,
@@ -173,6 +185,54 @@ public final class SettingsStore: @unchecked Sendable {
     public var neverSleepHosts: [String] {
         get { defaults.stringArray(forKey: Key.neverSleepHosts) ?? [] }
         set { defaults.set(newValue, forKey: Key.neverSleepHosts) }
+    }
+
+    /// Darkens every site that has no dark theme of its own. `HB_NIGHT=off|auto|always` overrides it (tests).
+    public var nightMode: NightMode {
+        get {
+            if let forced = ProcessInfo.processInfo.environment["HB_NIGHT"].flatMap(NightMode.init(rawValue:)) { return forced }
+            return NightMode(rawValue: defaults.string(forKey: Key.nightMode) ?? "") ?? .off
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.nightMode) }
+    }
+    /// Sites the user left light.
+    public var nightExcludedHosts: [String] {
+        get { defaults.stringArray(forKey: Key.nightExcludedHosts) ?? [] }
+        set { defaults.set(newValue, forKey: Key.nightExcludedHosts) }
+    }
+    /// Sites found to be dark already (learned on the first visit), so they are never inverted.
+    public var nightNativeHosts: [String] {
+        get { defaults.stringArray(forKey: Key.nightNativeHosts) ?? [] }
+        set { defaults.set(newValue, forKey: Key.nightNativeHosts) }
+    }
+
+    /// Calm mode on every site: no autoplay until the page is touched, no animations, no notification badges.
+    public var calmModeEverywhere: Bool {
+        get { defaults.bool(forKey: Key.calmModeEverywhere) }
+        set { defaults.set(newValue, forKey: Key.calmModeEverywhere) }
+    }
+
+    /// On a recipe page that carries its own structured data, show the essentials at once (no model, instant).
+    public var digestAutoRecipes: Bool {
+        get { defaults.bool(forKey: Key.digestAutoRecipes) }
+        set { defaults.set(newValue, forKey: Key.digestAutoRecipes) }
+    }
+
+    /// Remembers video positions and reading positions, and offers to pick up where the user left off.
+    public var resumeEnabled: Bool {
+        get { defaults.bool(forKey: Key.resumeEnabled) }
+        set { defaults.set(newValue, forKey: Key.resumeEnabled) }
+    }
+
+    /// Copying from a page puts clean text (no site fonts, colors or links) and real tables on the clipboard.
+    public var cleanCopy: Bool {
+        get { defaults.bool(forKey: Key.cleanCopy) }
+        set { defaults.set(newValue, forKey: Key.cleanCopy) }
+    }
+    /// A copied quotation gets its source appended, with a link to the exact passage.
+    public var copyAddsSource: Bool {
+        get { defaults.bool(forKey: Key.copyAddsSource) }
+        set { defaults.set(newValue, forKey: Key.copyAddsSource) }
     }
 
     public var privateByDefault: Bool {

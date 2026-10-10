@@ -67,6 +67,12 @@ final class SettingsViewModel: ObservableObject {
     }
     @Published var adBlockEnabled: Bool { didSet { settings.adBlockEnabled = adBlockEnabled } }
     @Published var privateByDefault: Bool { didSet { settings.privateByDefault = privateByDefault } }
+    @Published var calmModeEverywhere: Bool { didSet { settings.calmModeEverywhere = calmModeEverywhere } }
+    @Published var digestAutoRecipes: Bool { didSet { settings.digestAutoRecipes = digestAutoRecipes } }
+    @Published var resumeEnabled: Bool { didSet { settings.resumeEnabled = resumeEnabled } }
+    @Published var cleanCopy: Bool { didSet { settings.cleanCopy = cleanCopy } }
+    @Published var copyAddsSource: Bool { didSet { settings.copyAddsSource = copyAddsSource } }
+    @Published var nightMode: NightMode { didSet { settings.nightMode = nightMode } }
     @Published var autoplayAllowed: Bool { didSet { settings.autoplayMediaAllowed = autoplayAllowed } }
     @Published var autoSuspendMinutes: Int { didSet { settings.autoSuspendMinutes = autoSuspendMinutes } }
     @Published var freezeAfterSeconds: Int { didSet { settings.freezeAfterSeconds = freezeAfterSeconds } }
@@ -82,6 +88,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var learnSiteMemory: Bool { didSet { settings.learnSiteMemory = learnSiteMemory } }
     @Published var heaviestSites: [SiteProfile] = []
     private let siteMemoryRepo = SiteMemoryRepository()
+    private let resumeRepo = ResumeRepository()
     @Published var lightLongPages: Bool { didSet { settings.lightLongPages = lightLongPages } }
     @Published var backgroundCleanup: Bool { didSet { settings.backgroundCleanup = backgroundCleanup } }
     @Published var autoUpdateCheck: Bool { didSet { settings.autoUpdateCheck = autoUpdateCheck } }
@@ -126,7 +133,13 @@ final class SettingsViewModel: ObservableObject {
         homepageURL = current.customHomepageURL
         adBlockEnabled = current.adBlockEnabled
         privateByDefault = current.privateByDefault
+        calmModeEverywhere = current.calmModeEverywhere
+        digestAutoRecipes = current.digestAutoRecipes
+        resumeEnabled = current.resumeEnabled
+        cleanCopy = current.cleanCopy
+        copyAddsSource = current.copyAddsSource
         autoplayAllowed = current.autoplayMediaAllowed
+        nightMode = current.nightMode
         autoSuspendMinutes = current.autoSuspendMinutes
         freezeAfterSeconds = current.freezeAfterSeconds
         reloadPermissions()
@@ -282,6 +295,7 @@ final class SettingsViewModel: ObservableObject {
 
     func clearHistory() {
         try? historyRepo.clear()
+        try? resumeRepo.clear()          // where the user was in each page is part of what they browsed
         clearSiteMemory()
     }
 
@@ -470,6 +484,16 @@ public struct SettingsView: View {
                     }
                 }
             }
+            Section("Mode nuit des sites") {
+                Picker("Assombrir les sites", selection: $model.nightMode) {
+                    Text("Jamais").tag(NightMode.off)
+                    Text("Automatique (quand Orée est en mode sombre)").tag(NightMode.auto)
+                    Text("Toujours").tag(NightMode.always)
+                }
+                Text("Les sites qui ont déjà un thème sombre ne sont pas touchés. Une icône en forme de lune dans la barre d'outils laisse un site clair d'un clic. Orée suit l'apparence du Mac : le réglage Night Shift n'est pas accessible aux applications.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Page de démarrage") {
                 TextField("Page d'accueil", text: $model.homepageURL, prompt: Text("https://exemple.com (vide = page intégrée)"))
                 Toggle("Afficher les sites récents sur la page de nouvel onglet", isOn: $model.startPageShowsRecent)
@@ -535,6 +559,32 @@ public struct SettingsView: View {
                 Toggle("Bloquer les publicités et traqueurs", isOn: $model.adBlockEnabled)
                 Toggle("Ouvrir les nouveaux onglets en navigation privée par défaut", isOn: $model.privateByDefault)
                 Toggle("Autoriser la lecture automatique des vidéos et sons", isOn: $model.autoplayAllowed)
+            }
+            Section("Mode calme et personnalisation des sites") {
+                Toggle("Mode calme sur tous les sites (sans lecture automatique, sans animations, sans pastilles de notification)", isOn: $model.calmModeEverywhere)
+                Text("⌘K › « Personnaliser ce site… » : décrivez en une phrase ce que vous voulez changer sur le site ouvert (par exemple « cache les recommandations et agrandis le texte »). Le modèle local écrit des règles de style, jamais de script ; elles sont vérifiées, gardées pour ce site seulement, et « Annuler » les retire aussitôt. Nécessite macOS 26 et Apple Intelligence.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("L'essentiel") {
+                Toggle("Ouvrir directement l'essentiel sur les pages de recette qui le fournissent (instantané, sans IA)", isOn: $model.digestAutoRecipes)
+                Text("Le bouton de la barre d'outils (ou ⌘K › « L'essentiel ») résume n'importe quelle page avec le modèle local d'Apple Intelligence : environ 30 secondes, nécessite macOS 26 et Apple Intelligence, peut contenir des erreurs. Rien ne quitte le Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Reprise") {
+                Toggle("Proposer de reprendre une vidéo ou un article là où je m'étais arrêté", isOn: $model.resumeEnabled)
+                Text("Positions gardées sur ce Mac seulement (90 jours), jamais en navigation privée, effacées avec les données de navigation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Copier-coller") {
+                Toggle("Copier proprement (sans la police, les couleurs ni les liens du site ; les tableaux restent des tableaux)", isOn: $model.cleanCopy)
+                Toggle("Ajouter la source aux citations copiées, avec un lien vers le passage", isOn: $model.copyAddsSource)
+                    .disabled(!model.cleanCopy)
+                Text("S'applique aux pages ouvertes après le changement.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Sécurité et vie privée") {
                 Toggle("Mode HTTPS uniquement (met à niveau http:// et avertit avant de continuer)", isOn: $model.httpsOnly)
