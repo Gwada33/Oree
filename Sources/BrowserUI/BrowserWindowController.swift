@@ -61,6 +61,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var extensionButtons: [String: ExtensionButton] = [:]
     private let loadingBar = LoadingBarView()
     private let noticePill = NoticePill()
+    /// La barre IA, créée à la première ouverture (rien ne démarre avant : ni l'agent, ni la connexion au service).
+    private var aiBarController: AIBarController?
     private let digestPanel = DigestPanelView()
     private let digestButton = ChromeIconButton(symbol: "list.bullet.clipboard", label: "Afficher l'essentiel")
     private let calendarButton = ChromeIconButton(symbol: "calendar.badge.plus", label: "Ajouter au Calendrier")
@@ -346,7 +348,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         automation = AutomationServer(
             window: window,
             activeWebView: { [weak self] in self?.activeTab?.webView },
-            overlays: { [weak self] in [self?.activeTab?.interstitial, self?.loadingBar, self?.digestPanel, self?.noticePill, (self?.paletteLoaded == true ? self?.palette : nil), self?.addressDropdown, (self?.floatingShown == true ? self?.sidebarView : nil), self?.demoPanel, self?.drawer, self?.overview, self?.onboarding, self?.findBarContainer].compactMap { $0 } },
+            overlays: { [weak self] in [self?.activeTab?.interstitial, self?.loadingBar, self?.aiBarController?.view, self?.digestPanel, self?.noticePill, (self?.paletteLoaded == true ? self?.palette : nil), self?.addressDropdown, (self?.floatingShown == true ? self?.sidebarView : nil), self?.demoPanel, self?.drawer, self?.overview, self?.onboarding, self?.findBarContainer].compactMap { $0 } },
             tabOperation: { [weak self] op, index in
                 guard let self, self.visibleTabs().indices.contains(index) else { return "no such tab" }
                 let tab = self.visibleTabs()[index]
@@ -361,8 +363,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     NSPasteboard.general.clearContents()
                     NSApp.sendAction(NSSelectorFromString("copy:"), to: tab.webView, from: nil)
                     return "copied"
-                case "aiask":
-                    // Dev: asks the local model a fixed question and stores the answer for `aiget`.
+                case "aibar": self.aiBar().toggle(); return self.aiBar().report
+                case "aistate": return self.aiBarController?.report ?? "open=false (jamais ouverte)"
+                case "aiquery":
+                    // Dev: pose à la barre IA la question écrite dans /tmp/oree-ai-query.txt (la vraie question, par le vrai service).
+                    guard let text = try? String(contentsOfFile: "/tmp/oree-ai-query.txt", encoding: .utf8) else { return "no query file" }
+                    self.aiBar().ask(text.trimmingCharacters(in: .whitespacesAndNewlines)); return self.aiBar().report
+                case "aistop": self.aiBarController?.stop(); return self.aiBarController?.report ?? ""
+                case "fmask":
+                    // Dev: asks Apple's on-device model a fixed question and stores the answer for `aiget`.
                     self.aiResult = "pending"
                     let started = Date()
                     Task { @MainActor in
@@ -2098,6 +2107,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
                 actions.append((digestPanel.state == "closed" ? "L'essentiel" : "Fermer « L'essentiel »", "list.bullet.clipboard", { $0.digestAction() }))
             }
+            actions.append(("Demander à l'IA", "sparkles", { $0.askAIAction() }))
             if TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
                 actions.append(("Ajouter au Calendrier", "calendar.badge.plus", { $0.addToCalendarAction() }))
                 actions.append(("Personnaliser ce site…", "wand.and.stars", { $0.customizeSiteAction() }))
@@ -3510,6 +3520,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             }
         }
     }
+
+    // MARK: - IA locale
+
+    private func aiBar() -> AIBarController {
+        if let aiBarController { return aiBarController }
+        let created = AIBarController(container: contentContainer, downloads: downloads)
+        aiBarController = created
+        return created
+    }
+
+    /// ⌘J : la barre IA. Le modèle se réveille dès qu'elle s'ouvre, pour être prêt quand la question est tapée.
+    @objc func askAIAction() { aiBar().toggle() }
 
     // MARK: - Add to Calendar
 

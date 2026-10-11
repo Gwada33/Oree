@@ -14,6 +14,7 @@ let package = Package(
         .executable(name: "OreeDownloader", targets: ["OreeDownloader"]),
         .library(name: "OreeAIProtocol", targets: ["OreeAIProtocol"]),
         .library(name: "OreeAIEngine", targets: ["OreeAIEngine"]),
+        .library(name: "OreeAIClient", targets: ["OreeAIClient"]),
         .executable(name: "OreeAI", targets: ["OreeAI"]),
     ],
     dependencies: [
@@ -63,7 +64,19 @@ let package = Package(
         // NSHostingController — it doesn't otherwise touch SwiftUI.
         .target(
             name: "BrowserUI",
-            dependencies: ["BrowserCore", "BrowserStorage", "BrowserSettingsUI", "DownloadKit", "DownloadProtocol"],
+            dependencies: ["BrowserCore", "BrowserStorage", "BrowserSettingsUI", "DownloadKit", "DownloadProtocol", "OreeAIClient", "OreeAIEngine"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+
+        // Côté navigateur du service IA local : client XPC et décisions d'état (testables avec un faux service).
+        .target(
+            name: "OreeAIClient",
+            dependencies: ["OreeAIProtocol"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "OreeAIClientTests",
+            dependencies: ["OreeAIClient", "OreeAIProtocol"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
 

@@ -96,6 +96,29 @@ On ne passe à l'étape suivante qu'une fois la porte franchie, mesures à l'app
 5. **Le LoRA** (session IA, avec les traces de l'étape 4). Données, entraînement, jeu d'évaluation de 200 tâches, comparaison base / LoRA actuel / LoRA précédent, quantification.
    *Porte :* meilleur que la base sur les appels d'outils valides, la précision par étape et la réussite de bout en bout, sans perte de qualité de rédaction ; sinon on livre la base.
 
+## Où en est-on
+
+| Étape | État |
+|---|---|
+| 1. Le cerveau seul | **Fait et fusionné** (11 octobre 2026). Service `OreeAI`, états chaud/tiède/froid, modèle vérifié (SHA-256), service réservé à Orée. Mesures : `Docs/ia-mesures.md` (≈ 200 Mo d'empreinte en chaud, 16 à 19 jetons/s, réveil 0,14 s depuis le tiède, 0,7 s depuis le froid). Non mesuré : chargement à froid depuis le disque, navigateur chargé, version release. |
+| Branchement côté navigateur | **Fait** : client XPC (`Sources/OreeAIClient`), barre IA (⌘J, `Sources/BrowserUI/AIBar.swift`), installation de l'agent à la première ouverture, téléchargement du modèle avec accord (moteur de téléchargement d'Orée), Stop. Chaque question est indépendante : pas de mémoire, pas de page lue. |
+| 2. Les yeux | à faire |
+| 3. Les mains | à faire |
+| 4. La boucle d'agent | à faire |
+| 5. Le LoRA | à faire |
+
+**Ce que fait la barre aujourd'hui.** ⌘J (ou ⌘K › « Demander à l'IA ») ouvre une carte en haut de la page. Rien n'est lancé avant : ni l'agent, ni la connexion au service. À la première
+ouverture, Orée installe l'agent launchd `com.nolhan.hyperbrowser.ai` (comme le téléchargeur ; il pointe vers l'exécutable `OreeAI` de la copie d'Orée en cours), interroge le service
+et le réveille. Si le modèle manque, la barre propose « Télécharger le modèle » (≈ 1,3 Go) : **le téléchargement ne démarre que sur ce clic**. Le service vérifie ensuite le fichier.
+Textes d'état : `Sources/OreeAIClient/AIAvailability.swift` (testés).
+
+**Qualité observée (à ne pas présenter comme une garantie).** Sur « capitale de l'Italie ? », trois essais ont donné « Rome », « Rome » et « Milan » ; la session IA avait relevé « Berne » pour la Suisse.
+La barre ne doit donc pas servir de source de faits ; l'étape 4 mesurera la fiabilité des actions avec de vrais chiffres.
+
+**Essais.** `python3 scripts/bench/ai_check.py` : instance séparée, **son propre nom de service** (`HB_AI_MACH_NAME=com.nolhan.hyperbrowser.ai-test`, jamais l'agent réel de l'utilisateur), service et modèle
+réels, 11 contrôles (ouverture, réponse, Stop, service encore vivant, fermeture). L'agent d'essai est retiré à la fin. Ignoré si le fichier du modèle n'est pas sur le disque (le script ne télécharge pas 1,3 Go).
+Variables d'environnement : `HB_AI_MACH_NAME` (autre service Mach), `HB_AI_NO_AGENT=1` (l'agent est géré à la main).
+
 ## Pièges connus (à lire avant de commencer)
 
 - **Entraîner sur ce Mac n'est pas réaliste.** Un Mac M1 de 8 Go ne fait pas tourner un LoRA sur un modèle de 2 milliards de paramètres sans swap. Prévoir un notebook Colab (Unsloth) ou une machine louée.

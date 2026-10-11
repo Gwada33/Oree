@@ -73,6 +73,7 @@ public final class MenuBuilder {
         editMenu.addItem(.separator())
         addCommand("find", to: editMenu, selector: #selector(BrowserWindowController.findInPage))
         addCommand("translate", to: editMenu, selector: #selector(BrowserWindowController.translatePageAction))
+        addCommand("ai", to: editMenu, selector: #selector(BrowserWindowController.askAIAction))
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 
