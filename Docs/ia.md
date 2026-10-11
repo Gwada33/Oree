@@ -5,7 +5,7 @@ repris tel quel du plan ; le reste adapte le plan à ce dépôt et fixe les port
 
 ## Contrat
 
-# IA locale d'Orée — contrat
+(Bloc repris du plan, sans titre de premier niveau.)
 
 ## Objectif
 Service IA local, hors ligne, macOS (Apple Silicon), qui génère du texte et pilote des pages via des outils.
@@ -45,6 +45,7 @@ PAGE <url> "<titre>" / VISIBLE / @eN <rôle>[type] "<libellé>" attributs / AUTR
 (`Sources/DownloadProtocol` : `XPC.swift`, `AgentInstaller`, `LocalEngine`, exécutable `Sources/OreeDownloader`, copié et signé par `build_app.sh`). Le service IA
 fait pareil : un exécutable `OreeAI` dans `Contents/MacOS`, un agent à la demande, un service Mach. Pas de bundle `XPCServices` : `build_app.sh` assemble l'app à la main.
 Cibles à créer : `OreeAIProtocol` (protocole et événements, sans dépendance, partagé), `OreeAIService` (exécutable, llama.cpp), et côté navigateur un client mince.
+Le « dossier `OreeAI/` » du contrat désigne ces cibles : `Sources/OreeAIProtocol` et `Sources/OreeAIService` (SwiftPM veut les cibles sous `Sources/`).
 
 **Sécurité du service dès le premier jour.** `shouldAcceptNewConnection` du téléchargeur accepte toute connexion (point ouvert de l'audit du 10 octobre). Celui de l'IA doit
 appeler `setCodeSigningRequirement` pour n'accepter qu'Orée ; sinon n'importe quel processus de la session pourrait faire tourner le modèle, ou lui faire lire une page.
