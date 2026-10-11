@@ -117,6 +117,37 @@ final class LlamaEngine: AIEngine, @unchecked Sendable {
         }
     }
 
+    // MARK: Essai brut (mesure de l'appel d'outils, `OreeAI --probe`)
+
+    /// Génère à partir d'un prompt déjà rendu (modèle de conversation appliqué ailleurs), sans passer par le prompt système ni le cache KV.
+    /// Choix du jeton glouton (déterministe) ; `grammar` (GBNF) contraint la sortie. Pour les mesures seulement : le service n'appelle jamais ceci.
+    func probe(prompt: String, grammar: String?, maxTokens: Int) async throws -> String {
+        try await onQueue {
+            guard let model = self.model, let context = self.context else { throw LlamaError.noModel }
+            llama_memory_clear(llama_get_memory(context), true)
+            let tokens = try self.tokenize(prompt)
+            guard tokens.count + maxTokens <= Int(self.contextSize) else { throw LlamaError.decodeFailed(-2) }
+            try self.decode(tokens)
+            let vocab = llama_model_get_vocab(model)
+            let sampler = llama_sampler_chain_init(llama_sampler_chain_default_params())
+            defer { llama_sampler_free(sampler) }
+            if let grammar { llama_sampler_chain_add(sampler, llama_sampler_init_grammar(vocab, grammar, "root")) }
+            llama_sampler_chain_add(sampler, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 64, 1.0, 0, 0))   // répétition 1.0
+            llama_sampler_chain_add(sampler, llama_sampler_init_greedy())
+            var bytes: [UInt8] = []
+            for _ in 0..<maxTokens {
+                var token = llama_sampler_sample(sampler, context, -1)
+                if llama_vocab_is_eog(vocab, token) { break }
+                // (llama_sampler_sample accepte déjà le jeton : un second accept ferait avancer la grammaire et les pénalités de deux pas)
+                var piece = [CChar](repeating: 0, count: 64)
+                let n = llama_token_to_piece(vocab, token, &piece, Int32(piece.count), 0, true)
+                if n > 0 { bytes += piece.prefix(Int(n)).map { UInt8(bitPattern: $0) } }
+                if llama_decode(context, llama_batch_get_one(&token, 1)) != 0 { throw LlamaError.decodeFailed(-3) }
+            }
+            return String(decoding: bytes, as: UTF8.self)
+        }
+    }
+
     // MARK: Prompt et cache KV (sur la file llama)
 
     /// Le prompt système est le début de TOUS les prompts : son calcul (prefill) est fait une fois, puis gardé dans un fichier.
@@ -222,7 +253,7 @@ final class LlamaEngine: AIEngine, @unchecked Sendable {
             if cancelled.isSet { return }
             var token = llama_sampler_sample(sampler, context, -1)
             if llama_vocab_is_eog(vocab, token) { break }
-            llama_sampler_accept(sampler, token)
+            // (llama_sampler_sample accepte déjà le jeton : un second accept ferait avancer la grammaire et les pénalités de deux pas)
             var piece = [CChar](repeating: 0, count: 64)
             let n = llama_token_to_piece(vocab, token, &piece, Int32(piece.count), 0, false)
             if n > 0 { pending += piece.prefix(Int(n)).map { UInt8(bitPattern: $0) } }

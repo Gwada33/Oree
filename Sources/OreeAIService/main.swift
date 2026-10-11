@@ -115,6 +115,26 @@ if let at = arguments.firstIndex(of: "--ask"), arguments.indices.contains(at + 1
     await quit(0, controller)
 }
 
+// --probe <cas.jsonl> [--grammar <g.gbnf>] : sort une ligne JSON par cas avec la sortie brute du modèle (la notation est faite hors du service).
+if let at = arguments.firstIndex(of: "--probe"), arguments.indices.contains(at + 1) {
+    let engine = LlamaEngine(cacheDirectory: kvCache)
+    let grammar = option("--grammar").flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }
+    do {
+        try await engine.load(modelAt: ModelFile.url(for: .qwen35_2B))
+        try await engine.startContext(systemPrompt: "essai")
+        let lines = try String(contentsOfFile: arguments[at + 1], encoding: .utf8).split(separator: "\n")
+        for line in lines {
+            guard let object = try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any], let id = object["id"] as? String, let prompt = object["prompt"] as? String else { continue }
+            let started = Date()
+            let output = try await engine.probe(prompt: prompt, grammar: grammar, maxTokens: 300)
+            let reply: [String: Any] = ["id": id, "output": output, "seconds": Date().timeIntervalSince(started)]
+            print(String(decoding: try JSONSerialization.data(withJSONObject: reply), as: UTF8.self))
+        }
+    } catch { print("{\"error\": \"\(error.localizedDescription)\"}") }
+    await engine.unload()
+    exit(0)
+}
+
 if arguments.contains("--bench") {
     await runBench(makeEngine: makeEngine)
     exit(0)

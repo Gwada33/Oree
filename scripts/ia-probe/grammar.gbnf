@@ -1,0 +1,26 @@
+root ::= "<tool_call>\n<function=" call "</function>\n</tool_call>"
+call ::= search | openurl | readpage | click | type | select | scroll | fill | ask | done
+search ::= "search_web>\n" p-query
+openurl ::= "open_url>\n" p-url
+readpage ::= "read_page>\n" p-section?
+click ::= "click>\n" p-ref
+type ::= "type>\n" p-ref p-text p-submit?
+select ::= "select>\n" p-ref p-option
+scroll ::= "scroll>\n" p-direction
+fill ::= "fill_form>\n" p-fields
+ask ::= "ask_user>\n" p-question
+done ::= "done>\n" p-answer
+p-query ::= "<parameter=query>\n" value "\n</parameter>\n"
+p-url ::= "<parameter=url>\n" ("https://" | "http://") value "\n</parameter>\n"
+p-section ::= "<parameter=section>\n" value "\n</parameter>\n"
+p-ref ::= "<parameter=ref>\n@e" [0-9]+ "\n</parameter>\n"
+p-text ::= "<parameter=text>\n" value "\n</parameter>\n"
+p-submit ::= "<parameter=submit>\n" ("true" | "false") "\n</parameter>\n"
+p-option ::= "<parameter=option>\n" value "\n</parameter>\n"
+p-direction ::= "<parameter=direction>\n" ("up" | "down") "\n</parameter>\n"
+p-fields ::= "<parameter=fields>\n{" ws pair ("," ws pair)* ws "}\n</parameter>\n"
+p-question ::= "<parameter=question>\n" value "\n</parameter>\n"
+p-answer ::= "<parameter=answer>\n" value "\n</parameter>\n"
+pair ::= "\"@e" [0-9]+ "\"" ws ":" ws "\"" [^"\n]* "\""
+ws ::= [ ]*
+value ::= [^<]+
