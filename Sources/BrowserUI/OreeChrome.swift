@@ -113,7 +113,10 @@ final class ChromeIconButton: HoverView {
     private let ringTrack = CAShapeLayer()
     private let ringArc = CAShapeLayer()
     private let icon = NSImageView()
-    private let pointSize: CGFloat
+    private var pointSize: CGFloat
+    private var sizeConstraints: [NSLayoutConstraint] = []
+    /// Clic droit : le menu de personnalisation du bouton (masquer, déplacer…).
+    var contextMenuProvider: (() -> NSMenu?)?
 
     init(symbol: String, label: String, size: CGFloat = 28, pointSize: CGFloat = 14) {
         self.symbol = symbol
@@ -125,8 +128,8 @@ final class ChromeIconButton: HoverView {
         wantsLayer = true
         for l in [ringTrack, ringArc] { l.fillColor = nil; l.lineWidth = 1.8; l.lineCap = .round; l.isHidden = true; layer?.addSublayer(l) }
         ringArc.strokeEnd = 0
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: size), heightAnchor.constraint(equalToConstant: size),
+        sizeConstraints = [widthAnchor.constraint(equalToConstant: size), heightAnchor.constraint(equalToConstant: size)]
+        NSLayoutConstraint.activate(sizeConstraints + [
             icon.centerXAnchor.constraint(equalTo: centerXAnchor), icon.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         toolTip = label
@@ -148,6 +151,16 @@ final class ChromeIconButton: HoverView {
     }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateRing() }
+
+    /// Change la taille du bouton et du pictogramme (réglage « Taille des icônes »).
+    func resize(side: CGFloat, glyph: CGFloat) {
+        guard sizeConstraints.first?.constant != side || pointSize != glyph else { return }
+        sizeConstraints.forEach { $0.constant = side }
+        pointSize = glyph
+        refreshImage()
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? { contextMenuProvider?() ?? super.menu(for: event) }
 
     /// Draws / animates the ring (design system: 180 ms ease; rotation only when motion isn't reduced).
     private func updateRing() {
@@ -612,7 +625,10 @@ final class SidebarRowView: HoverView {
     private let label = NSTextField(labelWithString: "")
     private var heightConstraint: NSLayoutConstraint!
 
-    func refreshMetrics() { heightConstraint.constant = Theme.rowHeight; label.font = Theme.sans(13); needsDisplay = true }
+    /// Rangée repliée (réglage « Afficher la recherche / Nouvel onglet ») : plus de place prise, plus de clic.
+    var collapsed = false { didSet { isHidden = collapsed; refreshMetrics() } }
+
+    func refreshMetrics() { heightConstraint.constant = collapsed ? 0 : Theme.rowHeight; label.font = Theme.sans(13); needsDisplay = true }
 
     init(symbol: String, title: String, shortcut: String?) {
         super.init(frame: .zero)

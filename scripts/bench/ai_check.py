@@ -10,12 +10,17 @@ import os, plistlib, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 UI, APP = os.path.join(ROOT, "scripts", "ui.sh"), os.path.join(ROOT, "Oree.app")
-MODEL = os.path.expanduser("~/Library/Application Support/HyperBrowser/Models/Qwen3.5-2B-Q4_K_M.gguf")
+MODEL = os.path.expanduser("~/Library/Application Support/HyperBrowser/Models/Qwen3.5-4B-Q4_K_M.gguf")
 MACH = "com.nolhan.hyperbrowser.ai-test"
 PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{MACH}.plist")
 
 def ui(*args):
     r = subprocess.run([UI, *args], capture_output=True, text=True); return (r.stdout + r.stderr).strip()
+
+def shot(name):
+    """AI_SHOTS=<dossier> : une capture de la fenêtre de test à ce moment (pour relire le design)."""
+    out = os.environ.get("AI_SHOTS")
+    if out: os.makedirs(out, exist_ok=True); time.sleep(0.6); ui("snapshot", os.path.join(out, name + ".png"))
 
 def pids(): return set(subprocess.run(["pgrep", "-x", "Oree"], capture_output=True, text=True).stdout.split())
 
@@ -41,7 +46,7 @@ def main():
         print("ignoré : le modèle n'est pas sur le disque (ce script ne télécharge pas 1,3 Go)"); return 0
     tmp = tempfile.mkdtemp(prefix="aicheck-"); ext = os.path.join(tmp, "ext"); os.makedirs(ext)
     before = pids()
-    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_NO_AGENT=1", f"HB_AI_MACH_NAME={MACH}"]
+    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_NO_AGENT=1", f"HB_AI_MACH_NAME={MACH}", "HB_AI_TRACE=/tmp/aitrace.txt"]
     subprocess.run(["open", "-g", "-n", *[x for e in env for x in ("--env", e)], APP, "--args", "--automation"]); time.sleep(5)
     mine = pids() - before
     results = []
@@ -50,6 +55,7 @@ def main():
         check("avant l'ouverture, rien n'est lancé : pas d'agent IA installé", not os.path.exists(PLIST))
         print("\nOuverture de la barre")
         ui("tab", "aibar", "0")
+        shot("ouvert")
         check("la barre s'ouvre, l'agent est installé à la demande", wait_for(lambda: os.path.exists(PLIST), 15) and "open=true" in state())
         ready = wait_for(lambda: "state=ready" in state(), 40)
         print("  ", state()[:200])
@@ -64,9 +70,10 @@ def main():
         text = answer(); print("  réponse :", repr(text[:120]))
         check("elle n'est pas vide et nomme Paris", "paris" in text.lower())
 
+        shot("reponse")
         print("\nStop")
-        ask("Écris un très long poème de quarante vers sur la mer, avec des détails.")
-        check("une réponse longue commence à s'écrire", wait_for(lambda: "running=true" in state() and len(answer().strip()) > 20, 30))
+        ask("Cherche sur le web les meilleurs livres sur la mer et résume-les en détail.")
+        check("la tâche longue est en cours", wait_for(lambda: "running=true" in state(), 10))
         ui("tab", "aistop", "0")
         check("Stop arrête la tâche tout de suite", "running=false" in state())
         time.sleep(1.5)

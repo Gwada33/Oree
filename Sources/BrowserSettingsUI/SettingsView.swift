@@ -16,12 +16,13 @@ import AppKit
 /// system and needs nothing but the SDK, so it's what actually builds here.
 /// Worth revisiting once Xcode is installed.
 enum SettingsCategory: String, CaseIterable, Identifiable {
-    case general, appearance, layout, privacy, passwords, shortcuts, downloads, extensions, data, advanced
+    case general, appearance, layout, privacy, assistant, passwords, shortcuts, downloads, extensions, data, advanced
     var id: String { rawValue }
     var title: String {
         switch self {
         case .general: return "Général"
         case .privacy: return "Confidentialité"
+        case .assistant: return "Assistant IA"
         case .passwords: return "Mots de passe"
         case .appearance: return "Apparence"
         case .layout: return "Disposition"
@@ -36,6 +37,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "gearshape"
         case .privacy: return "hand.raised"
+        case .assistant: return "sparkles"
         case .passwords: return "key"
         case .appearance: return "paintbrush"
         case .layout: return "sidebar.left"
@@ -428,6 +430,7 @@ public struct SettingsView: View {
                 switch model.category {
                 case .general: generalSections
                 case .privacy: privacySections
+                case .assistant: AssistantSection()
                 case .passwords: passwordSections
                 case .shortcuts: ShortcutsSection()
                 case .appearance: AppearanceSection(onOpenCustomize: onOpenCustomize)
@@ -443,6 +446,10 @@ public struct SettingsView: View {
             .background(OreeColor.chrome)
         }
         .tint(OreeColor.accent)
+        // Clic droit sur un bouton › « Personnaliser les barres… » : la fenêtre s'ouvre sur « Disposition ».
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("Oree.selectSettingsCategory"))) { note in
+            if let raw = note.object as? String, let c = SettingsCategory(rawValue: raw) { model.category = c }
+        }
         .frame(minWidth: 760, minHeight: 560)
         .confirmationDialog(
             "Cette action est irréversible.",
@@ -1000,6 +1007,7 @@ struct LayoutSection: View {
             Text("« Au survol » : la barre est cachée et apparaît par-dessus la page quand le pointeur touche le bord gauche. Vous pouvez aussi tirer le bord de la barre pour la redimensionner. Sous 900 px de large, la barre fixe passe en mode compact toute seule.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+        ChromeLayoutSection()
         Section("Lignes et texte") {
             picker("Densité", OreeTokens.Density.allCases.map { ($0.label, $0) }, get: { store.density }, set: { store.density = $0 })
             picker("Taille du texte de l’interface", [("Petit", -1), ("Moyen", 0), ("Grand", 1)], get: { store.uiTextOffset }, set: { store.uiTextOffset = $0 })
@@ -1051,6 +1059,119 @@ struct DownloadsSection: View {
         Section {
             Text("Les téléchargements tournent dans un processus séparé : ils continuent si vous quittez Orée. Les fichiers sont marqués par macOS (quarantaine) et un téléchargement interrompu reprend où il s’était arrêté.")
                 .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+
+/// Le profil que l'assistant peut utiliser pour remplir des formulaires, via des jetons `{{profil.prenom}}`… Gardé dans le Trousseau, jamais
+/// envoyé au modèle (le navigateur remplace le jeton au moment du geste, et seulement après votre accord pour un envoi).
+@MainActor
+final class AssistantProfileModel: ObservableObject {
+    static let fields: [(key: String, label: String)] = [
+        ("prenom", "Prénom"), ("nom", "Nom"), ("email", "Adresse e-mail"), ("telephone", "Téléphone"),
+        ("adresse", "Adresse"), ("code_postal", "Code postal"), ("ville", "Ville"), ("pays", "Pays"),
+    ]
+    private let keychain = ProfileKeychain()
+    @Published var values: [String: String]
+    @Published var saved = false
+    init() { values = keychain.load() }
+    func binding(_ key: String) -> Binding<String> {
+        Binding(get: { self.values[key] ?? "" }, set: { self.values[key] = $0; self.saved = false })
+    }
+    func save() {
+        values = values.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+        saved = keychain.save(values)
+    }
+}
+
+struct AssistantSection: View {
+    @StateObject private var profile = AssistantProfileModel()
+
+    var body: some View {
+        Section("Profil pour l'assistant") {
+            ForEach(AssistantProfileModel.fields, id: \.key) { field in
+                TextField(field.label, text: profile.binding(field.key))
+            }
+            HStack {
+                Button("Enregistrer") { profile.save() }
+                if profile.saved { Text("Enregistré dans le Trousseau.").font(.caption).foregroundStyle(.secondary) }
+            }
+            Text("Quand vous demandez « remplis ce formulaire », l'assistant écrit des jetons comme {{profil.prenom}} ; Orée met la vraie valeur dans la page. Le modèle ne voit jamais ces valeurs. Il ne remplit jamais un mot de passe ni une carte, et demande toujours votre accord avant d'envoyer un formulaire, de payer ou de télécharger.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+
+/// La disposition des boutons : où est chaque bouton (barre d'outils à gauche / à droite, bas de la barre latérale, masqué), dans quel ordre,
+/// quelle taille. Les changements s'appliquent tout de suite dans la fenêtre.
+@MainActor
+final class ChromeLayoutModel: ObservableObject {
+    @Published var layout = SettingsStore.shared.chromeLayout
+    func commit() { SettingsStore.shared.chromeLayout = layout; layout = SettingsStore.shared.chromeLayout }
+    func reload() { layout = SettingsStore.shared.chromeLayout }
+    func move(_ item: ChromeItem, by delta: Int) {
+        let zone = layout.zone(of: item)
+        guard let index = layout.items(in: zone).firstIndex(of: item) else { return }
+        layout.move(item, to: zone, at: index + delta)
+        commit()
+    }
+    func send(_ item: ChromeItem, to zone: ChromeZone) { layout.move(item, to: zone); commit() }
+    func setPinned(_ item: ChromeItem, _ on: Bool) { if on { layout.pinned.insert(item) } else { layout.pinned.remove(item) }; commit() }
+    func reset() { layout = .standard; commit() }
+}
+
+struct ChromeLayoutSection: View {
+    @StateObject private var model = ChromeLayoutModel()
+
+    private func row(_ item: ChromeItem, zone: ChromeZone, index: Int, count: Int) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: item.symbol).frame(width: 20).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title)
+                if item.isContextual {
+                    Toggle("Toujours à sa place (grisé quand il ne sert pas)", isOn: Binding(get: { model.layout.pinned.contains(item) }, set: { model.setPinned(item, $0) }))
+                        .toggleStyle(.checkbox).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Button { model.move(item, by: -1) } label: { Image(systemName: "chevron.up") }
+                .buttonStyle(.borderless).disabled(index == 0).help("Monter").accessibilityLabel("Monter \(item.title)")
+            Button { model.move(item, by: 1) } label: { Image(systemName: "chevron.down") }
+                .buttonStyle(.borderless).disabled(index == count - 1).help("Descendre").accessibilityLabel("Descendre \(item.title)")
+            Menu {
+                ForEach(ChromeZone.allCases.filter { $0 != zone && !(item.isRequired && $0 == .hidden) }, id: \.self) { target in
+                    Button(target.title) { model.send(item, to: target) }
+                }
+            } label: { Image(systemName: "arrow.left.arrow.right") }
+                .menuStyle(.borderlessButton).frame(width: 30).help("Déplacer vers…").accessibilityLabel("Déplacer \(item.title) vers…")
+        }
+    }
+
+    var body: some View {
+        Section("Boutons : barre d'outils et barre latérale") {
+            Picker("Taille des icônes", selection: Binding(get: { model.layout.iconSize }, set: { model.layout.iconSize = $0; model.commit() })) {
+                ForEach(ChromeIconSize.allCases, id: \.self) { Text($0.title).tag($0) }
+            }.pickerStyle(.segmented)
+            Toggle("Afficher « Rechercher, aller à… » dans la barre latérale", isOn: Binding(get: { model.layout.showSearchRow }, set: { model.layout.showSearchRow = $0; model.commit() }))
+            Toggle("Afficher « Nouvel onglet » dans la barre latérale", isOn: Binding(get: { model.layout.showNewTabRow }, set: { model.layout.showNewTabRow = $0; model.commit() }))
+            Text("Clic droit sur un bouton de la fenêtre : le masquer ou le déplacer sans venir ici. La palette de commandes (⌘K) reste toujours visible : c'est votre chemin de retour.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        ForEach(ChromeZone.allCases, id: \.self) { zone in
+            Section(zone.title) {
+                let items = model.layout.items(in: zone)
+                if items.isEmpty { Text("Aucun bouton").foregroundStyle(.secondary) }
+                ForEach(Array(items.enumerated()), id: \.element) { index, item in row(item, zone: zone, index: index, count: items.count) }
+            }
+        }
+        Section {
+            Button("Rétablir la disposition d'origine") { model.reset() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            if model.layout != SettingsStore.shared.chromeLayout { model.reload() }
         }
     }
 }

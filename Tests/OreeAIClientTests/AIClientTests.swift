@@ -139,4 +139,23 @@ private func collect(_ client: AIClient, until done: @escaping @Sendable (AIEven
         #expect(AIAvailability.ready(.cold).line(modelBytes: size).contains("moins d'une seconde"))
         #expect(AIAvailability.downloading(AIDownloadProgress(received: 0, total: nil)).line(modelBytes: size) == "Téléchargement du modèle…")
     }
+
+    @Test func lucioleStateFollowsPanel() {
+        let ready = AIAvailability.ready(.warm)
+        #expect(LucioleState.pose(availability: ready, running: false, streaming: false, failed: false) == .idle)
+        #expect(LucioleState.pose(availability: ready, running: true, streaming: false, failed: false) == .think)
+        #expect(LucioleState.pose(availability: ready, running: true, streaming: true, failed: false) == .write)
+        #expect(LucioleState.pose(availability: ready, running: false, streaming: false, failed: true) == .err)
+        #expect(LucioleState.pose(availability: .needsModel, running: false, streaming: false, failed: false) == .sleep)
+        #expect(LucioleState.pose(availability: .unreachable, running: false, streaming: false, failed: false) == .off)
+        #expect(LucioleState.pose(availability: .verifying, running: false, streaming: false, failed: false) == .load)
+    }
+
+    @Test func panelWidthRules() {
+        #expect(AIPanelMetrics.clamp(100) == 320)
+        #expect(AIPanelMetrics.clamp(900) == 520)
+        #expect(AIPanelMetrics.clamp(400) == 400)
+        #expect(AIPanelMetrics.pushesPage(windowWidth: 900))
+        #expect(!AIPanelMetrics.pushesPage(windowWidth: 899))
+    }
 }

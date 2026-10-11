@@ -62,7 +62,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let loadingBar = LoadingBarView()
     private let noticePill = NoticePill()
     /// La barre IA, créée à la première ouverture (rien ne démarre avant : ni l'agent, ni la connexion au service).
-    private var aiBarController: AIBarController?
+    private var aiBarController: AIPanelController?
+    /// Écart entre le bord droit de la page et celui de la fenêtre quand le panneau IA pousse la page.
+    private var pageTrailing: NSLayoutConstraint?
+    private var pageMapResult = "(none)"
     private let digestPanel = DigestPanelView()
     private let digestButton = ChromeIconButton(symbol: "list.bullet.clipboard", label: "Afficher l'essentiel")
     private let calendarButton = ChromeIconButton(symbol: "calendar.badge.plus", label: "Ajouter au Calendrier")
@@ -186,6 +189,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let toggleSidebarButton = ChromeIconButton(symbol: "sidebar.left", label: "Afficher la barre latérale  ⌥⌘S")
     private let customizeButton = ChromeIconButton(symbol: "paintbrush", label: "Personnaliser  ⌘,")
     private let moreButton = ChromeIconButton(symbol: "ellipsis", label: "Palette de commandes  ⌘K")
+    private let assistantButton = ChromeIconButton(symbol: "sparkles", label: "Assistant (Luciole)  ⌘J")
+    /// La rangée de boutons du bas de la barre latérale, et ce qui la complète à droite (espace libre, « N en veille »).
+    private var footerStack: NSStackView?
+    private var footerTail: [NSView] = []
+    /// Les boutons « selon la page » qui servent en ce moment ; la disposition (`ChromeLayout`) décide où ils vont et s'ils restent à leur place.
+    private var chromeRelevant: Set<ChromeItem> = []
+    private var appliedChromeLayout: ChromeLayout?
     private var sidebarView: NSView?
     private var sidebarWidth: NSLayoutConstraint?
     private var sidebarLeading: NSLayoutConstraint?
@@ -348,10 +358,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         automation = AutomationServer(
             window: window,
             activeWebView: { [weak self] in self?.activeTab?.webView },
-            overlays: { [weak self] in [self?.activeTab?.interstitial, self?.loadingBar, self?.aiBarController?.view, self?.digestPanel, self?.noticePill, (self?.paletteLoaded == true ? self?.palette : nil), self?.addressDropdown, (self?.floatingShown == true ? self?.sidebarView : nil), self?.demoPanel, self?.drawer, self?.overview, self?.onboarding, self?.findBarContainer].compactMap { $0 } },
+            overlays: { [weak self] in [self?.activeTab?.interstitial, self?.loadingBar, self?.digestPanel, self?.noticePill, (self?.paletteLoaded == true ? self?.palette : nil), self?.addressDropdown, (self?.floatingShown == true ? self?.sidebarView : nil), self?.demoPanel, self?.drawer, self?.overview, self?.onboarding, self?.findBarContainer].compactMap { $0 } },
             tabOperation: { [weak self] op, index in
                 guard let self, self.visibleTabs().indices.contains(index) else { return "no such tab" }
                 let tab = self.visibleTabs()[index]
+                if op == "pagemap" || op == "pagemapget" || op == "act" || op == "actget" { return self.pageMapOp(op, tab) }      // hors du `switch` : il est déjà à la limite du compilateur
                 switch op {
                 case "select": self.selectTab(tab); return "selected \(index)"
                 case "sleep": self.sleepTab(tab); return "sleeping \(index)"
@@ -370,6 +381,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     guard let text = try? String(contentsOfFile: "/tmp/oree-ai-query.txt", encoding: .utf8) else { return "no query file" }
                     self.aiBar().ask(text.trimmingCharacters(in: .whitespacesAndNewlines)); return self.aiBar().report
                 case "aistop": self.aiBarController?.stop(); return self.aiBarController?.report ?? ""
+                case "airesolve":
+                    // Dev : répond à la carte « à valider » (yes / no) ou à la question affichée (texte du fichier).
+                    let answer = (try? String(contentsOfFile: "/tmp/oree-ai-query.txt", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "no"
+                    self.aiBarController?.devResolve(answer); return self.aiBarController?.report ?? ""
                 case "fmask":
                     // Dev: asks Apple's on-device model a fixed question and stores the answer for `aiget`.
                     self.aiResult = "pending"
@@ -453,7 +468,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 case "notice": return self.noticePill.visibleMessage ?? "(none)"
                 case "pasteboard":
                     let board = NSPasteboard.general
-                    return (["public.utf8-plain-text", "public.html"].map { type in "[\(type)]\n" + (board.string(forType: NSPasteboard.PasteboardType(type)) ?? "(none)") }).joined(separator: "\n")
+                    var parts: [String] = []
+                    for type in ["public.utf8-plain-text", "public.html"] {
+                        let content = board.string(forType: NSPasteboard.PasteboardType(type)) ?? "(none)"
+                        parts.append("[\(type)]\n" + content)
+                    }
+                    return parts.joined(separator: "\n")
                 default: return "unknown op"
                 }
             },
@@ -551,6 +571,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var lastSidebarPrefs = [SettingsStore.shared.sidebarWidth, SettingsStore.shared.sidebarGlass ? 1 : 0]
 
     private func settingsChanged() {
+        if SettingsStore.shared.chromeLayout != appliedChromeLayout { applyChromeLayout() }
         // Look settings edited elsewhere (Réglages, a configuration) apply live.
         let look = LookProfile.capture(named: "", from: SettingsStore.shared)
         let sidebarPrefs = [SettingsStore.shared.sidebarWidth, SettingsStore.shared.sidebarGlass ? 1 : 0]
@@ -769,7 +790,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         addressPill.onClick = { [weak self] in self?.focusAddressBar() }
         let bar = ToolbarView(pill: addressPill)
         toolbar = bar
-        [toggleSidebarButton, backButton, forwardButton, reloadButton].forEach(bar.leftStack.addArrangedSubview)
         splitButton.onClick = { [weak self] in self?.toggleSplit() }
         Tab.nativeDarkReported = { [weak self] host in
             let settings = SettingsStore.shared
@@ -782,15 +802,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
             Task { @MainActor in self?.settingsChanged() }
         }
-        digestButton.isHidden = true
         digestButton.onClick = { [weak self] in self?.digestAction() }
-        calendarButton.isHidden = true
         calendarButton.onClick = { [weak self] in self?.addToCalendarAction() }
-        nightButton.isHidden = true
         nightButton.onClick = { [weak self] in self?.toggleNightForCurrentSite() }
-        translateButton.isHidden = true
         translateButton.onClick = { [weak self] in self?.translatePageAction() }
-        downloadsButton.isHidden = true
         downloadsButton.onClick = { [weak self] in self?.toggleDownloads() }
         downloads.onChange = { [weak self] in self?.downloadsChanged() }
         downloads.onFinish = { [weak self] in self?.downloadsButton.pulse() }
@@ -802,7 +817,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         downloads.resumeWebView = { [weak self] in self?.activeTab?.webView }
         downloads.start()
-        [calendarButton, digestButton, nightButton, translateButton, splitButton, customizeButton, downloadsButton, moreButton].forEach(bar.rightStack.addArrangedSubview)
+        assistantButton.onClick = { [weak self] in self?.askAIAction() }
+        applyChromeLayout()
 
         // Page sheet: top-left corner rounded, flush against the right and bottom edges.
         contentContainer.cornerRadius = Theme.pageCornerRadius
@@ -878,9 +894,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
             contentContainer.topAnchor.constraint(equalTo: bar.bottomAnchor),
             contentContainer.leadingAnchor.constraint(equalTo: mainGuide.leadingAnchor),
-            contentContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             contentContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
         ])
+        let pageEdge = contentContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
+        pageEdge.isActive = true
+        pageTrailing = pageEdge
 
         contentView.addSubview(addressDropdown)
         NSLayoutConstraint.activate([
@@ -1034,6 +1052,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         sleepMetaLabel.translatesAutoresizingMaskIntoConstraints = false
         panelBar.addArrangedSubview(sleepMetaLabel)
         sidePanel.onBack = { [weak self] in self?.togglePanel(nil) }
+        footerStack = panelBar
+        footerTail = [spacer, sleepMetaLabel]
+        applyChromeLayout()
 
         [topStack, searchRow, newTabRow, scroll, sidePanel, panelBar].forEach(column.addSubview)
         let rowsInset: CGFloat = 8
@@ -1159,7 +1180,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func downloadsChanged() {
         if activePanel == .downloads { refreshPanel() }
         let summary = downloads.summary
-        downloadsButton.isHidden = !downloads.hasItems
+        setRelevant(.downloads, downloads.hasItems)
         downloadsButton.ringIndeterminate = summary.running > 0 && summary.fraction == nil
         downloadsButton.ringProgress = summary.running > 0 && summary.fraction != nil ? summary.fraction : nil
         let tip = summary.running > 0 ? "Téléchargements — \(summary.running) en cours · \(ByteFormat.speed(summary.bytesPerSecond))" : "Téléchargements"
@@ -1522,7 +1543,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         resizeHandle.isHidden = compact || hidden
         // The toolbar's sidebar button: brings back a hidden / hover / compact sidebar.
         let showToggle = !horizontal && (hidden || hover || store.sidebarMode == .compact)
-        toggleSidebarButton.isHidden = !showToggle
+        setRelevant(.sidebarToggle, showToggle)
         toggleSidebarButton.toolTip = compact ? "Agrandir la barre latérale  ⌥⌘S" : "Afficher la barre latérale  ⌥⌘S"
         let lightsClear: CGFloat = isFullScreen ? 12 : 92                            // room for the traffic lights when the toolbar starts at x = 0
         // Compact: the toolbar starts at the 58 pt rail, so its first button needs less inset to clear the lights.
@@ -2340,6 +2361,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     func selectTab(_ tab: Tab) {
+        aiBarController?.tabChanged(id: tab.id, title: tab.displayTitle)
         if digestPanel.state != "closed" { digestPanel.close() }     // the essentials belong to the page they were made from
         // Picking a tab that isn't one of the two sides leaves the split screen.
         if let pair = splitPair, tab.id != pair.left, tab.id != pair.right { endSplit(keeping: tab.id) }
@@ -2381,6 +2403,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     func closeTab(_ tab: Tab) {
+        aiBarController?.tabClosed(tab.id)
         guard let idx = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         if let pair = splitPair, tab.id == pair.left || tab.id == pair.right {
             endSplit(keeping: tab.id == pair.left ? pair.right : pair.left)
@@ -3400,9 +3423,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     // MARK: - L'essentiel
 
     private func updateDigestButton(for tab: Tab) {
-        digestButton.isHidden = tab.digestCandidate == nil
+        setRelevant(.essentiel, tab.digestCandidate != nil)
         digestButton.isActive = digestPanel.state != "closed"
-        calendarButton.isHidden = tab.eventCandidate == nil
+        setRelevant(.calendar, tab.eventCandidate != nil)
     }
 
     /// What a page says about itself in its JSON-LD: a recipe or how-to, an event or booking.
@@ -3523,14 +3546,166 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - IA locale
 
-    private func aiBar() -> AIBarController {
+    /// Le panneau IA écarte le bord droit de la page de `pushed` points (0 : il la recouvre ou il est fermé).
+    /// Dev : la carte de page (ce que lirait l'IA) de l'onglet, avec son poids estimé.
+    private func pageMapOp(_ op: String, _ tab: Tab) -> String {
+        if op == "pagemapget" || op == "actget" { return pageMapResult }
+        pageMapResult = "pending"
+        if op == "act" {
+            Task { @MainActor in pageMapResult = await actOp(tab) }
+            return "started (lire avec actget)"
+        }
+        Task { @MainActor in pageMapResult = await pageMapReport(tab) }
+        return "started (lire avec pagemapget)"
+    }
+
+    /// Dev : exécute l'appel d'outil écrit dans /tmp/oree-ai-action.json, `{"name","arguments","profile","approve"}`. Sans `approve`, toute confirmation est refusée.
+    private func actOp(_ tab: Tab) async -> String {
+        guard let web = tab.webView, let data = FileManager.default.contents(atPath: "/tmp/oree-ai-action.json"),
+              let spec = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let name = spec["name"] as? String else { return "no action file" }
+        let argsData = (try? JSONSerialization.data(withJSONObject: spec["arguments"] ?? [:])) ?? Data()
+        let argsJSON = String(data: argsData, encoding: .utf8) ?? "{}"
+        let action: AIAction
+        do { action = try AIAction.parse(name: name, argumentsJSON: argsJSON) } catch { return "parse error: \(error)" }
+        let approve = spec["approve"] as? Bool ?? false
+        var asked = ""
+        let result = await ActionExecutor.execute(action, in: web, profile: spec["profile"] as? [String: String] ?? [:]) { question in
+            asked = question
+            return approve
+        }
+        return "ok=\(result.ok) asked=\(result.askedConfirmation) msg=\(result.message)" + (asked.isEmpty ? "" : " question=\(asked)")
+    }
+
+    private func pageMapReport(_ tab: Tab) async -> String {
+        guard let web = tab.webView else { return "no web view" }
+        let started = Date()
+        guard let map = await PageMapScript.capture(web) else { return "pagemap failed" }
+        let text = map.render()
+        let ms = Int(Date().timeIntervalSince(started) * 1000)
+        return "tokens≈\(PageMap.estimatedTokens(text)) ms=\(ms)\n" + text
+    }
+
+    // MARK: - Disposition des boutons (barre d'outils, barre latérale)
+
+    private func chromeButton(_ item: ChromeItem) -> ChromeIconButton? {
+        switch item {
+        case .sidebarToggle: toggleSidebarButton
+        case .back: backButton
+        case .forward: forwardButton
+        case .reload: reloadButton
+        case .assistant: assistantButton
+        case .calendar: calendarButton
+        case .essentiel: digestButton
+        case .night: nightButton
+        case .translate: translateButton
+        case .split: splitButton
+        case .customize: customizeButton
+        case .downloads: downloadsButton
+        case .more: moreButton
+        case .favorites: panelButtons.first { $0.kind == .favorites }?.button
+        case .history: panelButtons.first { $0.kind == .history }?.button
+        case .downloadsPanel: panelButtons.first { $0.kind == .downloads }?.button
+        case .reading: panelButtons.first { $0.kind == .reading }?.button
+        }
+    }
+
+    /// Un bouton « selon la page » sert (ou ne sert plus) : on ne retouche la disposition que si cela change quelque chose.
+    private func setRelevant(_ item: ChromeItem, _ on: Bool) {
+        guard chromeRelevant.contains(item) != on else { return }
+        if on { chromeRelevant.insert(item) } else { chromeRelevant.remove(item) }
+        applyChromeLayout()
+    }
+
+    /// Range chaque bouton là où la disposition le veut : barre d'outils à gauche / à droite, bas de la barre latérale, ou nulle part.
+    /// Un bouton « selon la page » reste à sa place (grisé) s'il est épinglé, sinon il n'apparaît que quand il sert.
+    private func applyChromeLayout() {
+        guard let toolbar else { return }
+        let layout = SettingsStore.shared.chromeLayout
+        appliedChromeLayout = layout
+        let stacks: [(ChromeZone, NSStackView?, [NSView])] = [(.toolbarLeading, toolbar.leftStack, []), (.toolbarTrailing, toolbar.rightStack, []), (.sidebarFooter, footerStack, footerTail)]
+        for (_, stack, _) in stacks { stack?.arrangedSubviews.forEach { stack?.removeArrangedSubview($0); $0.removeFromSuperview() } }
+        let side = CGFloat(layout.iconSize.button), glyph = CGFloat(layout.iconSize.glyph)
+        for item in ChromeItem.allCases { chromeButton(item)?.resize(side: side, glyph: glyph) }
+        for (zone, stack, tail) in stacks {
+            guard let stack else { continue }
+            for item in layout.visibleItems(in: zone, relevant: { chromeRelevant.contains($0) }) {
+                guard let button = chromeButton(item) else { continue }
+                button.isHidden = false
+                button.isEnabled = !item.isContextual || chromeRelevant.contains(item)
+                stack.addArrangedSubview(button)
+            }
+            tail.forEach(stack.addArrangedSubview)
+        }
+        for item in ChromeItem.allCases { chromeButton(item)?.contextMenuProvider = { [weak self] in self?.chromeMenu(for: item) } }
+        searchRow?.collapsed = !layout.showSearchRow
+        newTabRow?.collapsed = !layout.showNewTabRow
+    }
+
+    /// Clic droit sur un bouton : le masquer, le déplacer, le garder à sa place — sans passer par les réglages.
+    private func chromeMenu(for item: ChromeItem) -> NSMenu {
+        let menu = NSMenu()
+        let layout = SettingsStore.shared.chromeLayout
+        func update(_ change: @escaping (inout ChromeLayout) -> Void) {
+            var edited = SettingsStore.shared.chromeLayout
+            change(&edited)
+            SettingsStore.shared.chromeLayout = edited
+            applyChromeLayout()
+        }
+        let header = NSMenuItem(title: item.title, action: nil, keyEquivalent: ""); header.isEnabled = false
+        menu.addItem(header)
+        if item.isContextual {
+            let pin = ClosureMenuItem(title: "Toujours à sa place (grisé quand il ne sert pas)") { update { if $0.pinned.contains(item) { $0.pinned.remove(item) } else { $0.pinned.insert(item) } } }
+            pin.state = layout.pinned.contains(item) ? .on : .off
+            menu.addItem(pin)
+        }
+        let move = NSMenuItem(title: "Déplacer vers", action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        for zone in ChromeZone.allCases where zone != .hidden && zone != layout.zone(of: item) {
+            submenu.addItem(ClosureMenuItem(title: zone.title) { update { $0.move(item, to: zone) } })
+        }
+        move.submenu = submenu
+        menu.addItem(move)
+        if !item.isRequired { menu.addItem(ClosureMenuItem(title: "Masquer ce bouton") { update { $0.move(item, to: .hidden) } }) }
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem(title: "Personnaliser les barres…") { [weak self] in
+            self?.openSettings()
+            NotificationCenter.default.post(name: Notification.Name("Oree.selectSettingsCategory"), object: "layout")
+        })
+        return menu
+    }
+
+    /// L'IA ouvre une adresse dans l'onglet actif (la personne la voit) et attend la fin du chargement, au plus 15 s.
+    private func agentNavigate(_ urlString: String) async -> Bool {
+        guard let tab = activeTab, let web = tab.webView else { return false }
+        load(urlString: urlString, in: tab)
+        try? await Task.sleep(for: .milliseconds(400))
+        for _ in 0..<60 where web.isLoading && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(250)) }
+        return !web.isLoading
+    }
+
+    private func pushPage(by pushed: CGFloat) {
+        guard let edge = pageTrailing else { return }
+        Motion.animate(Motion.standard) { edge.animator().constant = -pushed }
+    }
+
+    private func aiBar() -> AIPanelController {
         if let aiBarController { return aiBarController }
-        let created = AIBarController(container: contentContainer, downloads: downloads)
+        guard let contentView = window?.contentView else { fatalError("fenêtre sans contenu") }
+        let hooks = AIPanelController.Hooks(
+            activeWebView: { [weak self] in self?.activeTab?.webView },
+            navigate: { [weak self] urlString in await self?.agentNavigate(urlString) ?? false },
+            openTab: { [weak self] url in _ = self?.newTab(urlString: url.absoluteString, isPrivate: false) },
+            windowWidth: { [weak self] in self?.window?.contentView?.bounds.width ?? 1200 },
+            onLayout: { [weak self] pushed in self?.pushPage(by: pushed) })
+        let created = AIPanelController(contentView: contentView, top: contentContainer.topAnchor, downloads: downloads, hooks: hooks)
+        created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open }
         aiBarController = created
+        created.tabChanged(id: activeTab?.id, title: activeTab?.displayTitle)
         return created
     }
 
-    /// ⌘J : la barre IA. Le modèle se réveille dès qu'elle s'ouvre, pour être prêt quand la question est tapée.
+    /// ⌘J : le panneau IA (Luciole). Le modèle se réveille dès qu'il s'ouvre, pour être prêt quand la question est tapée.
     @objc func askAIAction() { aiBar().toggle() }
 
     // MARK: - Add to Calendar
@@ -3706,7 +3881,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func updateNightButton(for tab: Tab) {
         let settings = SettingsStore.shared
         let host = tab.webView?.url?.host ?? tab.currentURL?.host
-        nightButton.isHidden = settings.nightMode == .off || !TranslationPolicy.canTranslate(url: tab.webView?.url ?? tab.currentURL)
+        setRelevant(.night, settings.nightMode != .off && TranslationPolicy.canTranslate(url: tab.webView?.url ?? tab.currentURL))
         let active = NightPolicy.isActive(mode: settings.nightMode, appearanceIsDark: appearanceIsDark)
         let excluded = NightPolicy.contains(host, in: settings.nightExcludedHosts)
         nightButton.isActive = active && !excluded
@@ -3756,7 +3931,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func updateTranslateButton(for tab: Tab) {
         let translator = tab.translator
-        translateButton.isHidden = !translator.shouldOffer || !TranslationPolicy.canTranslate(url: tab.webView?.url)
+        setRelevant(.translate, translator.shouldOffer && TranslationPolicy.canTranslate(url: tab.webView?.url))
         translateButton.isActive = translator.state != .idle
         translateButton.ringIndeterminate = translator.isWorking
         let label = translator.state == .idle ? "Traduire la page" : "Afficher la page d'origine"
