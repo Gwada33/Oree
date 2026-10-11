@@ -1,0 +1,25 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Champs contrôlés</title></head>
+<body><main><h1>Inscription</h1>
+<p>État du framework : <output id="state">{}</output></p>
+<form id="f"><label for="name">Nom</label><input id="name" placeholder="Nom">
+<label for="naive">Ville</label><input id="naive" placeholder="Ville">
+<label for="pays">Pays</label><select id="pays"><option value="fr">France</option><option value="be">Belgique</option></select>
+<label><input type="checkbox" id="news"> Recevoir la lettre</label>
+<button type="submit">Créer mon compte</button></form>
+<button id="more" type="button" onclick="window.__more=(window.__more||0)+1">Afficher plus</button>
+<script>
+window.__submits = 0; window.__more = 0;
+const state = {}; const out = document.getElementById('state');
+const render = () => { out.textContent = JSON.stringify(state); };
+// « Name » imite React : le champ installe un suivi de valeur sur l'instance ; `el.value = x` met à jour ce suivi sans événement,
+// seul le setter natif du prototype (ou une vraie frappe) est vu comme un changement.
+const name = document.getElementById('name'); let tracked = '';
+const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+Object.defineProperty(name, 'value', { configurable: true, get() { return proto.get.call(this); }, set(v) { tracked = String(v); proto.set.call(this, v); } });
+name.addEventListener('input', () => { if (name.value !== tracked) { tracked = name.value; state.name = name.value; render(); } });
+const ville = document.getElementById('naive');
+ville.addEventListener('input', () => { state.ville = ville.value; render(); });
+document.getElementById('pays').addEventListener('change', e => { state.pays = e.target.value; render(); });
+document.getElementById('news').addEventListener('change', e => { state.news = e.target.checked; render(); });
+document.getElementById('f').addEventListener('submit', e => { e.preventDefault(); window.__submits++; });
+</script></main></body></html>

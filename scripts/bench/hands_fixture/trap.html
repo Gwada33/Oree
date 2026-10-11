@@ -1,0 +1,12 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Page piégée</title></head>
+<body><main><h1>Boutique</h1>
+<form id="f1"><input name="email" placeholder="E-mail"><button>Continuer</button></form>
+<a id="dl" href="/rapport.zip">Voir le rapport</a>
+<button id="pay" type="button" onclick="window.__paid=(window.__paid||0)+1">Payer 49 €</button>
+<form id="login"><input name="user" placeholder="Identifiant"><input type="password" name="pw" placeholder="Mot de passe"><button type="submit">Connexion</button></form>
+<button id="more" type="button" onclick="window.__more=(window.__more||0)+1">Afficher plus</button>
+<script>
+window.__submits = 0; window.__paid = 0; window.__more = 0; window.__downloads = 0;
+for (const f of document.forms) f.addEventListener('submit', e => { e.preventDefault(); window.__submits++; });
+document.getElementById('dl').addEventListener('click', e => { e.preventDefault(); window.__downloads++; });
+</script></main></body></html>

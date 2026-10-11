@@ -1,0 +1,15 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Connexion — Banque test</title></head>
+<body><header><nav><a href="/">Accueil</a> <a href="/aide">Aide</a></nav></header>
+<main><h1>Connexion</h1><p>Entrez vos identifiants pour continuer.</p>
+<form action="/login" method="post">
+  <label for="mail">Adresse e-mail</label><input id="mail" name="email" type="email" value="nolhan@example.org" required>
+  <label for="pw">Mot de passe</label><input id="pw" name="pw" type="password" value="SuperSecret123!">
+  <label for="cc">Numéro de carte</label><input id="cc" name="cardnumber" type="text" autocomplete="cc-number" value="4111111111111111">
+  <label for="pays">Pays</label><select id="pays"><option>France</option><option selected>Belgique</option></select>
+  <label><input type="checkbox" id="rem" checked> Se souvenir de moi</label>
+  <button type="submit">Se connecter</button>
+  <button type="button" disabled>Désactivé</button>
+</form>
+<div style="display:none"><a href="/cache">Lien caché</a></div>
+<div aria-hidden="true"><button>Masqué aux lecteurs</button></div>
+</main></body></html>

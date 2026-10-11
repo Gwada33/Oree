@@ -1,0 +1,9 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Champ contrôlé</title></head>
+<body><main><h1>Inscription</h1><div id="root"></div></main>
+<script>
+// Un champ « contrôlé » : l'élément est remplacé par un nouveau nœud à chaque rendu (sa référence change), l'autre est conservé.
+const root = document.getElementById('root');
+root.innerHTML = '<input id="keep" placeholder="Nom"><div id="swap"></div><button id="go">Créer mon compte</button>';
+window.rerender = () => { document.getElementById('swap').innerHTML = '<input placeholder="Ville">'; };
+window.rerender();
+</script></body></html>
