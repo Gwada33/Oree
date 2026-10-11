@@ -21,6 +21,9 @@ let machName = option("--mach-name") ?? OreeAIServiceInfo.machName
 // Le cache KV est jetable (il se reconstruit) : dans les caches de l'utilisateur, pas dans ses données.
 let kvCache = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/com.nolhan.hyperbrowser/ai-kv", isDirectory: true)
 
+/// `--model 2b|4b` pour les essais ; le service lui-même charge toujours `ModelPin.default`.
+let pin = ModelPin.named(option("--model"))
+
 func makeEngine() -> TimedEngine { TimedEngine(LlamaEngine(cacheDirectory: kvCache)) }
 
 /// Quitte proprement : Metal refuse de se fermer (assertion) tant que le modèle et le contexte ne sont pas libérés.
@@ -97,7 +100,7 @@ if let at = arguments.firstIndex(of: "--client-ask"), arguments.indices.contains
 if let at = arguments.firstIndex(of: "--ask"), arguments.indices.contains(at + 1) {
     let engine = makeEngine()
     let (events, continuation) = AsyncStream.makeStream(of: AIEvent.self)
-    let controller = AIController(engine: engine, emit: { continuation.yield($0) })
+    let controller = AIController(engine: engine, pin: pin, emit: { continuation.yield($0) })
     let start = Date()
     guard await controller.run(AIRunRequest(userText: arguments[at + 1])) else {
         for await event in events { if case .error(_, let message) = event { print("Erreur : \(message)") }; break }
@@ -120,7 +123,7 @@ if let at = arguments.firstIndex(of: "--probe"), arguments.indices.contains(at +
     let engine = LlamaEngine(cacheDirectory: kvCache)
     let grammar = option("--grammar").flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }
     do {
-        try await engine.load(modelAt: ModelFile.url(for: .qwen35_2B))
+        try await engine.load(modelAt: ModelFile.url(for: pin))
         try await engine.startContext(systemPrompt: "essai")
         let lines = try String(contentsOfFile: arguments[at + 1], encoding: .utf8).split(separator: "\n")
         for line in lines {
@@ -136,7 +139,7 @@ if let at = arguments.firstIndex(of: "--probe"), arguments.indices.contains(at +
 }
 
 if arguments.contains("--bench") {
-    await runBench(makeEngine: makeEngine)
+    await runBench(pin: pin, makeEngine: makeEngine)
     exit(0)
 }
 

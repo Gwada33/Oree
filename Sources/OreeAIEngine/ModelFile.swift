@@ -21,6 +21,22 @@ public struct ModelPin: Sendable, Equatable {
         size: 1_270_808_032,
         sha256: "0bfe35afc9f05b7fac3fa04925e051ac7939a42a8a17ea11afc99701bea826cc",
         url: URL(string: "https://huggingface.co/lmstudio-community/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf")!)
+
+    /// Qwen3.5-4B, même conversion et même quantification : environ deux fois plus lourd, plus capable. Taille et somme relevées sur HuggingFace.
+    public static let qwen35_4B = ModelPin(
+        name: "Qwen3.5-4B-Q4_K_M.gguf",
+        size: 2_707_513_696,
+        sha256: "25082a7dd3776cc3c741c6347d3bd04523f05796607b3fbc32fa3a25dfa1418c",
+        url: URL(string: "https://huggingface.co/lmstudio-community/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf")!)
+
+    /// Le modèle que le service charge. Un seul endroit à changer.
+    /// 4B depuis le 11 octobre 2026 : le 2B répondait trop souvent à côté (voir Docs/ia-mesures.md). Pour revenir au 2B : `qwen35_2B`.
+    public static let `default` = qwen35_4B
+
+    /// Pour les essais en ligne de commande : `--model 2b` ou `--model 4b`.
+    public static func named(_ name: String?) -> ModelPin {
+        switch name?.lowercased() { case "4b": qwen35_4B; case "2b": qwen35_2B; default: .default }
+    }
 }
 
 public enum ModelFile {

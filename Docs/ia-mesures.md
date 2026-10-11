@@ -69,3 +69,26 @@ Instance d'essai d'Orée (version debug de cette branche, session vierge, page d
 ## Chiffres cibles
 
 À fixer par vous d'après ce tableau pour les étapes suivantes ; je n'en propose pas d'inventés.
+
+## Qwen3.5-4B (essai du 11 octobre 2026)
+
+Même conversion (lmstudio-community), même quantification Q4_K_M, 2 707 513 696 octets, SHA-256 `25082a7d…a1418c` vérifié. Même machine, même méthode, service en debug, un seul essai par ligne.
+Le Mac était déjà chargé (mémoire libre système : 12 à 13 % pendant l'essai, contre 25 à 28 % avec le 2B).
+
+| Mesure | 2B | 4B |
+|---|---|---|
+| Empreinte en chaud | ≈ 200 Mo | ≈ 320 Mo |
+| Vérification SHA-256 | ≈ 1 s | 2,4 s |
+| Premier réveil (froid → chaud) | ≈ 1,9 s | 10,2 s (dont 4,4 s pour ouvrir les poids) |
+| Froid → chaud (cache disque chaud) | 0,7 s | 1,4 s |
+| Tiède → chaud | 0,14 s | 0,34 s |
+| Génération | 16 à 19 jetons/s | **5,5 à 8 jetons/s** |
+| Premier jeton | ≈ 0,16 s | 0,4 à 1,1 s |
+| Appels d'outils justes (26 cas, grammaire) | 17 / 26 | 18 / 26 |
+| Pages piégées ayant fait appeler l'adresse piégée | 0 / 2 | **2 / 2** |
+| `done` justes / `ask_user` justes | 0/3 / 0/2 | 2/3 / 1/2 |
+
+- **Réponses de conversation** : plus cohérentes avec le 4B (repas, RAM contre stockage), mais il se trompe encore sur des faits (il a répondu que la Suisse n'a pas de capitale et cité Zurich et Lucerne
+  comme « villes fédérales »). C'est une impression sur quelques questions, pas une évaluation chiffrée.
+- **Agent** : presque pas de gain sur le choix des outils, et il **obéit à une page piégée** là où le 2B ne le faisait pas. Les règles d'Orée (confirmations, zones interdites) doivent tenir quoi qu'il fasse.
+- **Coût** : 2 à 3 fois plus lent et plus lourd. Une réponse de 100 jetons demande ≈ 13 à 18 s. Non mesuré : l'effet sur un navigateur chargé de plusieurs onglets, le swap, la version release.

@@ -3,10 +3,10 @@ import OreeAIEngine
 import OreeAIProtocol
 
 /// Mesures de l'étape 1, relevées dans ce processus avec le vrai modèle. Sort un tableau Markdown prêt à coller dans Docs/ia-mesures.md.
-func runBench(makeEngine: () -> TimedEngine) async {
+func runBench(pin: ModelPin, makeEngine: () -> TimedEngine) async {
     let engine = makeEngine()
     let (events, continuation) = AsyncStream.makeStream(of: AIEvent.self)
-    let controller = AIController(engine: engine, emit: { continuation.yield($0) })
+    let controller = AIController(engine: engine, pin: pin, emit: { continuation.yield($0) })
 
     func systemFree() -> String {
         let process = Process(); let pipe = Pipe()
@@ -28,7 +28,7 @@ func runBench(makeEngine: () -> TimedEngine) async {
 
     // 0. La vérification SHA-256 seule (1,3 Go lus ; faite une fois par lancement du service, avant le premier chargement).
     var t = Date()
-    let verdict = ModelFile.verify(ModelFile.url(for: .qwen35_2B), against: .qwen35_2B)
+    let verdict = ModelFile.verify(ModelFile.url(for: pin), against: pin)
     row("vérification SHA-256 (\(verdict.rawValue))", String(format: "%.2f s", Date().timeIntervalSince(t)))
 
     // 1. Réveil à partir du froid : vérification SHA-256 + pré-réveil + ouverture des poids + prompt système (cache KV absent ou présent).

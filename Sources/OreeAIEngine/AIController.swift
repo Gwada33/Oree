@@ -24,7 +24,7 @@ public actor AIController {
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
     /// - Parameter idleDelay: inactivité avant le passage en tiède (30 s dans le contrat).
-    public init(engine: AIEngine, pin: ModelPin = .qwen35_2B, modelURL: URL? = nil, systemPrompt: String = AIPrompts.system,
+    public init(engine: AIEngine, pin: ModelPin = .default, modelURL: URL? = nil, systemPrompt: String = AIPrompts.system,
                 idleDelay: Duration = .seconds(30), emit: @escaping @Sendable (AIEvent) -> Void) {
         self.engine = engine; self.pin = pin; self.systemPrompt = systemPrompt; self.idleDelay = idleDelay; self.emit = emit
         let url = modelURL ?? ModelFile.url(for: pin)
