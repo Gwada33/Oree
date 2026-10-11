@@ -42,10 +42,16 @@ public enum ModelFile {
         defer { try? handle.close() }
         var hasher = SHA256()
         var read: Int64 = 0
-        while let chunk = try? handle.read(upToCount: 4 << 20), !chunk.isEmpty {
-            hasher.update(data: chunk)
-            read += Int64(chunk.count)
-            progress?(read)
+        var more = true
+        while more {
+            // Un bloc à la fois, libéré tout de suite : sans cette réserve locale, les 1,3 Go lus s'accumulent en mémoire jusqu'à la fin.
+            more = autoreleasepool {
+                guard let chunk = try? handle.read(upToCount: 4 << 20), !chunk.isEmpty else { return false }
+                hasher.update(data: chunk)
+                read += Int64(chunk.count)
+                progress?(read)
+                return true
+            }
         }
         let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
         return digest == pin.sha256 ? .ready : .corrupt

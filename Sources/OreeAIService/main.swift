@@ -5,8 +5,12 @@ import OreeAIProtocol
 // OreeAI — le service IA local d'Orée. Lancé par launchd à la demande (--agent), ou à la main pour essayer :
 //   OreeAI --ask "question"     répond en français, en direct, avec les temps
 //   OreeAI --bench              relève les mesures de l'étape 1 (voir Docs/ia-mesures.md)
-//   OreeAI --client-ping        essaie de se connecter au service : doit être REFUSÉ (ce programme n'est pas Orée)
+//   OreeAI --client-ping        essaie de se connecter au service : REFUSÉ si ce binaire n'est pas signé comme Orée
+//   OreeAI --client-ask "q"     pose une question au service par XPC (même condition)
 // Option commune : --mach-name <nom> pour viser un autre service Mach (essais).
+
+// Metal garde les poids « résidents » 180 s après le dernier calcul par défaut ; le contrat veut 30 s (état tiède). Doit précéder tout chargement.
+setenv("GGML_METAL_RESIDENCY_KEEP_ALIVE_S", "30", 0)
 
 let arguments = CommandLine.arguments
 func option(_ name: String) -> String? {
@@ -19,22 +23,73 @@ let kvCache = FileManager.default.homeDirectoryForCurrentUser.appendingPathCompo
 
 func makeEngine() -> TimedEngine { TimedEngine(LlamaEngine(cacheDirectory: kvCache)) }
 
+/// Quitte proprement : Metal refuse de se fermer (assertion) tant que le modèle et le contexte ne sont pas libérés.
+func quit(_ code: Int32, _ controller: AIController) async -> Never {
+    await controller.memoryPressure(critical: true)
+    exit(code)
+}
+
 // MARK: --client-ping
 
-if arguments.contains("--client-ping") {
+/// Les fermetures de ce fichier de haut niveau sont liées au fil principal ; XPC les appelle ailleurs (arrêt immédiat en Swift 6).
+/// Les deux fonctions d'essai client sont donc isolées ici, hors du fil principal.
+final class Once: @unchecked Sendable {
+    private let lock = NSLock(); private var done = false
+    func run(_ body: () -> Void) { lock.lock(); let first = !done; done = true; lock.unlock(); if first { body() } }
+}
+
+nonisolated func pingService(machName: String) async -> Bool {
     let connection = NSXPCConnection(machServiceName: machName, options: [])
     connection.remoteObjectInterface = NSXPCInterface(with: OreeAIServiceXPC.self)
     connection.resume()
-    let answered: Bool = await withCheckedContinuation { continuation in
-        final class Once: @unchecked Sendable { let lock = NSLock(); var done = false
-            func run(_ body: () -> Void) { lock.lock(); let first = !done; done = true; lock.unlock(); if first { body() } } }
+    defer { connection.invalidate() }
+    return await withCheckedContinuation { continuation in
         let once = Once()
         let proxy = connection.remoteObjectProxyWithErrorHandler { _ in once.run { continuation.resume(returning: false) } } as? OreeAIServiceXPC
         proxy?.ping { _ in once.run { continuation.resume(returning: true) } }
         DispatchQueue.global().asyncAfter(deadline: .now() + 4) { once.run { continuation.resume(returning: false) } }
     }
-    print(answered ? "ACCEPTÉ (inattendu)" : "REFUSÉ (attendu)")
-    exit(answered ? 1 : 0)
+}
+
+if arguments.contains("--client-ping") {
+    let answered = await pingService(machName: machName)
+    print(answered ? "ACCEPTÉ" : "REFUSÉ")
+    exit(0)
+}
+
+// MARK: --client-ask : une question au service par XPC (pour l'essai de bout en bout ; accepté seulement si ce binaire est signé comme Orée)
+
+nonisolated func remoteProxy(_ connection: NSXPCConnection) -> OreeAIServiceXPC {
+    connection.remoteObjectProxyWithErrorHandler { error in print("Connexion refusée ou coupée : \(error.localizedDescription)"); exit(2) } as! OreeAIServiceXPC
+}
+
+if let at = arguments.firstIndex(of: "--client-ask"), arguments.indices.contains(at + 1) {
+    final class Printer: NSObject, OreeAIObserverXPC, @unchecked Sendable {
+        let finished = DispatchSemaphore(value: 0)
+        func event(_ eventJSON: Data) {
+            switch AIEvent.decode(eventJSON) {
+            case .textDelta(_, let text): FileHandle.standardOutput.write(Data(text.utf8))
+            case .done: print(""); finished.signal()
+            case .error(_, let message): print("\nErreur : \(message)"); finished.signal()
+            default: break
+            }
+        }
+    }
+    let printer = Printer()
+    let connection = NSXPCConnection(machServiceName: machName, options: [])
+    connection.remoteObjectInterface = NSXPCInterface(with: OreeAIServiceXPC.self)
+    connection.exportedInterface = NSXPCInterface(with: OreeAIObserverXPC.self)
+    connection.exportedObject = printer
+    connection.resume()
+    let proxy = remoteProxy(connection)
+    proxy.subscribe {}
+    let request = (try? JSONEncoder().encode(AIRunRequest(userText: arguments[at + 1]))) ?? Data()
+    proxy.run(request) {}
+    let timedOut: Bool = await withCheckedContinuation { continuation in
+        DispatchQueue.global().async { continuation.resume(returning: printer.finished.wait(timeout: .now() + 120) == .timedOut) }
+    }
+    if timedOut { print("Pas de réponse."); exit(3) }
+    exit(0)
 }
 
 // MARK: --ask et --bench (le moteur tourne dans ce processus, sans XPC)
@@ -46,18 +101,18 @@ if let at = arguments.firstIndex(of: "--ask"), arguments.indices.contains(at + 1
     let start = Date()
     guard await controller.run(AIRunRequest(userText: arguments[at + 1])) else {
         for await event in events { if case .error(_, let message) = event { print("Erreur : \(message)") }; break }
-        exit(1)
+        await quit(1, controller)
     }
     for await event in events {
         switch event {
         case .textDelta(_, let text): FileHandle.standardOutput.write(Data(text.utf8))
         case .done: print(""); continuation.finish()
-        case .error(_, let message): print("\nErreur : \(message)"); exit(1)
+        case .error(_, let message): print("\nErreur : \(message)"); await quit(1, controller)
         default: break
         }
     }
     print(String(format: "— %.1f s au total · %.0f Mo d'empreinte", Date().timeIntervalSince(start), Memory.footprintMB()))
-    exit(0)
+    await quit(0, controller)
 }
 
 if arguments.contains("--bench") {
@@ -94,7 +149,7 @@ Task {
         try? await Task.sleep(for: .seconds(5))
         let busy = await controller.isBusy || delegate.connectionCount > 0
         idleTicks = busy ? 0 : idleTicks + 1
-        if idleTicks >= 60 { exit(0) }
+        if idleTicks >= 60 { await quit(0, controller) }
     }
 }
 dispatchMain()

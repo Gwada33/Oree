@@ -26,32 +26,38 @@ func runBench(makeEngine: () -> TimedEngine) async {
     print("|---|---|---|---|---|")
     row("processus lancé", "—")
 
-    // 1. Réveil à partir du froid : vérification SHA-256 + pré-réveil + ouverture des poids + prompt système (cache KV absent ou présent).
+    // 0. La vérification SHA-256 seule (1,3 Go lus ; faite une fois par lancement du service, avant le premier chargement).
     var t = Date()
+    let verdict = ModelFile.verify(ModelFile.url(for: .qwen35_2B), against: .qwen35_2B)
+    row("vérification SHA-256 (\(verdict.rawValue))", String(format: "%.2f s", Date().timeIntervalSince(t)))
+
+    // 1. Réveil à partir du froid : vérification SHA-256 + pré-réveil + ouverture des poids + prompt système (cache KV absent ou présent).
+    t = Date()
     await controller.warmUp()
     var d = engine.seconds
     row("froid → chaud (premier réveil)", String(format: "%.2f s total (prewarm %.2f, load %.2f, contexte %.2f)", Date().timeIntervalSince(t),
         d["prewarm"] ?? 0, d["load"] ?? 0, d["startContext"] ?? 0))
 
-    // 2. Une question en français.
-    engine.resetGeneration()
-    let question = "Explique en deux phrases à quoi sert un navigateur web."
-    t = Date()
-    _ = await controller.run(AIRunRequest(userText: question))
+    // 2. Trois questions en français, à la suite (le chaud ne doit pas se dégrader).
     var answer = ""
-    for await event in events {
-        if case .textDelta(_, let text) = event { answer += text }
-        if case .done = event { break }
-        if case .error(_, let message) = event { print("| erreur | \(message) | | | |"); return }
+    for question in ["Explique en deux phrases à quoi sert un navigateur web.", "Donne trois conseils pour bien choisir un mot de passe.", "Résume en une phrase ce qu'est un moteur de recherche."] {
+        engine.resetGeneration()
+        answer = ""
+        t = Date()
+        _ = await controller.run(AIRunRequest(userText: question))
+        for await event in events {
+            if case .textDelta(_, let text) = event { answer += text }
+            if case .done = event { break }
+            if case .error(_, let message) = event { print("| erreur | \(message) | | | |"); return }
+        }
+        let total = Date().timeIntervalSince(t)
+        if let first = engine.firstPieceAt, let last = engine.lastPieceAt, let begin = engine.generateStart, engine.pieces > 1 {
+            row("question (chaud)", String(format: "1er jeton après %.2f s · %d jetons · %.1f jetons/s (génération) · %.2f s au total", first - begin, engine.pieces,
+                                          Double(engine.pieces - 1) / (last - first), total))
+        }
+        print("<!-- \(answer.replacingOccurrences(of: "\n", with: " ")) -->")
     }
-    let total = Date().timeIntervalSince(t)
-    if let first = engine.firstPieceAt, let last = engine.lastPieceAt, let begin = engine.generateStart, engine.pieces > 1 {
-        row("question (chaud)", String(format: "1er jeton après %.2f s · %d jetons · %.1f jetons/s (génération) · %.2f s au total", first - begin, engine.pieces,
-                                      Double(engine.pieces - 1) / (last - first), total))
-    }
-    print("\nRéponse : \(answer)\n")
-    print("| étape | durée / détail | empreinte (Mo) | résident (Mo) | mémoire libre système |")
-    print("|---|---|---|---|---|")
+    print("")
 
     // 3. Tiède, puis retour au chaud.
     await controller.coolDown()

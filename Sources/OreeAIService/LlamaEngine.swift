@@ -35,8 +35,8 @@ final class LlamaEngine: AIEngine, @unchecked Sendable {
     /// - Parameter cacheDirectory: où écrire le cache KV du prompt système (jetable : il se reconstruit).
     init(cacheDirectory: URL) {
         self.cacheDirectory = cacheDirectory
+        if ProcessInfo.processInfo.environment["OREE_AI_LOG"] == nil { llama_log_set({ _, _, _ in }, nil) }   // silence (Metal compris), sauf demande
         llama_backend_init()
-        if ProcessInfo.processInfo.environment["OREE_AI_LOG"] == nil { llama_log_set({ _, _, _ in }, nil) }   // silence, sauf demande
     }
 
     // MARK: AIEngine
