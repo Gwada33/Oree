@@ -17,6 +17,8 @@ public actor AIController {
     private var loaded = false
     private var running: (id: String, task: Task<Void, Never>)?
     private var idleTask: Task<Void, Never>?
+    /// Pression mémoire reçue pendant une tâche : on ne la coupe pas (une réponse qui marche vaut plus que quelques centaines de Mo), on rend la mémoire juste après.
+    private var pendingPressure: Bool?
     /// Les opérations qui changent l'état (réveil, mise en veille, lancement) se suivent en file : jamais deux à la fois.
     private var locked = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -65,9 +67,10 @@ public actor AIController {
     /// État tiède : le prompt système est déjà en cache KV sur disque (écrit à sa création), on libère le contexte.
     public func coolDown() async { await serial { await makeTepid() } }
 
-    /// Pression mémoire : on rend tout ce qu'on peut. Avertissement → tiède ; critique → froid (poids fermés, l'OS reprend les pages).
+    /// Pression mémoire : on rend ce qu'on peut. Avertissement → tiède ; critique → froid (poids fermés, l'OS reprend les pages).
+    /// Si une réponse est en cours, elle va jusqu'au bout et la mémoire est rendue ensuite.
     public func memoryPressure(critical: Bool) async {
-        running?.task.cancel()
+        if running != nil { pendingPressure = (pendingPressure ?? false) || critical; return }
         await serial {
             await makeTepid()
             if critical { await makeCold() }
@@ -156,7 +159,12 @@ public actor AIController {
             emit(.error(taskID: request.taskID, message: error.localizedDescription))
         }
         running = nil
-        scheduleIdle()
+        if let critical = pendingPressure {
+            pendingPressure = nil
+            await memoryPressure(critical: critical)
+        } else {
+            scheduleIdle()
+        }
     }
 
     /// Après `idleDelay` sans activité (et sans tâche en cours), on passe en tiède.

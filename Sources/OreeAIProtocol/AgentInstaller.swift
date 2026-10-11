@@ -22,7 +22,7 @@ public enum AIAgentInstaller {
             "MachServices": [machName: true],
             "RunAtLoad": false,
             "KeepAlive": false,
-            "ProcessType": "Adaptive",
+            "ProcessType": "Interactive",       // travail demandé par l'utilisateur : launchd ne doit pas le ralentir comme une tâche de fond
             "AssociatedBundleIdentifiers": [bundleIdentifier],
             "StandardErrorPath": logPath,
             "StandardOutPath": logPath,

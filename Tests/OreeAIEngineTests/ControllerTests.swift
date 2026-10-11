@@ -71,6 +71,19 @@ import OreeAIProtocol
         #expect(engine.calls.filter { $0 == "load" }.count == 2)
     }
 
+    @Test func memoryPressureDoesNotKillARunningAnswer() async {
+        let model = FakeModel(); model.write(); defer { model.remove() }
+        let engine = FakeEngine(); engine.delay = .milliseconds(60)
+        let (controller, _, events) = make(model, engine: engine)
+        await controller.run(AIRunRequest(taskID: "t", userText: "?"))
+        await controller.memoryPressure(critical: true)                      // en pleine réponse
+        #expect(await events.waitFor { if case .done(_, let answer, _) = $0 { answer == "Bonjour !" } else { false } })
+        // la mémoire est rendue ensuite
+        for _ in 0..<100 where await controller.status().state != .cold { try? await Task.sleep(for: .milliseconds(20)) }
+        #expect(await controller.status().state == .cold)
+        #expect(engine.calls.suffix(2) == ["stopContext", "unload"])
+    }
+
     @Test func cancelStopsTheTask() async {
         let model = FakeModel(); model.write(); defer { model.remove() }
         let engine = FakeEngine(); engine.delay = .milliseconds(200)

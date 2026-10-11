@@ -154,13 +154,19 @@ let listener = NSXPCListener(machServiceName: machName)
 listener.delegate = delegate
 listener.resume()
 
-// Pression mémoire : avertissement → tiède, critique → froid. Le service ne doit jamais être la cause d'un onglet endormi de force.
-let pressure = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .global())
-pressure.setEventHandler { [pressure] in
-    let critical = pressure.data.contains(.critical)
-    Task { await controller.memoryPressure(critical: critical) }
+// Pression mémoire : avertissement → tiède, critique → froid (une fois la réponse en cours terminée). Le service ne doit jamais être la cause d'un onglet endormi de force.
+// Le gestionnaire est créé dans une fonction `nonisolated` : écrit ici, dans le haut niveau de ce fichier, Swift 6 le lie au fil principal et
+// le service s'arrêtait net (SIGTRAP) dès le premier événement de pression, donc en pleine réponse sur un Mac de 8 Go.
+nonisolated func makeMemoryPressureSource(_ controller: AIController) -> DispatchSourceMemoryPressure {
+    let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .global())
+    source.setEventHandler { [source] in
+        let critical = source.data.contains(.critical)
+        Task { await controller.memoryPressure(critical: critical) }
+    }
+    source.resume()
+    return source
 }
-pressure.resume()
+nonisolated(unsafe) let pressure = makeMemoryPressureSource(controller)
 
 // Le service s'arrête seul quand plus personne ne l'utilise (5 minutes sans client ni tâche) ; launchd le relancera au prochain message.
 Task {
