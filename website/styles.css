@@ -1,7 +1,7 @@
 /* Orée — site de téléchargement. Tokens issus du système de design « Pierre, papier, encre ». */
-@font-face{font-family:"Instrument Sans";src:url("assets/fonts/InstrumentSans.ttf") format("truetype");font-weight:400 700;font-display:swap}
-@font-face{font-family:"Instrument Serif";src:url("assets/fonts/InstrumentSerif-Regular.ttf") format("truetype");font-weight:400;font-style:normal;font-display:swap}
-@font-face{font-family:"Instrument Serif";src:url("assets/fonts/InstrumentSerif-Italic.ttf") format("truetype");font-weight:400;font-style:italic;font-display:swap}
+@font-face{font-family:"Instrument Sans";src:url("assets/fonts/InstrumentSans.woff2") format("woff2");font-weight:400 700;font-display:swap}
+@font-face{font-family:"Instrument Serif";src:url("assets/fonts/InstrumentSerif-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Instrument Serif";src:url("assets/fonts/InstrumentSerif-Italic.woff2") format("woff2");font-weight:400;font-style:italic;font-display:swap}
 
 :root{
   --stone:#ECE8E1; --paper:#FBFAF7; --surface:#FFFFFF; --field:#E2DDD5; --bg:#F3F0EA;
@@ -55,7 +55,7 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font:400 26px/1 var(--serif);letter-spacing:-.02em}
 .brand-mark{width:26px;height:26px}
 .nav-links{display:flex;gap:4px;margin-left:16px}
-.nav-links a{padding:8px 12px;border-radius:8px;font-size:14px;font-weight:500;color:var(--ink-2);text-decoration:none}
+.nav-links a{padding:8px 12px;border-radius:8px;font-size:14px;font-weight:500;color:var(--ink-2);text-decoration:none;white-space:nowrap}
 .nav-links a:hover{background:var(--hover);color:var(--ink)}
 .nav-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
 .icon-btn{width:40px;height:40px;border-radius:8px;border:0;background:transparent;color:var(--ink);display:grid;place-items:center;cursor:pointer}
@@ -370,3 +370,20 @@ html:not(.js) .bar i,.reveal.in .bar i{width:var(--w)}
 .feat-note{margin-top:20px;max-width:760px}
 @media (max-width:900px){.feat{grid-template-columns:repeat(2,1fr)}.feat li:first-child{grid-column:span 2}}
 @media (max-width:560px){.feat{grid-template-columns:1fr}.feat li:first-child{grid-column:auto}}
+
+/* ---- Aperçu : vraies captures, clair ou sombre selon le thème ---- */
+#apercu .sec-head h2{max-width:760px}
+#apercu .sec-head h2 em{color:var(--accent-text)}
+.shots{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.shot{margin:0;display:flex;flex-direction:column;gap:12px}
+.shot.wide{grid-column:1/-1}
+.shot img{width:100%;height:auto;border-radius:var(--r);box-shadow:var(--shadow);background:var(--surface)}
+.shot-dark{display:none}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .shot-light{display:none}:root:not([data-theme="light"]) .shot-dark{display:block}}
+:root[data-theme="dark"] .shot-light{display:none}:root[data-theme="dark"] .shot-dark{display:block}
+.shot figcaption{font-size:15px;line-height:1.5;color:var(--ink-2);max-width:620px}
+.shot figcaption b{color:var(--ink)}
+@media (max-width:760px){.shots{grid-template-columns:1fr}}
+
+/* La barre devient trop étroite pour sept liens : on garde les cinq qui comptent le plus avant de tout replier (900 px). */
+@media (max-width:1100px){.nav-links a[href="#telechargements"],.nav-links a[href="#legerete"]{display:none}}

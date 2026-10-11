@@ -66,17 +66,28 @@
   // le numéro, la date et la taille de la dernière version, sans rien casser si l'API est indisponible.
   var fine = document.getElementById('dl-fine');
   if (fine && window.fetch) {
-    fetch('https://api.github.com/repos/Gwada33/oree/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (rel) {
-        if (!rel || !rel.tag_name) return;
-        var dmg = (rel.assets || []).filter(function (a) { return /\.dmg$/i.test(a.name); })[0];
-        var parts = ['Version ' + rel.tag_name.replace(/^v/, '')];
-        if (rel.published_at) parts.push(new Date(rel.published_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }));
-        if (dmg) parts.push(Math.round(dmg.size / 1048576) + ' Mo');
-        parts.push('Apple silicon (M1 et suivants)');
-        fine.textContent = parts.join(' · ');
-      })
-      .catch(function () {});
+    var show = function (rel) {
+      var dmg = (rel.assets || []).filter(function (a) { return /\.dmg$/i.test(a.name); })[0];
+      var parts = ['Version ' + rel.tag_name.replace(/^v/, '')];
+      if (rel.published_at) parts.push(new Date(rel.published_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }));
+      if (dmg) parts.push(Math.round(dmg.size / 1048576) + ' Mo');
+      parts.push('Apple silicon (M1 et suivants)');
+      fine.textContent = parts.join(' · ');
+    };
+    // L'API de GitHub limite à 60 requêtes par heure et par adresse : on garde la réponse 6 h dans le navigateur.
+    var cached = null;
+    try { cached = JSON.parse(localStorage.getItem('oree-release') || 'null'); } catch (e) {}
+    if (cached && cached.rel && Date.now() - cached.at < 6 * 3600 * 1000) { show(cached.rel); }
+    else {
+      fetch('https://api.github.com/repos/Gwada33/oree/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (rel) {
+          if (!rel || !rel.tag_name) return;
+          var slim = { tag_name: rel.tag_name, published_at: rel.published_at, assets: (rel.assets || []).map(function (a) { return { name: a.name, size: a.size }; }) };
+          try { localStorage.setItem('oree-release', JSON.stringify({ at: Date.now(), rel: slim })); } catch (e) {}
+          show(slim);
+        })
+        .catch(function () {});
+    }
   }
 })();

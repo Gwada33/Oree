@@ -8,7 +8,20 @@
 <meta name="color-scheme" content="light dark">
 <meta property="og:title" content="Orée — le navigateur Mac qui dort quand tu ne le regardes pas">
 <meta property="og:description" content="Onglets endormis, espaces, palette ⌘K, vie privée intégrée, traduction et résumés sur ton Mac. Natif macOS, zéro télémétrie.">
-<meta property="og:image" content="assets/icon-512.png">
+<meta property="og:image" content="https://gwada33.github.io/oree/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Orée, le navigateur Mac qui dort quand tu ne le regardes pas">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:url" content="https://gwada33.github.io/oree/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://gwada33.github.io/oree/">
+<meta name="theme-color" content="#FBFAF7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1E1D1B" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+<link rel="preload" href="assets/fonts/InstrumentSans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="stylesheet" href="styles.css">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Orée","operatingSystem":"macOS 15.4+","applicationCategory":"BrowserApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"description":"Navigateur natif pour Mac : onglets qui s'endorment, téléchargements rapides, vie privée intégrée, zéro télémétrie."}</script>
@@ -84,7 +97,7 @@
   <div class="wrap hero-in">
     <p class="eyebrow reveal"><span class="dot"></span>Navigateur natif pour Mac · macOS 15.4+</p>
     <h1 class="reveal">Le navigateur qui <em>dort</em><br>quand tu ne le regardes pas.</h1>
-    <p class="lead reveal">Elle libère la mémoire des onglets inutilisés, et protège ta vie privée par défaut.</p>
+    <p class="lead reveal">Orée libère la mémoire des onglets inutilisés, protège ta vie privée par défaut, et t’aide sur la page : recettes allégées, traduction, mode nuit.</p>
     <div class="cta-row reveal">
       <a class="btn btn-primary btn-lg" href="#telecharger"><svg class="ic" aria-hidden="true"><use href="#i-apple"/></svg>Télécharger pour Mac</a>
       <a class="btn btn-ghost btn-lg" href="#rapidite">Voir les mesures</a>
@@ -138,6 +151,33 @@
 </section>
 
 <!-- RAPIDITE -->
+<!-- APERCU -->
+<section class="sec sec-alt" id="apercu">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <p class="eyebrow">Aperçu</p>
+      <h2>À quoi ça ressemble, <em>vraiment</em>.</h2>
+      <p class="lead">Des captures d’Orée 1.0.5, sur un Mac M1. Pas de maquette.</p>
+    </div>
+    <div class="shots">
+      <figure class="shot wide reveal">
+        <img class="shot-light" src="assets/shot-palette-light.webp" width="1500" height="961" loading="lazy" decoding="async" alt="Orée avec la palette de commandes ouverte : on tape « lis » et elle propose l’onglet Lisbonne, l’historique et des actions">
+        <img class="shot-dark" src="assets/shot-palette-dark.webp" width="1500" height="961" loading="lazy" decoding="async" alt="Orée en thème sombre avec la palette de commandes ouverte : on tape « lis » et elle propose l’onglet Lisbonne, l’historique et des actions">
+        <figcaption><b>La palette ⌘K.</b> Onglets ouverts, historique, favoris et actions dans une seule barre, tout au clavier.</figcaption>
+      </figure>
+      <figure class="shot reveal">
+        <img class="shot-light" src="assets/shot-essentiel-light.webp" width="1100" height="947" loading="lazy" decoding="async" alt="L’essentiel d’une recette de crêpes : titre, temps, curseur de nombre de personnes, ingrédients et étapes à cocher">
+        <img class="shot-dark" src="assets/shot-essentiel-dark.webp" width="1100" height="947" loading="lazy" decoding="async" alt="L’essentiel d’une recette de crêpes en thème sombre : titre, temps, curseur de nombre de personnes, ingrédients et étapes à cocher">
+        <figcaption><b>L’essentiel d’une recette.</b> Un curseur change le nombre de personnes, les quantités suivent.</figcaption>
+      </figure>
+      <figure class="shot reveal">
+        <img src="assets/shot-nuit.webp" width="1500" height="961" loading="lazy" decoding="async" alt="Orée en thème clair affichant Wikipédia assombri par le mode nuit, photos intactes">
+        <figcaption><b>Le mode nuit.</b> Wikipédia n’a pas de thème sombre : Orée l’assombrit, les photos restent naturelles.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
 <section class="sec" id="rapidite">
   <div class="wrap">
     <div class="sec-head reveal">
@@ -403,7 +443,7 @@
     <div class="steps reveal">
       <ol>
         <li>Ouvre le <em>.dmg</em> et glisse Orée dans <em>Applications</em>.</li>
-        <li><em>Clic droit → Ouvrir</em> la première fois (app non notarisée).</li>
+        <li>Au premier lancement, macOS bloque l’app (elle n’est pas encore notarisée) : ouvre <em>Réglages Système → Confidentialité et sécurité</em>, puis clique <em>Ouvrir quand même</em> sous le message sur Orée. Une seule fois.</li>
         <li>Ensuite, Orée se met à jour tout seul : <em>menu Orée → Rechercher des mises à jour</em>.</li>
       </ol>
     </div>
@@ -427,7 +467,7 @@
       <details><summary>Comment se mettent à jour les prochaines versions ?</summary><p>Orée vérifie une fois par jour s’il existe une nouvelle version (désactivable) et propose de l’installer, sans rien réinstaller à la main.</p></details>
       <details><summary>Un site s’affiche mal avec le blocage ?</summary><p>Clic droit sur l’onglet → « Désactiver les protections sur ce site ». Réversible à tout moment.</p></details>
       <details><summary>Ma musique ou ma visio s’endort ?</summary><p>Jamais : un onglet qui joue du son reste éveillé.</p></details>
-      <details><summary>Pourquoi macOS affiche un avertissement ?</summary><p>L’app n’est pas encore notarisée par Apple. Clic droit → Ouvrir la première fois.</p></details>
+      <details><summary>Pourquoi macOS affiche un avertissement ?</summary><p>L’app n’est pas encore notarisée par Apple (cela demande un compte développeur payant). Depuis macOS 15, le clic droit → Ouvrir ne suffit plus : au premier lancement, va dans <em>Réglages Système → Confidentialité et sécurité</em> et clique <em>Ouvrir quand même</em>. D’ordinaire, les mises à jour intégrées ne le redemandent pas.</p></details>
     </div>
   </div>
 </section>
@@ -439,10 +479,13 @@
     <a class="brand" href="#top"><svg class="brand-mark" aria-hidden="true"><use href="#mark"/></svg><span>Orée</span></a>
     <nav aria-label="Pied de page">
       <a href="https://github.com/Gwada33/oree">Code source</a>
+      <a href="https://github.com/Gwada33/oree/blob/main/CHANGELOG.md">Notes de version</a>
+      <a href="https://github.com/Gwada33/oree/tree/main/Docs">Documentation</a>
+      <a href="https://github.com/Gwada33/oree/issues">Signaler un problème</a>
       <a href="#telecharger">Télécharger</a>
       <a href="#faq">Questions</a>
     </nav>
-    <p>© 2026 Orée · Fait pour le Mac · Zéro télémétrie</p>
+    <p>© 2026 Orée · Fait pour le Mac · Zéro télémétrie dans l’app. Ce site ne contacte que GitHub, pour afficher la dernière version.</p>
   </div>
 </footer>
 
