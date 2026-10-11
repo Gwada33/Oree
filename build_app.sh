@@ -21,6 +21,7 @@ APP_DIR="${APP_NAME}.app"
 echo "==> Building release binary..."
 swift build -c "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"} --product "$EXECUTABLE_NAME"
 swift build -c "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"} --product OreeDownloader
+swift build -c "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"} --product OreeAI
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
@@ -30,6 +31,11 @@ cp Resources/Fonts/*.ttf "$APP_DIR/Contents/Resources/Fonts/"
 cp "$BUILD_DIR/$EXECUTABLE_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
 # The download engine runs as its own process (a launchd agent started on demand), so it ships beside the app.
 cp "$BUILD_DIR/OreeDownloader" "$APP_DIR/Contents/MacOS/OreeDownloader"
+# The local AI service is a launchd agent too (Sources/OreeAIService). It links llama.cpp, a prebuilt framework that ships in Contents/Frameworks.
+cp "$BUILD_DIR/OreeAI" "$APP_DIR/Contents/MacOS/OreeAI"
+mkdir -p "$APP_DIR/Contents/Frameworks"
+ditto "$BUILD_DIR/llama.framework" "$APP_DIR/Contents/Frameworks/llama.framework"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_DIR/Contents/MacOS/OreeAI"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -118,6 +124,8 @@ iconutil -c icns "$ICONSET_TMP" -o "$APP_DIR/Contents/Resources/AppIcon.icns"
 
 echo "==> Code signing (ad-hoc)..."
 codesign --force --sign - --identifier com.nolhan.hyperbrowser.downloader "$APP_DIR/Contents/MacOS/OreeDownloader"
+codesign --force --sign - "$APP_DIR/Contents/Frameworks/llama.framework"
+codesign --force --sign - --identifier com.nolhan.hyperbrowser.ai "$APP_DIR/Contents/MacOS/OreeAI"
 codesign --force --sign - "$APP_DIR"
 
 echo "==> Done: $APP_DIR"

@@ -6,7 +6,7 @@ public protocol AIEngine: Sendable {
     /// Ouvre les poids (mmap). Ne crée pas de contexte.
     func load(modelAt url: URL) async throws
     /// Pré-réveil : demande à l'OS de relire les poids en tâche de fond (madvise WILLNEED).
-    func prewarm() async
+    func prewarm(modelAt url: URL) async
     /// Crée le contexte et y met le prompt système (depuis le cache KV sur disque s'il existe, sinon en le calculant puis en l'écrivant).
     func startContext(systemPrompt: String) async throws
     /// Libère le contexte (et la mémoire GPU qui va avec) ; les poids restent ouverts.

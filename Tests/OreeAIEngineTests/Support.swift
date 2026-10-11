@@ -19,7 +19,7 @@ final class FakeEngine: AIEngine, @unchecked Sendable {
         log("load")
         if failLoad { throw NSError(domain: "fake", code: 1, userInfo: [NSLocalizedDescriptionKey: "refusé"]) }
     }
-    func prewarm() async { log("prewarm") }
+    func prewarm(modelAt url: URL) async { log("prewarm") }
     func startContext(systemPrompt: String) async throws { log("startContext") }
     func stopContext() async { log("stopContext") }
     func unload() async { log("unload") }

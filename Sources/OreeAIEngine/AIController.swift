@@ -87,7 +87,7 @@ public actor AIController {
         if !verified {
             guard await verifyModel() else { return false }
         }
-        await engine.prewarm()
+        await engine.prewarm(modelAt: modelURL)
         do {
             if !loaded { try await engine.load(modelAt: modelURL); loaded = true }
             try await engine.startContext(systemPrompt: systemPrompt)
