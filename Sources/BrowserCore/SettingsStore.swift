@@ -74,6 +74,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let density = "settings.density"
         static let cornerRadius = "settings.cornerRadius"
         static let uiTextOffset = "settings.uiTextOffset"
+        static let chromeLayout = "settings.chromeLayout"
         static let calmMotion = "settings.calmMotion"
         static let sidebarMode = "settings.sidebarMode"
         static let onboardingDone = "settings.onboardingDone"
@@ -342,6 +343,17 @@ public final class SettingsStore: @unchecked Sendable {
         get { min(max(defaults.double(forKey: Key.cornerRadius), 0), 16) }
         set { defaults.set(min(max(newValue, 0), 16), forKey: Key.cornerRadius) }
     }
+
+    /// Disposition des boutons de la barre d'outils et de la barre latérale (`ChromeLayout`, JSON). Une valeur illisible redonne la disposition d'origine.
+    public var chromeLayout: ChromeLayout {
+        get { layoutOverride ?? ChromeLayout.decode(defaults.string(forKey: Key.chromeLayout)) }
+        set {
+            if layoutOverride != nil { layoutOverride = newValue.normalized() }       // essais : jamais dans les vrais réglages
+            else { defaults.set(newValue.normalized().json, forKey: Key.chromeLayout) }
+        }
+    }
+    /// `HB_CHROME_LAYOUT=<json>` (essais) : la disposition vit en mémoire seulement, les vrais réglages de la personne ne sont pas touchés.
+    private var layoutOverride: ChromeLayout? = ProcessInfo.processInfo.environment["HB_CHROME_LAYOUT"].map { ChromeLayout.decode($0) }
 
     /// Interface text size delta in points (-1, 0, +1). Does not affect page zoom.
     public var uiTextOffset: Int {
