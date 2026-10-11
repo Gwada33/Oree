@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "DownloadKit", targets: ["DownloadKit"]),
         .library(name: "DownloadProtocol", targets: ["DownloadProtocol"]),
         .executable(name: "OreeDownloader", targets: ["OreeDownloader"]),
+        .library(name: "OreeAIProtocol", targets: ["OreeAIProtocol"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", .upToNextMajor(from: "6.0.0")),
@@ -97,6 +98,17 @@ let package = Package(
         .executableTarget(
             name: "OreeDownloader",
             dependencies: ["DownloadKit", "DownloadProtocol"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+
+        // Protocole XPC et événements du service IA local. Sans dépendance : partagé avec la session navigateur.
+        .target(
+            name: "OreeAIProtocol",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "OreeAIProtocolTests",
+            dependencies: ["OreeAIProtocol"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
 
