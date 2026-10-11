@@ -110,8 +110,11 @@
 
 ## 5. À NE PAS affirmer (pas prouvé ou pas vrai)
 
-- ❌ « Plus rapide / plus léger que Safari, Chrome, Brave, Orion » : **aucune comparaison valide n'a été faite**
-  (Safari, Orion, Firefox, Chrome non mesurés ; la comparaison avec Brave a été invalidée).
+- ⚠️ Comparaison avec Safari et Brave : **une mesure existe** (Docs/benchmark-compare-2026-10-09.json, banc `scripts/bench/compare.py`, Mac M1 8 Go,
+  macOS 27, Orée **1.0.1**, serveur local, médiane de 10 lancements) : ouverture 0,83 s contre 1,58 s (Safari) et 0,90 s (Brave) ; téléchargement de
+  192 Mo 7 s contre 27,5 s et 30 s (serveur limitant chaque connexion). **Safari reste plus économe en mémoire** (20 onglets : ~1,07 Go contre ~1,6 Go).
+  À dire avec la méthode et la date, **à refaire sur la version courante et sur d'autres Mac** ; jamais « plus léger que Safari ». Firefox, Chrome et
+  Orion ne sont pas mesurés.
 - ❌ « Meilleure batterie » : jamais mesuré.
 - ❌ Passkeys, mises à jour automatiques, extensions, synchronisation entre appareils, profils séparés :
   **non disponibles** (certaines demandent un compte Apple Developer payant).
