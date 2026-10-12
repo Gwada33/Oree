@@ -33,6 +33,35 @@ private final class FakeEnv: AgentEnvironment {
         #expect(AgentParser.parse(#"{"name":"search_web","arguments":{"query":"x"}}"#) == .call(AgentCall(name: "search_web", argumentsJSON: #"{"query":"x"}"#)))
     }
 
+    @Test func parserReadsSeveralCallsInOneReply() {
+        let text = "{\"tool\":\"type\",\"ref\":\"@e1\",\"text\":\"a\"}\n{\"tool\":\"click\",\"ref\":\"@e2\"}\n{\"tool\":\"done\",\"answer\":\"ok\"}"
+        #expect(AgentParser.parseAll(text) == [.call(AgentCall(name: "type", argumentsJSON: "{\"ref\":\"@e1\",\"text\":\"a\"}")), .call(AgentCall(name: "click", argumentsJSON: "{\"ref\":\"@e2\"}")), .answer("ok")])
+        #expect(AgentParser.parseAll("Bonjour") == [.answer("Bonjour")])
+        #expect(AgentParser.parseAll("{\"truc\": 1}") == [.answer("{\"truc\": 1}")])
+    }
+
+    @Test func severalCallsInOneReplyRunWithoutAskingAgain() async {
+        let env = FakeEnv(["{\"tool\":\"type\",\"ref\":\"@e1\",\"text\":\"a\"}\n{\"tool\":\"click\",\"ref\":\"@e2\"}\n{\"tool\":\"done\",\"answer\":\"Fait.\"}"])
+        let outcome = await AgentLoop(environment: env).run(task: "t")
+        #expect(outcome.reason == .done && outcome.answer == "Fait.")
+        #expect(env.performed.map(\.name) == ["type", "click"])
+        #expect(env.prompts.count == 1)                                    // un seul appel au modèle
+        #expect(env.traces.last?.count == 2)
+    }
+
+    @Test func aBatchStopsAfterAToolWhoseResultMustBeRead() async {
+        let env = FakeEnv(["{\"tool\":\"search_web\",\"query\":\"x\"}\n{\"tool\":\"click\",\"ref\":\"@e1\"}", "{\"tool\":\"done\",\"answer\":\"ok\"}"])
+        _ = await AgentLoop(environment: env).run(task: "t")
+        #expect(env.performed.map(\.name) == ["search_web"])               // le clic est abandonné : le modèle doit d'abord lire la recherche
+        #expect(env.prompts.count == 2)
+    }
+
+    @Test func aBatchStopsAtTheFirstFailure() async {
+        let env = FakeEnv(["{\"tool\":\"rm\"}\n{\"tool\":\"click\",\"ref\":\"@e1\"}", "{\"tool\":\"done\",\"answer\":\"ok\"}"])
+        _ = await AgentLoop(environment: env).run(task: "t")
+        #expect(env.performed.isEmpty && env.prompts.count == 2)
+    }
+
     @Test func aSimpleTaskEndsWithTheAnswerAndSources() async {
         let env = FakeEnv([#"{"tool":"search_web","query":"lisbonne"}"#, #"{"tool":"done","answer":"Lisbonne est au Portugal."}"#])
         let outcome = await AgentLoop(environment: env).run(task: "Où est Lisbonne ?")
@@ -84,6 +113,13 @@ private final class FakeEnv: AgentEnvironment {
         let task = Task { await AgentLoop(environment: env).run(task: "t") }
         task.cancel()
         #expect(await task.value.reason == .cancelled)
+    }
+
+    @Test func toolResultsAndMemoryAreFencedAsData() async {
+        let env = FakeEnv(["{\"tool\":\"scroll\",\"direction\":\"down\"}", "{\"tool\":\"done\",\"answer\":\"ok\"}"])
+        _ = await AgentLoop(environment: env).run(task: "t", memory: ["• hier : « x »"])
+        #expect(env.prompts[0].contains("<memoire>\n• hier") && env.prompts[0].contains("</memoire>"))
+        #expect(env.prompts[1].contains("<donnees>résultat de scroll</donnees>"))
     }
 
     @Test func pageContentIsFencedAndPromptStaysSmall() async {

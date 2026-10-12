@@ -75,6 +75,12 @@ public final class SettingsStore: @unchecked Sendable {
         static let cornerRadius = "settings.cornerRadius"
         static let uiTextOffset = "settings.uiTextOffset"
         static let chromeLayout = "settings.chromeLayout"
+        static let aiProvider = "settings.aiProvider"
+        static let lucioleMemory = "settings.lucioleMemory"
+        static let aiGroqModel = "settings.aiGroqModel"
+        static let aiMistralModel = "settings.aiMistralModel"
+        static let aiLMStudioModel = "settings.aiLMStudioModel"
+        static let aiLMStudioURL = "settings.aiLMStudioURL"
         static let calmMotion = "settings.calmMotion"
         static let sidebarMode = "settings.sidebarMode"
         static let onboardingDone = "settings.onboardingDone"
@@ -343,6 +349,38 @@ public final class SettingsStore: @unchecked Sendable {
         get { min(max(defaults.double(forKey: Key.cornerRadius), 0), 16) }
         set { defaults.set(min(max(newValue, 0), 16), forKey: Key.cornerRadius) }
     }
+
+    /// Luciole garde ses discussions et un journal de ses actions (sur ce Mac seulement, jamais en navigation privée).
+    public var lucioleMemoryEnabled: Bool {
+        get { defaults.object(forKey: Key.lucioleMemory) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.lucioleMemory) }
+    }
+
+    /// Le choix explicite du fournisseur d'IA (nil : pas encore choisi, `AIProvider.effective` décide).
+    public var aiProviderChoice: AIProvider? {
+        get { (ProcessInfo.processInfo.environment["HB_AI_PROVIDER"] ?? defaults.string(forKey: Key.aiProvider)).flatMap(AIProvider.init(rawValue:)) }      // HB_AI_PROVIDER : essais seulement
+        set { defaults.set(newValue?.rawValue, forKey: Key.aiProvider) }
+    }
+    /// Le modèle utilisé chez un fournisseur en nuage (par défaut : `mistral-small-latest`, `openai/gpt-oss-20b`).
+    public func aiModel(for provider: AIProvider) -> String {
+        let key = modelKey(provider)
+        return defaults.string(forKey: key).flatMap { $0.isEmpty ? nil : $0 } ?? provider.defaultModel
+    }
+    public func setAIModel(_ model: String, for provider: AIProvider) {
+        defaults.set(model.trimmingCharacters(in: .whitespaces), forKey: modelKey(provider))
+    }
+    private func modelKey(_ provider: AIProvider) -> String { switch provider { case .mistral: Key.aiMistralModel; case .lmstudio: Key.aiLMStudioModel; default: Key.aiGroqModel } }
+
+    /// L'adresse de base de LM Studio (par défaut `http://localhost:1234/v1`). `HB_LMSTUDIO_URL` : essais seulement.
+    public var lmStudioBase: URL {
+        get { LMStudio.normalizedBase(ProcessInfo.processInfo.environment["HB_LMSTUDIO_URL"] ?? defaults.string(forKey: Key.aiLMStudioURL) ?? "") }
+        set { defaults.set(newValue.absoluteString, forKey: Key.aiLMStudioURL) }
+    }
+    public var lmStudioBaseText: String { defaults.string(forKey: Key.aiLMStudioURL) ?? "" }
+    public func setLMStudioBase(text: String) { defaults.set(text.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.aiLMStudioURL) }
+
+    /// L'adresse de conversation du fournisseur.
+    public func aiEndpoint(for provider: AIProvider) -> URL { provider == .lmstudio ? LMStudio.chatURL(base: lmStudioBase) : provider.endpoint }
 
     /// Disposition des boutons de la barre d'outils et de la barre latérale (`ChromeLayout`, JSON). Une valeur illisible redonne la disposition d'origine.
     public var chromeLayout: ChromeLayout {
