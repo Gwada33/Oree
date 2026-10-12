@@ -44,66 +44,45 @@
       if (pending) raceRaf = requestAnimationFrame(tick);
     })(start);
   }
-  function stopRace() { cancelAnimationFrame(raceRaf); }
+  // Téléchargement : les mégaoctets s'accumulent en direct, quinze connexions contre une (temps réel ×0,14 pour Orée : 7 s deviennent 1 s).
+  var dlRaf = 0;
+  function runDl() {
+    var rows = $$('.dl', race), start = performance.now();
+    rows.forEach(function (r) { r.classList.remove('done'); $('b', r).textContent = '0 Mo'; });
+    cancelAnimationFrame(dlRaf);
+    (function tick(now) {
+      var el = (now - start) / 1000, pending = false;
+      rows.forEach(function (r) {
+        var d = parseFloat(r.getAttribute('data-d')), p = clamp(el / d, 0, 1);
+        $('b', r).textContent = Math.round(192 * p) + ' Mo';
+        if (p >= 1) r.classList.add('done'); else pending = true;
+      });
+      if (pending) dlRaf = requestAnimationFrame(tick);
+    })(start);
+  }
+  function stopRace() { cancelAnimationFrame(raceRaf); cancelAnimationFrame(dlRaf); }
   if (race && 'IntersectionObserver' in window && !reduce) {
     new IntersectionObserver(function (es) {
       es.forEach(function (e) {
         var on = e.isIntersecting && e.intersectionRatio > 0.5;
-        if (on && !race.classList.contains('go')) { race.classList.add('go'); runRace(); }
+        if (on && !race.classList.contains('go')) { race.classList.add('go'); runRace(); runDl(); }
         else if (!e.isIntersecting && race.classList.contains('go')) { race.classList.remove('go'); stopRace(); }
       });
     }, { threshold: [0, 0.5, 1] }).observe(race);
   } else if (race) {
     race.classList.add('go');
     $$('.win', race).forEach(function (w) { w.classList.add('done'); $('b', w).textContent = w.getAttribute('data-t').replace('.', ',') + ' s'; });
+    $$('.dl', race).forEach(function (r) { r.classList.add('done'); $('b', r).textContent = '192 Mo'; });
     var fixed = { '.83': '0,83 s', '.9': '0,90 s', '1.58': '1,58 s' }; $$('.win', race).forEach(function (w) { $('b', w).textContent = fixed[w.getAttribute('data-t')]; });
   }
 
-  // ——— Décor : une forêt de facettes, en profondeur (collines, trois rangées d'arbres, brume) ———
   function rng(seed) { return function () { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
-  function pine(x, base, h, w) {                    // sapin : étages de triangles, moitié claire à gauche, moitié sombre à droite
-    var lt = '', dk = '', tiers = h > 230 ? 5 : 4, top = base - h, y1 = 0, half;
-    for (var t = 0; t < tiers; t++) {
-      var y0 = top + t * h * (0.78 / tiers); y1 = y0 + h * (1.05 / tiers); half = w * (0.38 + 0.62 * (t + 1) / tiers) / 2;
-      lt += 'M' + x + ',' + y0 + 'L' + (x - half) + ',' + y1 + 'L' + x + ',' + y1 + 'Z';
-      dk += 'M' + x + ',' + y0 + 'L' + x + ',' + y1 + 'L' + (x + half) + ',' + y1 + 'Z';
-    }
-    var tw = Math.max(2, w * 0.05);
-    lt += 'M' + (x - tw) + ',' + y1 + 'H' + x + 'V' + (base + 4) + 'H' + (x - tw) + 'Z'; dk += 'M' + x + ',' + y1 + 'H' + (x + tw) + 'V' + (base + 4) + 'H' + x + 'Z';
-    return [lt, dk];
-  }
-  function oak(x, base, h, w) {                     // feuillu : une couronne en losange, deux facettes
-    var top = base - h, mid = top + h * 0.34, bot = top + h * 0.7, tw = Math.max(2, w * 0.06);
-    return ['M' + x + ',' + top + 'L' + (x - w / 2) + ',' + mid + 'L' + x + ',' + bot + 'Z M' + (x - tw) + ',' + bot + 'H' + x + 'V' + (base + 4) + 'H' + (x - tw) + 'Z',
-            'M' + x + ',' + top + 'L' + (x + w / 2) + ',' + mid + 'L' + x + ',' + bot + 'Z M' + x + ',' + bot + 'H' + (x + tw) + 'V' + (base + 4) + 'H' + x + 'Z'];
-  }
-  function layer(id, count, seed, minH, maxH, edges, oakShare) {
-    var svg = $('#' + id); if (!svg) return;
-    var r = rng(seed), lt = '', dk = '', n, x;
-    for (n = 0; n < count; n++) {
-      x = edges ? (r() < 0.45 ? r() * 0.09 : 1 - r() * 0.2) * 1600 : (n + r() * 0.8) * (1600 / count);          // rangée de devant : seulement sur les bords
-      var h = minH + r() * (maxH - minH), w = h * (0.32 + r() * 0.16), t = r() < oakShare ? oak(x, 500, h, w * 1.5) : pine(x, 500, h, w);
-      lt += t[0]; dk += t[1];
-    }
-    var g = '<path class="lt" d="' + lt + 'M0,500V486H1600V500Z"/><path class="dk" d="' + dk + '"/>';
-    svg.innerHTML = g;
-  }
-  (function hills() {                               // crête anguleuse très lointaine
-    var svg = $('#ly0'); if (!svg) return; var r = rng(3), d = 'M0,500V300', x = 0;
-    while (x < 1600) { x += 90 + r() * 150; d += 'L' + Math.min(x, 1600) + ',' + (230 + r() * 150); }
-    svg.innerHTML = '<path d="' + d + 'V500Z"/>';
-  })();
-  layer('ly1', 46, 11, 90, 170, false, 0.2);
-  layer('ly2', 30, 29, 150, 270, false, 0.18);
-  layer('ly3', 12, 47, 300, 470, true, 0.12);
-  var plx = [['#ly0', 0.015], ['#ly1', 0.035], ['#ly2', 0.07], ['#ly3', 0.12]].map(function (p) { return [$(p[0]), p[1]]; });
-  var stars = (function () { var r = rng(77), a = []; for (var i = 0; i < 70; i++) a.push({ x: r(), y: r() * 0.5, s: 0.6 + r() * 1.1, p: r() * 6.28 }); return a; })();
 
   var world = $('#world');
   var cv = $('#flies'), ctx = cv && cv.getContext('2d'), flies = [], W = 0, H = 0, trail = [];
   function sizeCanvas() { if (!cv) return; var dpr = Math.min(window.devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
   function makeFlies() {
-    var r = rng(5), n = reduce ? 6 : (innerWidth < 700 ? 6 : 10); flies = [];
+    var r = rng(5), n = reduce ? 4 : (innerWidth < 700 ? 4 : 7); flies = [];
     for (var i = 0; i < n; i++) flies.push({ x: r() * innerWidth, y: r() * innerHeight, r: 1 + r() * 1.1, ph: r() * 6.28, sp: 0.4 + r() * 0.8 });
   }
   sizeCanvas(); makeFlies();
@@ -156,8 +135,7 @@
   function drawWorld(t, dy) {
     if (!ctx) return;
     ctx.clearRect(0, 0, W, H);
-    var dark = isDark(), rgb = dark ? '226,214,120' : '217,164,65', i;
-    if (dark) for (i = 0; i < stars.length; i++) { var st = stars[i], sa = 0.35 + 0.5 * (0.5 + 0.5 * Math.sin(t * 0.0012 * st.s + st.p)); ctx.fillStyle = 'rgba(235,240,230,' + sa + ')'; ctx.fillRect(st.x * W, st.y * H, st.s, st.s); }
+    var rgb = isDark() ? '226,214,120' : '217,164,65', i;
     for (i = 0; i < flies.length; i++) {
       var f = flies[i];
       if (!reduce) {
@@ -183,7 +161,7 @@
     // L'aube : une lueur chaude monte quand on approche de la fin.
     var camp = $('#telecharger');
     if (world && camp) world.style.setProperty('--dawn', String(clamp((scrollY + innerHeight - camp.offsetTop) / (innerHeight * 0.9), 0, 1) * 0.5));
-    plx.forEach(function (p) { if (p[0]) p[0].style.transform = 'translate3d(0,' + Math.min(scrollY * p[1], 90) + 'px,0)'; });
+    if (world && !reduce) { world.style.setProperty('--lx', g.x.toFixed(0) + 'px'); world.style.setProperty('--ly', (g.y + scrollY * 0).toFixed(0) + 'px'); }
     if (guide && !reduce) {
       var sc = activeScene();
       if (sc !== g.scene) { g.scene = sc; if (g.woke && !g.sleepy) { g.base = sc.getAttribute('data-pose') || 'idle'; speak(sc.getAttribute('data-say')); } }
@@ -211,7 +189,7 @@
   }
   window.__oreeFrame = frame;      // essais : fait avancer l'animation à la main quand la fenêtre est cachée (le navigateur suspend alors requestAnimationFrame)
   if (guide && reduce) { guide.style.transform = 'translate3d(' + (innerWidth - 80) + 'px,' + (innerHeight - 96) + 'px,0)'; guide.classList.add('live'); setPose('idle'); }
-  if (reduce) { drawWorld(0, 0); window.addEventListener('scroll', function () { if (nav) nav.classList.toggle('solid', scrollY > 20); }, { passive: true }); }
+  if (reduce) { if (world) { world.style.setProperty('--lx', '72%'); world.style.setProperty('--ly', '60%'); } drawWorld(0, 0); window.addEventListener('scroll', function () { if (nav) nav.classList.toggle('solid', scrollY > 20); }, { passive: true }); }
   else requestAnimationFrame(frame);
   document.addEventListener('visibilitychange', function () { running = !document.hidden; if (running && !reduce) requestAnimationFrame(frame); });
 
