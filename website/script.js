@@ -28,27 +28,78 @@
     reveals.forEach(function (el) { rio.observe(el); });
   } else { reveals.forEach(function (el) { el.classList.add('in'); }); }
 
-  // La course se rejoue à chaque fois qu'on la revoit.
-  var race = $('#race');
-  if (race && 'IntersectionObserver' in window) {
+  // Ouverture : trois fenêtres se chargent pour de bon, avec chronomètre (temps réel ×2,2 pour qu'on le voie). Rejoué à chaque fois qu'on la revoit.
+  var race = $('#race'), raceRaf = 0;
+  function runRace() {
+    var wins = $$('.win', race), start = performance.now();
+    wins.forEach(function (w) { w.classList.remove('done'); $('b', w).textContent = '0,00 s'; });
+    cancelAnimationFrame(raceRaf);
+    (function tick(now) {
+      var el = (now - start) / 1000 / 2.2, pending = false;
+      wins.forEach(function (w) {
+        var t = parseFloat(w.getAttribute('data-t')), v = Math.min(el, t);
+        $('b', w).textContent = v.toFixed(2).replace('.', ',') + ' s';
+        if (v >= t) w.classList.add('done'); else pending = true;
+      });
+      if (pending) raceRaf = requestAnimationFrame(tick);
+    })(start);
+  }
+  function stopRace() { cancelAnimationFrame(raceRaf); }
+  if (race && 'IntersectionObserver' in window && !reduce) {
     new IntersectionObserver(function (es) {
-      es.forEach(function (e) { race.classList.toggle('go', e.isIntersecting && e.intersectionRatio > 0.55); });
-    }, { threshold: [0, 0.55, 1] }).observe(race);
-  } else if (race) race.classList.add('go');
+      es.forEach(function (e) {
+        var on = e.isIntersecting && e.intersectionRatio > 0.5;
+        if (on && !race.classList.contains('go')) { race.classList.add('go'); runRace(); }
+        else if (!e.isIntersecting && race.classList.contains('go')) { race.classList.remove('go'); stopRace(); }
+      });
+    }, { threshold: [0, 0.5, 1] }).observe(race);
+  } else if (race) {
+    race.classList.add('go');
+    $$('.win', race).forEach(function (w) { w.classList.add('done'); $('b', w).textContent = w.getAttribute('data-t').replace('.', ',') + ' s'; });
+    var fixed = { '.83': '0,83 s', '.9': '0,90 s', '1.58': '1,58 s' }; $$('.win', race).forEach(function (w) { $('b', w).textContent = fixed[w.getAttribute('data-t')]; });
+  }
 
-  // ——— Décor discret : une rangée d'arbres très pâle, quelques lucioles ———
+  // ——— Décor : une forêt de facettes, en profondeur (collines, trois rangées d'arbres, brume) ———
   function rng(seed) { return function () { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
-  (function trees() {
-    var svg = $('#treesvg'); if (!svg) return;
-    var r = rng(11), d = '', count = 30;
-    for (var n = 0; n < count; n++) {
-      var x = (n + r() * 0.8) * (1600 / count), h = 150 + r() * 200, w = h * (0.34 + r() * 0.14), top = 400 - h;
-      for (var t = 0; t < 4; t++) { var y0 = top + t * h * 0.22, y1 = y0 + h * 0.4, half = w * (0.3 + 0.2 * t) / 1.6; d += 'M' + x + ',' + y0 + 'L' + (x + half) + ',' + y1 + 'L' + (x - half) + ',' + y1 + 'Z'; }
+  function pine(x, base, h, w) {                    // sapin : étages de triangles, moitié claire à gauche, moitié sombre à droite
+    var lt = '', dk = '', tiers = h > 230 ? 5 : 4, top = base - h, y1 = 0, half;
+    for (var t = 0; t < tiers; t++) {
+      var y0 = top + t * h * (0.78 / tiers); y1 = y0 + h * (1.05 / tiers); half = w * (0.38 + 0.62 * (t + 1) / tiers) / 2;
+      lt += 'M' + x + ',' + y0 + 'L' + (x - half) + ',' + y1 + 'L' + x + ',' + y1 + 'Z';
+      dk += 'M' + x + ',' + y0 + 'L' + x + ',' + y1 + 'L' + (x + half) + ',' + y1 + 'Z';
     }
-    var p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d + 'M0,400V394H1600V400Z'); svg.appendChild(p);
+    var tw = Math.max(2, w * 0.05);
+    lt += 'M' + (x - tw) + ',' + y1 + 'H' + x + 'V' + (base + 4) + 'H' + (x - tw) + 'Z'; dk += 'M' + x + ',' + y1 + 'H' + (x + tw) + 'V' + (base + 4) + 'H' + x + 'Z';
+    return [lt, dk];
+  }
+  function oak(x, base, h, w) {                     // feuillu : une couronne en losange, deux facettes
+    var top = base - h, mid = top + h * 0.34, bot = top + h * 0.7, tw = Math.max(2, w * 0.06);
+    return ['M' + x + ',' + top + 'L' + (x - w / 2) + ',' + mid + 'L' + x + ',' + bot + 'Z M' + (x - tw) + ',' + bot + 'H' + x + 'V' + (base + 4) + 'H' + (x - tw) + 'Z',
+            'M' + x + ',' + top + 'L' + (x + w / 2) + ',' + mid + 'L' + x + ',' + bot + 'Z M' + x + ',' + bot + 'H' + (x + tw) + 'V' + (base + 4) + 'H' + x + 'Z'];
+  }
+  function layer(id, count, seed, minH, maxH, edges, oakShare) {
+    var svg = $('#' + id); if (!svg) return;
+    var r = rng(seed), lt = '', dk = '', n, x;
+    for (n = 0; n < count; n++) {
+      x = edges ? (r() < 0.45 ? r() * 0.09 : 1 - r() * 0.2) * 1600 : (n + r() * 0.8) * (1600 / count);          // rangée de devant : seulement sur les bords
+      var h = minH + r() * (maxH - minH), w = h * (0.32 + r() * 0.16), t = r() < oakShare ? oak(x, 500, h, w * 1.5) : pine(x, 500, h, w);
+      lt += t[0]; dk += t[1];
+    }
+    var g = '<path class="lt" d="' + lt + 'M0,500V486H1600V500Z"/><path class="dk" d="' + dk + '"/>';
+    svg.innerHTML = g;
+  }
+  (function hills() {                               // crête anguleuse très lointaine
+    var svg = $('#ly0'); if (!svg) return; var r = rng(3), d = 'M0,500V300', x = 0;
+    while (x < 1600) { x += 90 + r() * 150; d += 'L' + Math.min(x, 1600) + ',' + (230 + r() * 150); }
+    svg.innerHTML = '<path d="' + d + 'V500Z"/>';
   })();
+  layer('ly1', 46, 11, 90, 170, false, 0.2);
+  layer('ly2', 30, 29, 150, 270, false, 0.18);
+  layer('ly3', 12, 47, 300, 470, true, 0.12);
+  var plx = [['#ly0', 0.015], ['#ly1', 0.035], ['#ly2', 0.07], ['#ly3', 0.12]].map(function (p) { return [$(p[0]), p[1]]; });
+  var stars = (function () { var r = rng(77), a = []; for (var i = 0; i < 70; i++) a.push({ x: r(), y: r() * 0.5, s: 0.6 + r() * 1.1, p: r() * 6.28 }); return a; })();
 
-  var world = $('#world'), treesEl = $('#trees');
+  var world = $('#world');
   var cv = $('#flies'), ctx = cv && cv.getContext('2d'), flies = [], W = 0, H = 0, trail = [];
   function sizeCanvas() { if (!cv) return; var dpr = Math.min(window.devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
   function makeFlies() {
@@ -105,7 +156,8 @@
   function drawWorld(t, dy) {
     if (!ctx) return;
     ctx.clearRect(0, 0, W, H);
-    var rgb = isDark() ? '226,214,120' : '217,164,65', i;
+    var dark = isDark(), rgb = dark ? '226,214,120' : '217,164,65', i;
+    if (dark) for (i = 0; i < stars.length; i++) { var st = stars[i], sa = 0.35 + 0.5 * (0.5 + 0.5 * Math.sin(t * 0.0012 * st.s + st.p)); ctx.fillStyle = 'rgba(235,240,230,' + sa + ')'; ctx.fillRect(st.x * W, st.y * H, st.s, st.s); }
     for (i = 0; i < flies.length; i++) {
       var f = flies[i];
       if (!reduce) {
@@ -131,7 +183,7 @@
     // L'aube : une lueur chaude monte quand on approche de la fin.
     var camp = $('#telecharger');
     if (world && camp) world.style.setProperty('--dawn', String(clamp((scrollY + innerHeight - camp.offsetTop) / (innerHeight * 0.9), 0, 1) * 0.5));
-    if (treesEl) treesEl.style.transform = 'translate3d(0,' + Math.min(scrollY * 0.04, 70) + 'px,0)';
+    plx.forEach(function (p) { if (p[0]) p[0].style.transform = 'translate3d(0,' + Math.min(scrollY * p[1], 90) + 'px,0)'; });
     if (guide && !reduce) {
       var sc = activeScene();
       if (sc !== g.scene) { g.scene = sc; if (g.woke && !g.sleepy) { g.base = sc.getAttribute('data-pose') || 'idle'; speak(sc.getAttribute('data-say')); } }
@@ -163,23 +215,37 @@
   else requestAnimationFrame(frame);
   document.addEventListener('visibilitychange', function () { running = !document.hidden; if (running && !reduce) requestAnimationFrame(frame); });
 
-  // ——— Le sommeil : huit arbres, un seul éveillé ———
-  var grove = $('#grove');
-  if (grove) {
-    var tree = '<svg viewBox="0 0 40 60"><rect class="trunk" x="18" y="40" width="4" height="20" rx="1"/><path class="crown" d="M20 4L34 26H6zM20 16L36 42H4z"/><circle class="lamp" cx="20" cy="34" r="2.4"/></svg>';
-    for (var k = 0; k < 8; k++) { var d = document.createElement('div'); d.className = 'tab-tree' + (k === 0 ? ' keep' : ''); d.innerHTML = tree; grove.appendChild(d); }
+  // ——— Le sommeil : huit fenêtres, une seule éveillée ; les autres s'endorment en vague ———
+  var tabs8 = $('#tabs8');
+  if (tabs8) {
+    var sleeper = '<svg class="lu lu-sleep" viewBox="0 0 40 40" aria-hidden="true"><circle class="h" cx="20" cy="26.5" r="11"/><g transform="rotate(-30 11 10)"><ellipse class="w wl" cx="11" cy="10" rx="6" ry="3.3"/></g><g transform="rotate(30 29 10)"><ellipse class="w wr" cx="29" cy="10" rx="6" ry="3.3"/></g><g class="bd"><path class="a" d="M17.4 10Q15.8 6.4 13.2 5.4M22.6 10Q24.2 6.4 26.8 5.4"/><circle class="k" cx="13.2" cy="5.4" r="1.3"/><circle class="k" cx="26.8" cy="5.4" r="1.3"/><circle class="l" cx="20" cy="26.5" r="5.6"/><circle class="k" cx="20" cy="17" r="8.6"/><g class="es"><rect class="e" x="16.1" y="14.8" width="2.5" height="4.2" rx="1.25"/><rect class="e" x="21.4" y="14.8" width="2.5" height="4.2" rx="1.25"/></g></g></svg>';
+    for (var k = 0; k < 8; k++) {
+      var d = document.createElement('div'); d.className = 'tab8' + (k === 0 ? ' keep' : ''); d.style.setProperty('--w', (k * 0.07).toFixed(2) + 's');
+      d.innerHTML = '<span class="ln"></span><span class="ln"></span><span class="ln"></span><span class="ln" style="width:70%"></span><span class="zz">' + (k === 0 ? '' : sleeper) + '</span>';
+      tabs8.appendChild(d);
+    }
   }
   var mem = $('#mem');
   if (mem) {
-    var val = $('#memval'), note = $('#memnote');
-    var texts = { all: ['~700 Mo', '8 pages chargées'], lazy: ['~120–175 Mo', '1 page chargée, 7 en attente'] };
-    $$('.seg button', mem).forEach(function (b) {
-      b.addEventListener('click', function () {
-        var m = b.getAttribute('data-mode'); mem.setAttribute('data-mode', m);
-        $$('.seg button', mem).forEach(function (o) { var on = o === b; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on ? 'true' : 'false'); });
-        val.textContent = texts[m][0]; note.textContent = texts[m][1];
-      });
-    });
+    var val = $('#memval'), note = $('#memnote'), shown = 700, tween = 0, auto = false;
+    var texts = { all: [700, '8 pages chargées'], lazy: [150, '1 page chargée, 7 en attente · 120–175 Mo mesurés'] };
+    var setMode = function (m) {
+      mem.setAttribute('data-mode', m);
+      $$('.seg button', mem).forEach(function (o) { var on = o.getAttribute('data-mode') === m; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+      note.textContent = texts[m][1];
+      cancelAnimationFrame(tween);
+      var from = shown, to = texts[m][0], t0 = performance.now(), dur = reduce ? 1 : 1400;
+      (function step(now) {
+        var p = clamp((now - t0) / dur, 0, 1), e = 1 - Math.pow(1 - p, 3); shown = from + (to - from) * e;
+        val.textContent = (m === 'lazy' && p === 1 ? '~' : '') + Math.round(shown) + ' Mo';
+        if (p < 1) tween = requestAnimationFrame(step);
+      })(t0);
+    };
+    $$('.seg button', mem).forEach(function (b) { b.addEventListener('click', function () { auto = true; setMode(b.getAttribute('data-mode')); }); });
+    // La première fois qu'on la voit, elles s'endorment toutes seules : on comprend sans lire.
+    if ('IntersectionObserver' in window && !reduce) {
+      new IntersectionObserver(function (es, o) { if (es[0].isIntersecting) { o.disconnect(); setTimeout(function () { if (!auto) setMode('lazy'); }, 1800); } }, { threshold: 0.6 }).observe(mem);
+    }
   }
 
   // ——— Luciole demande : démonstration et cerveau au choix ———
