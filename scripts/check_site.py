@@ -11,7 +11,7 @@ for href in re.findall(r'(?:href|src)="([^"]+)"', html):
     if href.startswith("#"):
         if href[1:] and href[1:] not in ids:
             errors.append(f"ancre manquante : {href}")
-    elif href.startswith("#") is False and not (root / href.split("#")[0]).exists():
+    elif href.startswith("#") is False and not (root / href.split("#")[0].split("?")[0]).exists():
         errors.append(f"fichier manquant : {href}")
 for ref in re.findall(r'url\("([^")]+)"\)', (root / "styles.css").read_text(encoding="utf-8")):
     if not ref.startswith(("http", "data:")) and not (root / ref).exists():

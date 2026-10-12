@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orée — le navigateur Mac qui dort quand tu ne le regardes pas</title>
-<meta name="description" content="Orée est un navigateur natif pour Mac : ouverture et téléchargements plus rapides (mesurés), onglets en pause puis endormis, espaces, palette ⌘K, vie privée intégrée, zéro télémétrie, et sur la page : recettes allégées, traduction, mode nuit, calendrier. Gratuit, macOS 15.4+.">
+<title>Orée — le navigateur Mac qui dort quand tu ne le regardes pas, et sa luciole</title>
+<meta name="description" content="Orée est un navigateur natif pour Mac, raconté comme une nuit à la lisière du bois : ouverture et téléchargements plus rapides (mesurés), onglets endormis, espaces, palette ⌘K, vie privée intégrée, et Luciole, un assistant qui montre ce qu’il fait et demande avant d’agir.">
 <meta name="color-scheme" content="light dark">
-<meta property="og:title" content="Orée — le navigateur Mac qui dort quand tu ne le regardes pas">
-<meta property="og:description" content="Onglets endormis, espaces, palette ⌘K, vie privée intégrée, traduction et résumés sur ton Mac. Natif macOS, zéro télémétrie.">
+<meta property="og:title" content="Orée — une histoire de navigateur, de forêt et d’une luciole">
+<meta property="og:description" content="Onglets endormis, espaces, palette ⌘K, vie privée intégrée, et Luciole qui demande avant d’agir. Natif macOS, zéro télémétrie.">
 <meta property="og:image" content="https://gwada33.github.io/oree/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -17,14 +17,14 @@
 <meta property="og:url" content="https://gwada33.github.io/oree/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="https://gwada33.github.io/oree/">
-<meta name="theme-color" content="#FBFAF7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1E1D1B" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F3F0EA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B1214" media="(prefers-color-scheme: dark)">
 <link rel="apple-touch-icon" href="assets/icon-256.png">
 <link rel="preload" href="assets/fonts/InstrumentSans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" type="image/png" href="assets/favicon.png">
-<link rel="stylesheet" href="styles.css">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Orée","operatingSystem":"macOS 15.4+","applicationCategory":"BrowserApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"description":"Navigateur natif pour Mac : onglets qui s'endorment, téléchargements rapides, vie privée intégrée, zéro télémétrie."}</script>
+<link rel="stylesheet" href="styles.css?v=16">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Orée","operatingSystem":"macOS 15.4+","applicationCategory":"BrowserApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"downloadUrl":"https://github.com/Gwada33/oree/releases/latest/download/Oree-macOS-arm64.dmg"}</script>
 </head>
 <body>
 
@@ -65,23 +65,37 @@
 
 <a class="skip" href="#contenu">Aller au contenu</a>
 
+<!-- Le monde : ciel, arbres, lucioles (décor, fixe derrière le texte) -->
+<div class="world" id="world" aria-hidden="true">
+  <div class="moon"></div>
+  <div class="trees t1"><svg id="trees1" viewBox="0 0 1600 400" preserveAspectRatio="none"></svg></div>
+  <div class="trees t2"><svg id="trees2" viewBox="0 0 1600 400" preserveAspectRatio="none"></svg></div>
+  <div class="trees t3"><svg id="trees3" viewBox="0 0 1600 400" preserveAspectRatio="none"></svg></div>
+  <div class="mist"></div>
+  <canvas id="flies"></canvas>
+</div>
+
+<!-- Luciole, qui guide le récit : elle vole d'une scène à l'autre -->
+<div class="guide" id="guide" aria-hidden="true"><svg class="lu lu-sleep" viewBox="0 0 40 40" aria-hidden="true"><circle class="h" cx="20" cy="26.5" r="11"/><g transform="rotate(-30 11 10)"><ellipse class="w wl" cx="11" cy="10" rx="6" ry="3.3"/></g><g transform="rotate(30 29 10)"><ellipse class="w wr" cx="29" cy="10" rx="6" ry="3.3"/></g><g class="bd"><path class="a" d="M17.4 10Q15.8 6.4 13.2 5.4M22.6 10Q24.2 6.4 26.8 5.4"/><circle class="k" cx="13.2" cy="5.4" r="1.3"/><circle class="k" cx="26.8" cy="5.4" r="1.3"/><circle class="l" cx="20" cy="26.5" r="5.6"/><circle class="k" cx="20" cy="17" r="8.6"/><g class="es"><rect class="e" x="16.1" y="14.8" width="2.5" height="4.2" rx="1.25"/><rect class="e" x="21.4" y="14.8" width="2.5" height="4.2" rx="1.25"/></g></g></svg><span class="say" id="say"></span></div>
+
 <header class="nav" id="top">
   <div class="wrap nav-in">
     <a class="brand" href="#top" aria-label="Orée, accueil">
       <svg class="brand-mark" aria-hidden="true"><use href="#mark"/></svg>
       <span>Orée</span>
     </a>
-    <nav class="nav-links" aria-label="Principal">
-      <a href="#rapidite">Rapidité</a>
-      <a href="#legerete">Veille</a>
-      <a href="#interface">Palette</a>
-      <a href="#pages">Sur la page</a>
-      <a href="#prive">Vie privée</a>
-      <a href="#telechargements">Téléchargements</a>
-      <a href="#faq">Questions</a>
+    <nav class="nav-links" id="chapters" aria-label="Chapitres">
+      <a href="#sentier"><i>I</i>Sentier</a>
+      <a href="#clairieres"><i>II</i>Clairières</a>
+      <a href="#veille"><i>III</i>Sommeil</a>
+      <a href="#luciole"><i>IV</i>Luciole</a>
+      <a href="#terrier"><i>V</i>Terrier</a>
+      <a href="#page"><i>VI</i>Page</a>
+      <a href="#saisons"><i>VII</i>Saisons</a>
+      <a href="#telecharger"><i>VIII</i>Feu de camp</a>
     </nav>
     <div class="nav-actions">
-      <button class="icon-btn" id="theme" type="button" aria-label="Changer de thème">
+      <button class="icon-btn" id="theme" type="button" aria-label="Changer de thème : nuit ou matin">
         <svg class="ic ic-moon" aria-hidden="true"><use href="#i-moon"/></svg>
         <svg class="ic ic-sun" aria-hidden="true"><use href="#i-sun"/></svg>
       </button>
@@ -92,355 +106,238 @@
 
 <main id="contenu">
 
-<!-- HERO -->
-<section class="hero">
-  <div class="wrap hero-in">
-    <p class="eyebrow reveal"><span class="dot"></span>Navigateur natif pour Mac · macOS 15.4+</p>
-    <h1 class="reveal">Le navigateur qui <em>dort</em><br>quand tu ne le regardes pas.</h1>
-    <p class="lead reveal">Orée libère la mémoire des onglets inutilisés, protège ta vie privée par défaut, et t’aide sur la page : recettes allégées, traduction, mode nuit.</p>
-    <div class="cta-row reveal">
+<!-- Prologue : à la lisière -->
+<section class="scene s0" id="lisiere" data-pose="sleep" data-say="Chut… on dort encore." data-wake="Ah, vous voilà ! Suivez-moi." data-side="right">
+  <div class="wrap">
+    <p class="eyebrow reveal"><span class="dot"></span>Une histoire en huit chapitres · navigateur natif pour Mac · macOS 15.4+</p>
+    <h1 class="reveal" style="--d:.1s">Orée</h1>
+    <p class="sub reveal" style="--d:.2s">À la lisière du bois, un navigateur <em>dort</em>. Une luciole veille.</p>
+    <p class="lead reveal" style="--d:.3s">Orée libère la mémoire des onglets que tu ne regardes pas, protège ta vie privée par défaut, et sa luciole t’aide sur la page : elle montre ce qu’elle fait et demande avant d’agir.</p>
+    <div class="cta-row reveal" style="--d:.4s">
       <a class="btn btn-primary btn-lg" href="#telecharger"><svg class="ic" aria-hidden="true"><use href="#i-apple"/></svg>Télécharger pour Mac</a>
-      <a class="btn btn-ghost btn-lg" href="#rapidite">Voir les mesures</a>
+      <a class="btn btn-ghost btn-lg" href="#sentier">Lire l’histoire</a>
     </div>
-    <p class="fine reveal">Gratuit · Apple silicon (M1 et suivants) · Aucune donnée d’usage envoyée</p>
-    <ul class="proof reveal" aria-label="En bref">
-      <li><svg class="ic" aria-hidden="true"><use href="#i-sleep"/></svg>Onglets en pause, puis endormis</li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg>Ouverture 47 % plus rapide que Safari</li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Téléchargements ≈ 4× plus rapides</li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Pubs et traceurs bloqués</li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Mises à jour intégrées</li>
-    </ul>
-
-    <!-- App mock -->
-    <div class="window reveal" id="mock" role="img" aria-label="Aperçu de la fenêtre Orée : barre latérale avec espaces et onglets, palette de commandes ouverte">
-      <div class="win-bar">
-        <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span class="addr"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg><b>fr.wikipedia.org</b><span>/wiki/Lisbonne</span><kbd>⌘L</kbd></span>
-      </div>
-      <div class="win-body">
-        <aside class="side">
-          <div class="spaces">
-            <span class="sp on" style="--h:var(--mousse)"><i></i>Perso</span>
-            <span class="sp" style="--h:var(--marine)"><i></i>Travail</span>
-            <span class="sp" style="--h:var(--ocre)"><i></i>Lecture</span>
-          </div>
-          <div class="favs"><i></i><i></i><i></i><i></i></div>
-          <div class="tabs">
-            <span class="tab on"><b class="fv" style="background:#2D5C9A">W</b>Lisbonne — Wikipédia</span>
-            <span class="tab"><b class="fv" style="background:#B04A2A">C</b>Ligne 28 : horaires</span>
-            <span class="tab sleep"><b class="fv" style="background:#8A5E0E">L</b>Logement à Alfama<em>zz</em></span>
-            <span class="tab sleep"><b class="fv" style="background:#87406F">V</b>Vols Paris → Lisbonne<em>zz</em></span>
-            <span class="tab sleep"><b class="fv" style="background:#3A3936">M</b>Carte du métro<em>zz</em></span>
-          </div>
-        </aside>
-        <div class="page">
-          <div class="page-date">9 octobre</div>
-          <div class="page-title">Bonne soirée.</div>
-          <div class="page-tiles"><i></i><i></i><i></i><i></i><i></i><i></i></div>
-          <div class="palette" id="palette">
-            <div class="pal-in"><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg><span id="typed">lisb</span><span class="caret"></span></div>
-            <div class="pal-row on"><b class="fv" style="background:#2D5C9A">W</b><span><mark>Lisb</mark>onne — Wikipédia</span><small>Onglet</small></div>
-            <div class="pal-row"><b class="fv" style="background:#8A5E0E">L</b><span>Logement à Alfama, <mark>Lisb</mark>oa</span><small>Onglet endormi</small></div>
-            <div class="pal-row"><b class="fv" style="background:#B04A2A">C</b><span>Carris — <mark>Lisb</mark>oa</span><small>Historique</small></div>
-            <div class="pal-row"><svg class="ic" aria-hidden="true"><use href="#i-split"/></svg><span>Ouvrir côte à côte</span><small>Action · ⌘\</small></div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <p class="fine reveal" style="--d:.5s">Gratuit · Apple silicon (M1 et suivants) · Aucune donnée d’usage envoyée</p>
+    <a class="scroll-cue reveal" href="#sentier" style="--d:.6s"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Le récit commence plus bas</a>
   </div>
+  <span class="station" data-station style="right:13%;top:56%"></span>
 </section>
 
-<!-- RAPIDITE -->
-<!-- APERCU -->
-<section class="sec sec-alt" id="apercu">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <p class="eyebrow">Aperçu</p>
-      <h2>À quoi ça ressemble, <em>vraiment</em>.</h2>
-      <p class="lead">Des captures d’Orée 1.0.5, sur un Mac M1. Pas de maquette.</p>
+<!-- I. Le sentier -->
+<section class="scene" id="sentier" data-pose="act" data-say="Vite, avant l’aube !" data-side="left">
+  <div class="path" aria-hidden="true"><svg viewBox="0 0 600 700" preserveAspectRatio="none"><path id="trail" d="M-20 640C120 600 80 480 220 470S460 520 430 380 260 300 330 180 520 120 640 40"/></svg></div>
+  <div class="wrap scene-in">
+    <div class="tale">
+      <p class="chap reveal"><b>I</b>Chapitre un · Le sentier</p>
+      <h2 class="reveal">Partir <em>avant</em> que le jour se lève.</h2>
+      <p class="lede reveal">Un navigateur qui met une seconde et demie à s’ouvrir fait perdre le fil. Orée s’ouvre en 0,83 s, et télécharge jusqu’à quatre fois plus vite quand le serveur limite chaque connexion.</p>
+      <p class="reveal">Il en ouvre jusqu’à quinze à la fois, et reprend là où il s’est arrêté si la connexion tombe.</p>
     </div>
-    <div class="shots">
-      <figure class="shot wide reveal">
-        <img class="shot-light" src="assets/shot-palette-light.webp" width="1500" height="961" loading="lazy" decoding="async" alt="Orée avec la palette de commandes ouverte : on tape « lis » et elle propose l’onglet Lisbonne, l’historique et des actions">
-        <img class="shot-dark" src="assets/shot-palette-dark.webp" width="1500" height="961" loading="lazy" decoding="async" alt="Orée en thème sombre avec la palette de commandes ouverte : on tape « lis » et elle propose l’onglet Lisbonne, l’historique et des actions">
-        <figcaption><b>La palette ⌘K.</b> Onglets ouverts, historique, favoris et actions dans une seule barre, tout au clavier.</figcaption>
-      </figure>
-      <figure class="shot reveal">
-        <img class="shot-light" src="assets/shot-essentiel-light.webp" width="1100" height="947" loading="lazy" decoding="async" alt="L’essentiel d’une recette de crêpes : titre, temps, curseur de nombre de personnes, ingrédients et étapes à cocher">
-        <img class="shot-dark" src="assets/shot-essentiel-dark.webp" width="1100" height="947" loading="lazy" decoding="async" alt="L’essentiel d’une recette de crêpes en thème sombre : titre, temps, curseur de nombre de personnes, ingrédients et étapes à cocher">
-        <figcaption><b>L’essentiel d’une recette.</b> Un curseur change le nombre de personnes, les quantités suivent.</figcaption>
-      </figure>
-      <figure class="shot reveal">
-        <img src="assets/shot-nuit.webp" width="1500" height="961" loading="lazy" decoding="async" alt="Orée en thème clair affichant Wikipédia assombri par le mode nuit, photos intactes">
-        <figcaption><b>Le mode nuit.</b> Wikipédia n’a pas de thème sombre : Orée l’assombrit, les photos restent naturelles.</figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-
-<section class="sec" id="rapidite">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <p class="eyebrow">Rapidité, mesurée</p>
-      <h2>Il démarre vite et télécharge <em>quatre fois</em> plus vite.</h2>
-      <p class="lead">Même banc, mêmes pages, même Mac. Voici ce que ça donne face à Safari et Brave.</p>
-    </div>
-
-    <div class="bench reveal">
-      <div class="bench-card">
+    <div class="card race reveal" id="race">
+      <div>
         <h3>Ouverture : de l’icône au début du chargement de la page</h3>
-        <div class="speed">
-          <div class="speed-row on"><span>Orée</span><div class="bar"><i style="--w:53%"></i></div><b>0,83 s</b></div>
-          <div class="speed-row"><span>Brave</span><div class="bar"><i style="--w:57%"></i></div><b>0,90 s</b></div>
-          <div class="speed-row"><span>Safari</span><div class="bar"><i style="--w:100%"></i></div><b>1,58 s</b></div>
-        </div>
-        <p class="bench-note"><strong>47 % plus rapide que Safari</strong>, un peu devant Brave (0,07 s). Médiane de 10 lancements.</p>
+        <div class="bar us"><span>Orée</span><span class="track"><span class="fill" style="--w:52%"></span></span><b>0,83 s</b></div>
+        <div class="bar"><span>Brave</span><span class="track"><span class="fill" style="--w:57%"></span></span><b>0,90 s</b></div>
+        <div class="bar"><span>Safari</span><span class="track"><span class="fill" style="--w:100%"></span></span><b>1,58 s</b></div>
+        <p class="verdict"><b>47 % plus rapide que Safari</b>, un peu devant Brave. Médiane de 10 lancements.</p>
       </div>
-
-      <div class="bench-card">
+      <div>
         <h3>Téléchargement d’un fichier de 192 Mo</h3>
-        <div class="speed">
-          <div class="speed-row on"><span>Orée</span><div class="bar"><i style="--w:23%"></i></div><b>7,0 s</b></div>
-          <div class="speed-row"><span>Safari</span><div class="bar"><i style="--w:92%"></i></div><b>27,5 s</b></div>
-          <div class="speed-row"><span>Brave</span><div class="bar"><i style="--w:100%"></i></div><b>30 s</b></div>
-        </div>
-        <p class="bench-note"><strong>≈ 4× plus rapide</strong> quand le serveur limite chaque connexion : Orée en ouvre jusqu’à 15 à la fois.</p>
+        <div class="bar us"><span>Orée</span><span class="track"><span class="fill" style="--w:25%"></span></span><b>7,0 s</b></div>
+        <div class="bar"><span>Safari</span><span class="track"><span class="fill" style="--w:92%"></span></span><b>27,5 s</b></div>
+        <div class="bar"><span>Brave</span><span class="track"><span class="fill" style="--w:100%"></span></span><b>30 s</b></div>
+        <p class="verdict"><b>≈ 4× plus rapide</b> quand le serveur limite chaque connexion.</p>
       </div>
-    </div>
-
-    <div class="bench-fine reveal">
-      <p><strong>Comment on a mesuré.</strong> Mac M1, 8 Go, macOS 27. Serveur local (aucune variance du réseau), pages jamais mises en cache, presque aucune autre app ouverte. Orée 1.0.1, Safari 27, Brave 155 (profil neuf). Le banc est dans le dépôt : <code>scripts/bench/compare.py</code>.</p>
-      <p><strong>Ce qu’on ne prétend pas.</strong> Safari reste plus économe en mémoire qu’Orée quand beaucoup d’onglets sont ouverts. Les téléchargements dépendent du serveur : sans limite par connexion, l’écart est bien plus petit. Chiffres du 9 octobre 2026, à refaire sur d’autres Mac.</p>
+      <p class="fine"><b>Comment on a mesuré.</b> Mac M1, 8 Go, macOS 27, serveur local, pages jamais mises en cache. Orée 1.0.1, Safari 27, Brave 155 (profil neuf). Le banc est dans le dépôt : <code>scripts/bench/compare.py</code>. <b>Ce qu’on ne prétend pas.</b> Safari reste plus économe en mémoire quand beaucoup d’onglets sont ouverts, et sans limite par connexion l’écart de téléchargement est bien plus petit. Chiffres du 9 octobre 2026, à refaire sur d’autres Mac.</p>
     </div>
   </div>
+  <span class="station" data-station style="left:47.8%;top:26%"></span>
 </section>
 
-<!-- DIFFERENCES -->
-<section class="sec" id="difference">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <p class="eyebrow">Ce qui change</p>
-      <h2>Six choses qu’on fait autrement.</h2>
-    </div>
-
-    <!-- 1. Veille -->
-    <article class="diff reveal" id="legerete">
-      <div class="diff-copy">
-        <span class="num">01</span>
-        <h3>Les onglets s’endorment en deux temps.</h3>
-        <p>D’abord mis en pause : la page reste prête et reprend instantanément. Puis, si tu ne reviens pas, elle est vraiment déchargée de la RAM. Survole un onglet endormi : il se réveille avant ton clic.</p>
-        <ul class="tiers" aria-label="Les trois états d’un onglet">
-          <li><b>Actif</b><span>Tu le regardes.</span></li>
-          <li><b>En pause</b><span>Après 2 min cachée (réglable). Reprise immédiate.</span></li>
-          <li><b>Endormi</b><span>Après 45 min, ou si la mémoire manque. Seule l’image reste.</span></li>
-        </ul>
-        <p class="care"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Jamais déchargé : ce que tu es en train de saisir, ce qui joue du son, ta caméra ou ton micro, les messageries — et les sites que tu choisis.</p>
-        <ul class="stats">
-          <li><strong>−75 %</strong><span>de mémoire au lancement avec 8 onglets</span></li>
-          <li><strong>≈ 0,4 s</strong><span>pour ouvrir la fenêtre</span></li>
-        </ul>
-      </div>
-      <div class="mem" id="mem" data-mode="all">
-        <div class="seg" role="group" aria-label="Mode de restauration">
-          <button type="button" class="on" data-mode="all" aria-pressed="true">Tout charger</button>
-          <button type="button" data-mode="lazy" aria-pressed="false">Orée</button>
-        </div>
-        <div class="mem-tabs" aria-hidden="true">
-          <i class="t on"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i><i class="t"></i>
-        </div>
-        <div class="mem-bar" role="img" aria-label="Barre de mémoire utilisée"><span class="mem-fill"></span></div>
-        <div class="mem-read"><strong id="memval">~700 Mo</strong><span id="memnote">8 pages chargées</span></div>
-        <p class="mem-src">Mac M1, 8 Go, 8 onglets sauvegardés.</p>
-      </div>
-    </article>
-
-    <!-- 2. Palette -->
-    <article class="diff flip reveal" id="interface">
-      <div class="diff-copy">
-        <span class="num">02</span>
-        <h3>Une seule barre pour tout. <kbd>⌘K</kbd></h3>
-        <p>Onglets, historique, favoris, actions, web. Tout au clavier.</p>
-      </div>
-      <div class="pal-demo" aria-hidden="true">
-        <div class="pal-in"><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg><span>hor</span></div>
-        <div class="chips"><span class="on">Tout</span><span>Onglets</span><span>Historique</span><span>Favoris</span><span>Actions</span></div>
-        <div class="pal-row on"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><span>Ligne 28 : <mark>hor</mark>aires</span><small>Onglet</small></div>
-        <div class="pal-row"><svg class="ic" aria-hidden="true"><use href="#i-sleep"/></svg><span>Mettre en veille</span><small>Action</small></div>
-        <div class="pal-row"><svg class="ic" aria-hidden="true"><use href="#i-split"/></svg><span>Ouvrir côte à côte</span><small>⌘\</small></div>
-      </div>
-    </article>
-
-    <!-- 3. Espaces -->
-    <article class="diff reveal">
-      <div class="diff-copy">
-        <span class="num">03</span>
-        <h3>Des espaces, chacun sa couleur.</h3>
-        <p>Perso, Travail, Lecture. <kbd>⌃1</kbd> à <kbd>⌃3</kbd> pour passer de l’un à l’autre.</p>
-      </div>
-      <div class="swatches" aria-hidden="true">
-        <span style="--h:var(--mousse)"><i></i>Perso</span>
-        <span style="--h:var(--marine)"><i></i>Travail</span>
-        <span style="--h:var(--ocre)"><i></i>Lecture</span>
-        <span style="--h:var(--brique)"><i></i>Cuisine</span>
-        <span style="--h:var(--prune)"><i></i>Voyage</span>
-      </div>
-    </article>
-
-    <!-- 4. Vie privée -->
-    <article class="diff flip reveal" id="prive">
-      <div class="diff-copy">
-        <span class="num">04</span>
-        <h3>Protégé par défaut. Sans extension.</h3>
-        <p>Zéro télémétrie : rien ne quitte ton Mac.</p>
-      </div>
-      <ul class="priv">
-        <li><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><b>Pubs et traceurs bloqués</b></li>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><b>Liens nettoyés</b><small>utm, fbclid, gclid…</small></li>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg><b>Fingerprinting réduit</b></li>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg><b>Mots de passe en local</b><small>Trousseau + Touch ID</small></li>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg><b>HTTPS d’abord</b></li>
+<!-- II. Les clairières -->
+<section class="scene flip" id="clairieres" data-pose="read" data-say="Chaque projet a sa clairière." data-side="right">
+  <div class="wrap scene-in">
+    <div class="tale">
+      <p class="chap reveal"><b>II</b>Chapitre deux · Les clairières</p>
+      <h2 class="reveal">Chaque projet a sa <em>clairière</em>.</h2>
+      <p class="lede reveal">Au lieu d’une barre de soixante onglets, des espaces : une couleur, un nom, leurs onglets, leurs favoris. On passe de l’un à l’autre sans rien mélanger.</p>
+      <ul class="pts">
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg></span><span><b>Espaces colorés.</b> Barre latérale à gauche, qui se replie ou apparaît au survol du bord.</span></li>
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg></span><span><b>Palette <kbd>⌘K</kbd>.</b> On tape « lis » : Lisbonne, l’historique et les réglages répondent au même endroit.</span></li>
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-split"/></svg></span><span><b>Écran partagé <kbd>⌘\</kbd>.</b> Deux pages côte à côte, sans deuxième fenêtre.</span></li>
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg></span><span><b>Reprise.</b> Orée propose de reprendre une vidéo ou un article là où tu t’étais arrêté.</span></li>
       </ul>
-    </article>
+    </div>
+    <figure class="reveal">
+      <div class="shot-frame" id="shot1">
+        <img class="shot-light" src="assets/shot-palette-light.webp" width="1500" height="961" loading="lazy" decoding="async" alt="Orée avec la palette de commandes ouverte : on tape « lis » et elle propose Lisbonne, l’historique et les réglages">
+        <img class="shot-dark" src="assets/shot-palette-dark.webp" width="1500" height="961" loading="lazy" decoding="async" alt="Orée en thème sombre avec la palette de commandes ouverte : on tape « lis » et elle propose Lisbonne, l’historique et les réglages">
+      </div>
+    </figure>
+  </div>
+  <span class="station" data-station style="left:51%;top:26%"></span>
+</section>
 
-    <!-- 5. Téléchargements -->
-    <article class="diff reveal" id="telechargements">
-      <div class="diff-copy">
-        <span class="num">05</span>
-        <h3>Les gros fichiers arrivent plus vite.</h3>
-        <p>Chaque téléchargement est découpé en segments reçus en parallèle, repris après une coupure, et Orée ajuste le nombre de connexions selon le serveur. Il ralentit tout seul quand tu navigues.</p>
-        <ul class="stats">
-          <li><strong>×1,7</strong><span>face à 4 connexions fixes (test de 640 Mo)</span></li>
-          <li><strong>à part</strong><span>un moteur séparé : la navigation ne rame pas</span></li>
-        </ul>
+<!-- III. Le sommeil des arbres -->
+<section class="scene" id="veille" data-pose="sleep" data-say="Zzz… les arbres dorment." data-side="left">
+  <div class="wrap scene-in">
+    <div class="tale">
+      <p class="chap reveal"><b>III</b>Chapitre trois · Le sommeil des arbres</p>
+      <h2 class="reveal">Ce que tu ne regardes pas <em>s’endort</em>.</h2>
+      <p class="lede reveal">Dans une forêt, ce qui n’est pas éclairé se repose. Orée fait pareil avec les onglets : d’abord en pause, puis endormis, et un clic suffit à les réveiller.</p>
+      <ul class="pts">
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-sleep"/></svg></span><span><b>En pause, puis endormi.</b> En pause, la page reste en mémoire sans calculer. Endormi, il ne reste que son image.</span></li>
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span><span><b>Rien ne se perd.</b> Un onglet où tu as écrit n’est jamais déchargé. Un onglet qui joue du son reste éveillé.</span></li>
+      </ul>
+      <p class="note reveal">Safari reste plus économe en mémoire qu’Orée quand beaucoup d’onglets sont ouverts : ce que gagne Orée, c’est de ne rien garder allumé pour rien.</p>
+    </div>
+    <div class="card sleep-demo reveal" id="mem" data-mode="all">
+      <div class="seg" role="group" aria-label="Mode de chargement des huit onglets">
+        <button type="button" class="on" data-mode="all" aria-pressed="true">Tout garder allumé</button>
+        <button type="button" data-mode="lazy" aria-pressed="false">Laisser dormir</button>
       </div>
-      <div class="speed" aria-hidden="true">
-        <div class="speed-row"><span>4 connexions fixes</span><div class="bar"><i style="--w:59%"></i></div><b>29 Mo/s</b></div>
-        <div class="speed-row on"><span>Orée, adaptatif</span><div class="bar"><i style="--w:100%"></i></div><b>49 Mo/s</b></div>
-        <p class="mem-src">Fichier test de 640 Mo sur un serveur local. En vrai, le résultat dépend du serveur et de ta connexion.</p>
-      </div>
-    </article>
+      <div class="grove" id="grove" aria-hidden="true"></div>
+      <div class="memval"><b id="memval">~700 Mo</b><span id="memnote">8 pages chargées</span></div>
+      <p class="fine">Mesuré sur un Mac M1 de 8 Go : restauration paresseuse d’une session de huit pages.</p>
+    </div>
+  </div>
+  <span class="station" data-station style="left:47.8%;top:26%"></span>
+</section>
 
-    <!-- 6. Personnalisation -->
-    <article class="diff flip reveal" id="perso">
-      <div class="diff-copy">
-        <span class="num">06</span>
-        <h3>Un navigateur qui s’arrange à ta façon.</h3>
-        <p>Onglets sur le côté, en haut, ou une barre qui n’apparaît qu’au survol. Deux pages côte à côte. Clair, sombre ou automatique, six couleurs, densité et arrondis réglables, raccourcis clavier modifiables.</p>
+<!-- IV. La luciole -->
+<section class="scene flip" id="luciole" data-pose="think" data-say="Je regarde, je montre, je demande." data-side="left" data-anchor="#pd-anchor">
+  <div class="wrap scene-in">
+    <div class="tale">
+      <p class="chap reveal"><b>IV</b>Chapitre quatre · La luciole</p>
+      <h2 class="reveal">Elle éclaire la page. Elle <em>demande</em> avant d’agir.</h2>
+      <p class="lede reveal">Luciole est l’assistant d’Orée, dans un panneau à droite (<kbd>⌘J</kbd>). Elle lit la page, cherche sur le web, remplit un formulaire à ta place — et s’arrête quand c’est à toi de décider.</p>
+      <ul class="pts">
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></span><span><b>Elle montre tout.</b> Chaque action apparaît dans une trace, et Luciole vole jusqu’à l’élément qu’elle touche.</span></li>
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span><span><b>Rien d’important sans toi.</b> Envoi, paiement, connexion, téléchargement : une carte montre ce qui part, et seul ton clic valide. Jamais de mot de passe ni de carte remplis par l’IA.</span></li>
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-feather"/></svg></span><span><b>Elle se souvient.</b> Tes discussions et ce qu’elle a fait, dans un fichier sur ton Mac — jamais ce que tu saisis dans les formulaires, jamais en navigation privée.</span></li>
+      </ul>
+      <div class="brains reveal" id="brains" role="group" aria-label="Choisir le cerveau de Luciole">
+        <button type="button" class="on" data-b="local">Sur ce Mac</button>
+        <button type="button" data-b="lm">LM Studio</button>
+        <button type="button" data-b="mistral">Mistral</button>
+        <button type="button" data-b="groq">Groq</button>
       </div>
-      <div class="custom" aria-hidden="true">
-        <div class="swatches">
-          <span style="--h:var(--mousse)"><i></i>Mousse</span>
-          <span style="--h:var(--marine)"><i></i>Marine</span>
-          <span style="--h:var(--ocre)"><i></i>Ocre</span>
-          <span style="--h:var(--brique)"><i></i>Brique</span>
-          <span style="--h:var(--prune)"><i></i>Prune</span>
+      <p class="brain-note reveal" id="brain-note"><b>Modèle intégré.</b> Téléchargé une seule fois (environ 2,7 Go), avec ton accord. Tout reste sur ton Mac. Plus lent, il se trompe plus : c’est pour cela que tu valides.</p>
+    </div>
+    <div class="reveal">
+      <div class="panel-demo" id="pd" aria-label="Démonstration du panneau Luciole : une réservation demandée, la trace des actions, puis la carte de validation">
+        <div class="pd-head"><svg class="lu lu-idle" viewBox="0 0 40 40" aria-hidden="true"width="26" height="26" style="width:26px;height:26px"><circle class="h" cx="20" cy="26.5" r="11"/><g transform="rotate(-30 11 10)"><ellipse class="w wl" cx="11" cy="10" rx="6" ry="3.3"/></g><g transform="rotate(30 29 10)"><ellipse class="w wr" cx="29" cy="10" rx="6" ry="3.3"/></g><g class="bd"><path class="a" d="M17.4 10Q15.8 6.4 13.2 5.4M22.6 10Q24.2 6.4 26.8 5.4"/><circle class="k" cx="13.2" cy="5.4" r="1.3"/><circle class="k" cx="26.8" cy="5.4" r="1.3"/><circle class="l" cx="20" cy="26.5" r="5.6"/><circle class="k" cx="20" cy="17" r="8.6"/><g class="es"><rect class="e" x="16.1" y="14.8" width="2.5" height="4.2" rx="1.25"/><rect class="e" x="21.4" y="14.8" width="2.5" height="4.2" rx="1.25"/></g></g></svg><b>Luciole</b><span class="pd-chip"><i></i><span id="pd-state">Prêt</span></span></div>
+        <div class="pd-ctx">Lit : Alfama à pied — réserver</div>
+        <div class="pd-flow" id="pd-flow" aria-live="polite">
+          <div class="pd-user hidden" id="pd-user">Réserve la visite guidée de samedi matin pour nous deux.</div>
+          <div class="pd-lu hidden" id="pd-lu">
+            <div class="who"><svg class="lu lu-act" viewBox="0 0 40 40" aria-hidden="true"width="18" height="18" style="width:18px;height:18px"><circle class="h" cx="20" cy="26.5" r="11"/><g transform="rotate(-30 11 10)"><ellipse class="w wl" cx="11" cy="10" rx="6" ry="3.3"/></g><g transform="rotate(30 29 10)"><ellipse class="w wr" cx="29" cy="10" rx="6" ry="3.3"/></g><g class="bd"><path class="a" d="M17.4 10Q15.8 6.4 13.2 5.4M22.6 10Q24.2 6.4 26.8 5.4"/><circle class="k" cx="13.2" cy="5.4" r="1.3"/><circle class="k" cx="26.8" cy="5.4" r="1.3"/><circle class="l" cx="20" cy="26.5" r="5.6"/><circle class="k" cx="20" cy="17" r="8.6"/><g class="es"><rect class="e" x="16.1" y="14.8" width="2.5" height="4.2" rx="1.25"/><rect class="e" x="21.4" y="14.8" width="2.5" height="4.2" rx="1.25"/></g></g></svg>Luciole</div>
+            <div class="pd-trace"><div class="th">Réserver la visite de samedi <span id="pd-chip">En cours · étape 1</span></div>
+              <div class="row"><em>1</em><i>✓</i><span><b>Lecture de la page</b><br><span class="fine">alfama-a-pe.pt · formulaire de réservation</span></span></div>
+              <div class="row hidden" id="pd-r2"><em>2</em><i>✓</i><span><b>Choix de la date</b><br><span class="fine">samedi 14 novembre, 10 h 00</span></span></div>
+              <div class="row hidden" id="pd-r3"><em>3</em><i class="q">?</i><span><b>Clic sur « Réserver »</b><br><span class="fine">j’attends ton accord</span></span></div>
+            </div>
+          </div>
+          <p class="pd-result hidden" id="pd-result"></p>
         </div>
-        <div class="chips"><span class="on">Barre latérale</span><span>Icônes seules</span><span>Onglets en haut</span><span>Au survol</span></div>
-        <div class="chips"><span>Clair</span><span class="on">Sombre</span><span>Auto</span><span>Côte à côte ⌘\</span></div>
+        <div class="pd-confirm hidden" id="pd-confirm" role="group" aria-label="Validation requise">
+          <div class="top"><svg class="lu lu-wait" viewBox="0 0 40 40" aria-hidden="true"width="22" height="22" style="width:22px;height:22px"><circle class="h" cx="20" cy="26.5" r="11"/><g transform="rotate(-30 11 10)"><ellipse class="w wl" cx="11" cy="10" rx="6" ry="3.3"/></g><g transform="rotate(30 29 10)"><ellipse class="w wr" cx="29" cy="10" rx="6" ry="3.3"/></g><g class="bd"><path class="a" d="M17.4 10Q15.8 6.4 13.2 5.4M22.6 10Q24.2 6.4 26.8 5.4"/><circle class="k" cx="13.2" cy="5.4" r="1.3"/><circle class="k" cx="26.8" cy="5.4" r="1.3"/><circle class="l" cx="20" cy="26.5" r="5.6"/><circle class="k" cx="20" cy="17" r="8.6"/><g class="es"><rect class="e" x="16.1" y="14.8" width="2.5" height="4.2" rx="1.25"/><rect class="e" x="21.4" y="14.8" width="2.5" height="4.2" rx="1.25"/></g></g></svg>Validation requise</div>
+          <h4>Envoyer cette réservation ?</h4>
+          <dl><div><dt>Visite</dt><dd>Alfama, 2 h 30</dd></div><div><dt>Date</dt><dd>Samedi 14 novembre, 10 h 00</dd></div><div><dt>Participants</dt><dd>2</dd></div><div><dt>Téléphone</dt><dd>06 12 34 56 78</dd></div><div><dt>Carte</dt><dd>•••• 4242</dd></div></dl>
+          <p>Je vais cliquer sur « Réserver ». Une fois envoyé, je ne pourrai pas l’annuler.</p>
+          <div class="btns"><button type="button" class="no" id="pd-no">Annuler</button><button type="button" class="yes" id="pd-yes">Valider l’envoi</button></div>
+          <small>Essaie : c’est toi qui décides, Luciole attend.</small>
+        </div>
+        <div class="pd-input"><span id="pd-ph">Demandez à Luciole…</span><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></div>
+        <p class="pd-note" id="pd-foot">Tout reste sur ce Mac · Luciole peut se tromper</p>
+        <span class="station" id="pd-anchor" style="right:10px;top:46%"></span>
       </div>
-    </article>
-
-    <p class="combo reveal">Chaque fonction existe quelque part ailleurs. <strong>La différence, c’est de les avoir toutes ensemble</strong>, dans un navigateur Mac natif.</p>
-  </div>
-</section>
-
-<!-- SUR LA PAGE -->
-<section class="sec" id="pages">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <p class="eyebrow">Sur la page</p>
-      <h2>Il t’aide aussi <em>sur la page</em> elle-même.</h2>
-      <p class="lead">Tout se passe sur ton Mac : la traduction et les résumés utilisent les modèles d’Apple, rien n’est envoyé nulle part.</p>
     </div>
-    <ul class="feat reveal">
-      <li>
-        <svg class="ic" aria-hidden="true"><use href="#i-recipe"/></svg>
-        <h3>L’essentiel d’une recette</h3>
-        <p>Les ingrédients, les étapes et les temps, sans les 2 000 mots de souvenirs. Un curseur change le nombre de personnes et les quantités suivent. Mode cuisine : gros texte, écran qui reste allumé.</p>
-        <small>Lu tel quel dans les données de la page quand elles existent ; sinon le modèle local la résume (environ 30 s) et peut se tromper : ce qui ne se retrouve pas dans la page est écarté.</small>
-      </li>
-      <li>
-        <svg class="ic" aria-hidden="true"><use href="#i-translate"/></svg>
-        <h3>Traduire la page</h3>
-        <p>Avec le framework de traduction d’Apple, hors ligne. Ce qui est à l’écran d’abord, le reste au défilement ; un clic remet l’original.</p>
-        <small>macOS 26. Rapide avec le modèle de traduction d’Apple installé, plus lent sinon.</small>
-      </li>
-      <li>
-        <svg class="ic" aria-hidden="true"><use href="#i-wand"/></svg>
-        <h3>Changer un site en une phrase</h3>
-        <p>« Cache les recommandations et agrandis le texte. » Le modèle écrit des règles de style pour ce site seulement, vérifiées, jamais de script, et tu peux annuler aussitôt. Un mode calme coupe la lecture automatique, les animations et les pastilles.</p>
-        <small>Demande Apple Intelligence. Le scroll infini n’est pas géré.</small>
-      </li>
-      <li>
-        <svg class="ic" aria-hidden="true"><use href="#i-calendar"/></svg>
-        <h3>Ajouter au Calendrier</h3>
-        <p>Un concert, un rendez-vous, une réservation : Orée trouve la date et ouvre Calendrier avec le titre, l’heure et le lieu remplis. Tu confirmes, Orée n’a aucun accès à tes agendas.</p>
-        <small>Date vérifiée dans la page avant d’être proposée.</small>
-      </li>
-      <li>
-        <svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg>
-        <h3>Mode nuit sur tous les sites</h3>
-        <p>Même ceux qui n’ont pas de thème sombre. Les photos et les vidéos gardent leurs couleurs, les sites déjà sombres ne sont pas touchés, un clic sur la lune en exclut un.</p>
-        <small>Suit le mode sombre du Mac. Les couleurs très saturées peuvent ternir.</small>
-      </li>
-      <li>
-        <svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg>
-        <h3>Un copier-coller qui marche</h3>
-        <p>Le texte arrive sans la police ni les liens du site. Un tableau copié se colle en vrai tableau dans Numbers ou Excel. En option, une citation garde sa source avec un lien vers le passage ; une adresse propose « Ouvrir dans Plans ».</p>
-      </li>
-      <li>
-        <svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>
-        <h3>Reprendre où tu en étais</h3>
-        <p>Une vidéo longue reprend à la minute, un long article au bon paragraphe, avec une fine ligne de progression. Rien n’est gardé en navigation privée.</p>
-      </li>
-    </ul>
-    <p class="fine reveal feat-note">Les fonctions qui demandent un modèle (résumé sans données de page, changement de site, date dans un texte) ont besoin de macOS 26 et d’Apple Intelligence. Tout le reste marche sans.</p>
   </div>
 </section>
 
-<!-- INCLUS D'OFFICE -->
-<section class="sec sec-alt" id="inclus">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <p class="eyebrow">Inclus d’office</p>
-      <h2>Rien à installer pour que ça marche bien.</h2>
+<!-- V. Le terrier -->
+<section class="scene" id="terrier" data-pose="idle" data-say="Ici, personne ne nous regarde." data-side="right">
+  <div class="wrap scene-in">
+    <div class="tale">
+      <p class="chap reveal"><b>V</b>Chapitre cinq · Le terrier</p>
+      <h2 class="reveal">Ce qui doit rester caché <em>reste caché</em>.</h2>
+      <p class="lede reveal">Au fond du terrier, il fait noir et tout est calme. Orée essaie d’être cet endroit-là : pas de compte, pas de télémétrie, pas de publicité qui te suit de site en site.</p>
+      <p class="reveal">Ce site, lui, ne contacte que GitHub, pour afficher la dernière version.</p>
     </div>
-    <ul class="incl reveal">
-      <li><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><b>Blocage des pubs et traceurs</b><span>Sans extension, avec des exceptions par site.</span></li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg><b>Mots de passe</b><span>Coffre local, Touch ID, import CSV.</span></li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg><b>Palette ⌘K</b><span>Onglets, historique, favoris, actions.</span></li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><b>Espaces et groupes</b><span>Perso, Travail, Lecture, et les tiens.</span></li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><b>Mises à jour intégrées</b><span>Une proposition, un clic, Orée se relance.</span></li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><b>Liens nettoyés</b><span>utm, fbclid, gclid… retirés.</span></li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg><b>HTTPS d’abord</b><span>Pas de contournement d’un certificat invalide.</span></li>
-      <li><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg><b>Venir d’ailleurs</b><span>Favoris, cookies de Brave, mots de passe en CSV.</span></li>
-    </ul>
+    <div class="vault">
+      <div class="card reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span><h4>Pubs et traceurs bloqués</h4><p>Par défaut, avec des listes mises à jour. Désactivable site par site, d’un clic droit.</p></div>
+      <div class="card reveal" style="--d:.08s"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></span><h4>Zéro télémétrie</h4><p>Orée n’envoie aucune donnée d’usage. La vérification des mises à jour se fait une fois par jour, et se coupe.</p></div>
+      <div class="card reveal" style="--d:.16s"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg></span><h4>Mots de passe au Trousseau</h4><p>Gérés par le Trousseau de ton Mac, jamais remplis par l’IA.</p></div>
+      <div class="card reveal" style="--d:.24s"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg></span><h4>IA sur ton Mac</h4><p>Traduction, résumés et cerveau par défaut de Luciole tournent localement. Un fournisseur en nuage, c’est toi qui le choisis, et le panneau le dit.</p></div>
+    </div>
   </div>
+  <span class="station" data-station style="left:47.8%;top:26%"></span>
 </section>
 
-<!-- HONNETE -->
-<section class="honest" id="honnete">
-  <div class="wrap honest-in reveal">
-    <h3>Pas encore là</h3>
-    <ul>
-      <li>Extensions</li><li>Synchronisation</li><li>Passkeys</li><li>Web hors ligne automatique</li><li>Fenêtres flottantes</li><li>Rappels</li><li>Application notarisée</li><li>Windows, iPhone</li>
-    </ul>
+<!-- VI. Sur la page -->
+<section class="scene flip" id="page" data-pose="read" data-say="Je vous tends ce qu’il faut." data-side="left">
+  <div class="wrap scene-in">
+    <div class="tale">
+      <p class="chap reveal"><b>VI</b>Chapitre six · Sur la page</p>
+      <h2 class="reveal">Elle te tend ce qu’il faut, <em>quand il le faut</em>.</h2>
+      <p class="lede reveal">Une recette noyée dans trois pages d’histoire familiale ? Un site sans thème sombre à minuit ? Orée s’en occupe, sur ton Mac.</p>
+      <ul class="pts">
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-recipe"/></svg></span><span><b>L’essentiel.</b> Ingrédients, étapes, temps — avec un curseur pour changer le nombre de personnes.</span></li>
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-translate"/></svg></span><span><b>Traduction</b> de la page, en un clic.</span></li>
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg></span><span><b>Mode nuit</b> pour les sites qui n’en ont pas : les photos restent intactes.</span></li>
+        <li class="reveal"><span class="pic"><svg class="ic" aria-hidden="true"><use href="#i-wand"/></svg></span><span><b>Un site à ta main.</b> Décris en une phrase ce que tu veux changer ; seul le style bouge, pour ce site, et « Annuler » le retire.</span></li>
+      </ul>
+    </div>
+    <div class="shots-two reveal">
+      <div class="shot-frame"><img class="shot-light" src="assets/shot-essentiel-light.webp" width="1100" height="947" loading="lazy" decoding="async" alt="L’essentiel d’une recette de crêpes : titre, temps, curseur de personnes, ingrédients et étapes"><img class="shot-dark" src="assets/shot-essentiel-dark.webp" width="1100" height="947" loading="lazy" decoding="async" alt="L’essentiel d’une recette de crêpes en thème sombre"></div>
+      <div class="shot-frame"><img src="assets/shot-nuit.webp" width="1500" height="961" loading="lazy" decoding="async" alt="Orée affichant Wikipédia assombri par le mode nuit, photos intactes"></div>
+    </div>
   </div>
+  <span class="station" data-station style="left:51%;top:26%"></span>
 </section>
 
-<!-- TELECHARGER -->
-<section class="dl" id="telecharger">
-  <div class="wrap dl-in">
-    <svg class="dl-icon-mark" aria-hidden="true"><use href="#mark"/></svg>
-    <img class="dl-icon" src="assets/icon-256.png" width="128" height="128" alt="Icône de l’application Orée">
+<!-- VII. Les saisons -->
+<section class="scene" id="saisons" data-pose="happy" data-say="Choisissez la couleur de ma lanterne !" data-side="right">
+  <div class="wrap scene-in">
+    <div class="tale">
+      <p class="chap reveal"><b>VII</b>Chapitre sept · Les saisons</p>
+      <h2 class="reveal">À chaque saison, <em>sa couleur</em>.</h2>
+      <p class="lede reveal">Six teintes pour l’accent, un thème clair ou sombre, et une barre d’outils que tu réarranges : chaque bouton va où tu veux, à la taille que tu veux, ou n’y va pas.</p>
+      <div class="swatches reveal" id="swatches" role="group" aria-label="Choisir la teinte d’accent">
+        <button type="button" data-a="mousse" aria-pressed="true" aria-label="Mousse" style="background:#2F7354"></button>
+        <button type="button" data-a="brique" aria-pressed="false" aria-label="Brique" style="background:#B04A2A"></button>
+        <button type="button" data-a="ocre" aria-pressed="false" aria-label="Ocre" style="background:#B7842A"></button>
+        <button type="button" data-a="marine" aria-pressed="false" aria-label="Marine" style="background:#2D5C9A"></button>
+        <button type="button" data-a="prune" aria-pressed="false" aria-label="Prune" style="background:#87406F"></button>
+        <button type="button" data-a="graphite" aria-pressed="false" aria-label="Graphite" style="background:#4A4640"></button>
+      </div>
+      <p class="swatch-name reveal" id="swatch-name">Mousse</p>
+      <p class="fine reveal">C’est la vraie palette d’Orée : toute la page, la lanterne de Luciole et le panneau suivent la teinte choisie.</p>
+    </div>
+    <div class="card bar-demo reveal">
+      <div class="mini-win" aria-label="Aperçu d’une barre d’outils réarrangée">
+        <div class="mini-bar"><span class="lights"><i></i><i></i><i></i></span><span class="mini-btn on" title="Barre latérale"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg></span><span class="mini-addr">fr.wikipedia.org/wiki/Lisbonne</span><span class="mini-btn on" title="Luciole"><svg class="ic" aria-hidden="true"><use href="#i-feather"/></svg></span><span class="mini-btn" title="Écran partagé"><svg class="ic" aria-hidden="true"><use href="#i-split"/></svg></span><span class="mini-btn" title="Palette"><svg class="ic" aria-hidden="true"><use href="#i-cmd"/></svg></span></div>
+        <div class="mini-body"><div class="mini-side"><i class="cur"></i><i></i><i></i><i></i></div><div class="mini-page"><i></i><i></i><i></i><i style="width:70%"></i></div></div>
+      </div>
+      <p class="fine">Réglages › Disposition, ou clic droit sur un bouton : emplacement, ordre, taille des icônes, boutons « toujours à leur place » pour que rien ne bouge quand la page change.</p>
+    </div>
+  </div>
+  <span class="station" data-station style="left:47.8%;top:24%"></span>
+</section>
+
+<!-- VIII. Le feu de camp -->
+<section class="scene" id="telecharger" data-pose="happy" data-say="Bonne route !" data-side="right">
+  <div class="wrap camp">
+    <svg class="dl-mark" aria-hidden="true"><use href="#mark"/></svg>
+    <p class="chap reveal" style="justify-content:center"><b>VIII</b>Chapitre huit · Le feu de camp</p>
     <h2 class="reveal">Télécharge Orée.</h2>
-    <p class="lead reveal">Gratuit. macOS 15.4 ou plus récent.</p>
-    <div class="cta-row reveal">
+    <p class="lead reveal">Gratuit. macOS 15.4 ou plus récent. L’aube se lève, la route commence.</p>
+    <div class="cta-row reveal" style="justify-content:center">
       <a class="btn btn-primary btn-lg" id="dl-btn" href="https://github.com/Gwada33/oree/releases/latest/download/Oree-macOS-arm64.dmg"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Télécharger le .dmg</a>
     </div>
     <p class="fine reveal" id="dl-fine">Dernière version · Apple silicon (M1 et suivants)</p>
-
-    <div class="steps reveal">
+    <div class="card steps reveal">
       <ol>
         <li>Ouvre le <em>.dmg</em> et glisse Orée dans <em>Applications</em>.</li>
         <li>Au premier lancement, macOS bloque l’app (elle n’est pas encore notarisée) : ouvre <em>Réglages Système → Confidentialité et sécurité</em>, puis clique <em>Ouvrir quand même</em> sous le message sur Orée. Une seule fois.</li>
@@ -448,19 +345,28 @@
       </ol>
     </div>
   </div>
+  <span class="station" data-station style="right:8%;top:14%"></span>
 </section>
 
-<!-- FAQ -->
+<section class="honest" id="honnete">
+  <div class="wrap">
+    <div class="card honest-in reveal">
+      <h3>Pas encore là</h3>
+      <ul><li>Extensions</li><li>Synchronisation</li><li>Passkeys</li><li>Web hors ligne automatique</li><li>Fenêtres flottantes</li><li>Rappels</li><li>Application notarisée</li><li>Windows, iPhone</li></ul>
+    </div>
+  </div>
+</section>
+
 <section class="sec" id="faq">
-  <div class="wrap faq-wrap">
+  <div class="wrap">
     <h2 class="reveal">Questions fréquentes</h2>
     <div class="faq reveal">
       <details><summary>C’est gratuit ?</summary><p>Oui, sans compte.</p></details>
       <details><summary>Que devient un onglet en pause, puis endormi ?</summary><p>En pause, la page reste en mémoire mais ne calcule plus : elle reprend d’un coup. Endormi, il ne reste que son image ; un clic (ou le survol) recharge la page, depuis le cache quand c’est possible.</p></details>
       <details><summary>Vais-je perdre ce que j’étais en train d’écrire ?</summary><p>Non : un onglet où tu as saisi du texte n’est jamais déchargé, seulement mis en pause. Si le Mac manque vraiment de mémoire, les champs (jamais les mots de passe) et la position d’une vidéo sont sauvegardés puis remis.</p></details>
       <details><summary>Puis-je garder un site toujours éveillé ?</summary><p>Oui : clic droit sur l’onglet → « Ne jamais mettre en veille ce site ». Les messageries courantes le sont déjà.</p></details>
-      <details><summary>Les fonctions avec IA envoient-elles mes pages quelque part ?</summary><p>Non. Elles utilisent le modèle d’Apple qui tourne sur ton Mac (Apple Intelligence), et la traduction aussi. Rien n’est envoyé, rien n’est gardé hors de ton Mac.</p></details>
-      <details><summary>Qu’est-ce qu’il me faut pour les utiliser ?</summary><p>macOS 26 pour la traduction. macOS 26 et Apple Intelligence pour les résumés écrits par le modèle, la personnalisation d’un site et la recherche d’une date dans un texte. Le reste d’Orée (nuit, copier-coller, reprise, recettes dont la page donne les données) marche dès macOS 15.4.</p></details>
+      <details><summary>Les fonctions avec IA envoient-elles mes pages quelque part ?</summary><p>Traduction, résumé « L’essentiel », personnalisation d’un site : non, elles utilisent le modèle d’Apple qui tourne sur ton Mac (Apple Intelligence). Pour Luciole, le cerveau par défaut est un modèle intégré qui tourne aussi sur ton Mac. Si tu choisis toi-même Mistral ou Groq dans les réglages, les pages que Luciole lit leur sont envoyées : c’est écrit dans le panneau tant que c’est le cas.</p></details>
+      <details><summary>Luciole, c’est quoi ?</summary><p>L’assistant d’Orée, dans un panneau à droite (⌘J). Elle lit la page, cherche sur le web et remplit un formulaire à ta place, en montrant chaque action. Elle se trompe parfois : c’est pour cela que rien d’important ne part sans ton accord.</p></details><details><summary>Peut-elle envoyer un formulaire ou payer sans moi ?</summary><p>Non. Avant un envoi, un paiement, une connexion ou un téléchargement, une carte « Validation requise » montre ce qui va partir, et le bouton Valider ne s’active qu’après un instant. Elle ne remplit jamais un mot de passe ni un numéro de carte. Écrire tes informations de profil dans une page demande aussi ton accord.</p></details><details><summary>Que garde Luciole en mémoire ?</summary><p>Tes discussions et un journal de ce qu’elle a fait (le site, la tâche, les actions, le résultat), dans un fichier sur ton Mac, jamais en navigation privée. Jamais les valeurs saisies dans les formulaires. Tu peux couper cette mémoire ou l’effacer dans Réglages › Assistant IA.</p></details><details><summary>Quel modèle choisir pour Luciole ?</summary><p>Le modèle intégré (Sur ce Mac) pour ce qui doit rester privé : plus lent, il se trompe plus. LM Studio pour utiliser un modèle plus gros que tu as déjà sur ton Mac. Mistral ou Groq pour la vitesse et la fiabilité des actions, au prix d’un envoi des pages lues à ces services.</p></details><details><summary>Qu’est-ce qu’il me faut pour les utiliser ?</summary><p>macOS 26 pour la traduction. macOS 26 et Apple Intelligence pour les résumés écrits par le modèle, la personnalisation d’un site et la recherche d’une date dans un texte. Le reste d’Orée (nuit, copier-coller, reprise, recettes dont la page donne les données) marche dès macOS 15.4.</p></details>
       <details><summary>Le modèle peut-il se tromper ?</summary><p>Oui, et Orée le dit. Un résumé garde seulement ce qui se retrouve dans la page, une date n’est proposée que si la page la cite, et tu confirmes avant qu’un événement soit ajouté.</p></details>
       <details><summary>Une personnalisation peut-elle casser un site ?</summary><p>Elle ne peut changer que le style, pour ce site seulement. Les règles sont vérifiées avant d’être appliquées, jamais de script, et « Annuler » (ou ⌘K › « Retirer les changements ») remet la page comme avant.</p></details>
       <details><summary>Pourquoi Calendrier me demande de confirmer ?</summary><p>Parce qu’Orée n’a aucun accès à tes agendas : il ouvre Calendrier avec un fichier d’événement, et c’est Calendrier qui te laisse choisir où l’ajouter.</p></details>
@@ -489,6 +395,6 @@
   </div>
 </footer>
 
-<script src="script.js"></script>
+<script src="script.js?v=16"></script>
 </body>
 </html>
