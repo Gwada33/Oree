@@ -7,492 +7,6 @@ import OreeAIProtocol
 import BrowserStorage
 import WebKit
 
-/// Un message de la conversation d'un onglet. Une réponse de l'IA porte la trace des actions faites pour la produire, et ses sources.
-struct AIMessage {
-    enum Role { case user, assistant }
-    var role: Role
-    var text: String
-    var trace: [AgentTraceItem] = []
-    var sources: [String] = []
-}
-
-/// Ce que le fil affiche en plus des messages : une action à valider, ou une question de l'IA, ou rien.
-struct AIPending: Equatable {
-    enum Kind: Equatable { case confirm(String), question(String) }
-    var kind: Kind
-    var since: Date
-    /// « Valider » ne répond qu'après 0,8 s : impossible à valider d'un clic réflexe.
-    var armed: Bool { Date().timeIntervalSince(since) >= 0.8 }
-}
-
-/// La poignée du bord gauche du panneau : on la tire pour changer sa largeur (320 à 520 pt), comme la barre latérale gauche.
-@MainActor
-private final class PanelHandle: NSView {
-    var onDrag: ((CGFloat) -> Void)?       // largeur voulue
-    var onEnd: (() -> Void)?
-    var currentWidth: () -> CGFloat = { 380 }
-    private var startX: CGFloat = 0, startWidth: CGFloat = 0
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        translatesAutoresizingMaskIntoConstraints = false
-        setAccessibilityElement(true)
-        setAccessibilityRole(.splitter)
-        setAccessibilityLabel("Largeur du panneau IA")
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) { startX = NSEvent.mouseLocation.x; startWidth = currentWidth() }
-    override func mouseDragged(with event: NSEvent) { onDrag?(startWidth + (startX - NSEvent.mouseLocation.x)) }
-    override func mouseUp(with event: NSEvent) { onEnd?() }
-}
-
-private final class FlippedView: NSView { override var isFlipped: Bool { true } }
-
-/// Le panneau IA : une colonne collée au bord droit de la fenêtre. Il ne décide de rien : il montre ce que `AIPanelController` lui donne.
-@MainActor
-final class AIPanelView: SurfaceView, NSTextViewDelegate {
-    // En-tête
-    let mascot = LucioleView(size: 28)
-    private let title = oreeLabel("Luciole", font: Theme.serifItalic(19), color: Theme.text)
-    private let chip = oreeLabel("", font: Theme.sans(11.5, .medium), color: Theme.muted)
-    private let newChat = ChromeIconButton(symbol: "square.and.pencil", label: "Nouvelle conversation", size: 28, pointSize: 13)
-    private let closeButton = ChromeIconButton(symbol: "xmark", label: "Fermer le panneau", size: 28, pointSize: 12)
-    private let context = oreeLabel("", font: Theme.sans(12), color: Theme.muted)
-    private let contextBox = SurfaceView(fill: Theme.hover, cornerRadius: Theme.pill)
-    // Corps
-    private let scroll = NSScrollView()
-    private let document = FlippedView()
-    private let stack = NSStackView()
-    private let emptyState = NSView()
-    private let bigMascot = LucioleView(size: 64)
-    private let emptyTitle = oreeLabel("", font: Theme.serifItalic(26), color: Theme.text, lines: 0)
-    private let emptyText = oreeLabel("", font: Theme.sans(13), color: Theme.muted, lines: 0)
-    private let progress = NSProgressIndicator()
-    private let download = TextButton("Télécharger le modèle", style: .primary)
-    private let suggestions = NSStackView()
-    private let questionField = NSTextField()
-    private var expandedTraces: Set<Int> = []
-    // Composeur
-    private let composer = NSTextView()
-    private let composerScroll = NSScrollView()
-    private let placeholder = oreeLabel("", font: Theme.sans(13), color: Theme.muted)
-    private let send = ChromeIconButton(symbol: "arrow.up", label: "Envoyer", size: 28, pointSize: 13)
-    private let note = oreeLabel("Tout reste sur ce Mac · l'IA peut se tromper", font: Theme.sans(11), color: Theme.muted)
-    private var composerHeight: NSLayoutConstraint!
-    private let handle = PanelHandle()
-
-    private var running = false
-    private var canAsk = false
-
-    var onSubmit: ((String) -> Void)?
-    var onStop: (() -> Void)?
-    var onDownload: (() -> Void)?
-    var onClose: (() -> Void)?
-    var onNewChat: (() -> Void)?
-    var onToggleShare: (() -> Void)?
-    var onConfirm: ((Bool) -> Void)?
-    var onAnswer: ((String?) -> Void)?
-    var onCopy: ((String) -> Void)?
-    var onOpenSource: ((URL) -> Void)?
-    var onResize: ((CGFloat) -> Void)? { didSet { handle.onDrag = onResize } }
-    var onResizeEnd: (() -> Void)? { didSet { handle.onEnd = onResizeEnd } }
-    var currentWidth: () -> CGFloat = { 380 } { didSet { handle.currentWidth = currentWidth } }
-
-    init() {
-        super.init(fill: Theme.page)
-        setAccessibilityElement(false)
-        setAccessibilityLabel("Panneau IA")
-        build()
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    private func rule(vertical: Bool = false) -> NSView {
-        let line = SurfaceView(fill: Theme.line)
-        (vertical ? line.widthAnchor : line.heightAnchor).constraint(equalToConstant: 1).isActive = true
-        return line
-    }
-
-    private func build() {
-        // En-tête : 48 pt, mascotte, titre, état du modèle, nouvelle conversation, fermer.
-        title.setContentCompressionResistancePriority(.required, for: .horizontal)
-        chip.lineBreakMode = .byTruncatingTail
-        chip.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        newChat.onClick = { [weak self] in self?.onNewChat?() }
-        closeButton.onClick = { [weak self] in self?.onClose?() }
-        let header = NSStackView(views: [mascot, title, chip, NSView(), newChat, closeButton])
-        header.orientation = .horizontal; header.spacing = 8; header.alignment = .centerY
-        header.edgeInsets = NSEdgeInsets(top: 0, left: 16, bottom: 0, right: 12)
-        header.translatesAutoresizingMaskIntoConstraints = false
-        header.views[3].setContentHuggingPriority(.defaultLow, for: .horizontal)
-
-        // Puce de contexte : ce que l'IA voit. Un clic la coupe ou la rétablit (la page n'est alors pas partagée).
-        context.lineBreakMode = .byTruncatingTail
-        contextBox.addSubview(context)
-        contextBox.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleShare)))
-        contextBox.setAccessibilityElement(true)
-        contextBox.setAccessibilityRole(.button)
-        contextBox.toolTip = "Partager ou non la page avec l'IA"
-        NSLayoutConstraint.activate([
-            context.leadingAnchor.constraint(equalTo: contextBox.leadingAnchor, constant: 10), context.trailingAnchor.constraint(equalTo: contextBox.trailingAnchor, constant: -10),
-            context.centerYAnchor.constraint(equalTo: contextBox.centerYAnchor), contextBox.heightAnchor.constraint(equalToConstant: 24),
-        ])
-
-        // Fil de conversation : une pile verticale (messages, trace, cartes) dans un défilement.
-        stack.orientation = .vertical; stack.spacing = 16; stack.alignment = .leading
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        document.translatesAutoresizingMaskIntoConstraints = false
-        document.addSubview(stack)
-        scroll.documentView = document
-        scroll.hasVerticalScroller = true; scroll.drawsBackground = false; scroll.borderType = .noBorder
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            stack.topAnchor.constraint(equalTo: document.topAnchor, constant: 14), stack.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -16),
-            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 16), stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -16),
-        ])
-
-        // État vide / états du modèle (même emplacement)
-        progress.style = .bar; progress.isIndeterminate = false; progress.minValue = 0; progress.maxValue = 1
-        progress.translatesAutoresizingMaskIntoConstraints = false
-        progress.setAccessibilityLabel("Progression du téléchargement")
-        download.onClick = { [weak self] in self?.onDownload?() }
-        suggestions.orientation = .vertical; suggestions.spacing = 6; suggestions.alignment = .leading
-        let stateStack = NSStackView(views: [bigMascot, emptyTitle, emptyText, progress, download, suggestions])
-        stateStack.orientation = .vertical; stateStack.spacing = 12; stateStack.alignment = .leading
-        stateStack.setCustomSpacing(16, after: bigMascot)
-        stateStack.translatesAutoresizingMaskIntoConstraints = false
-        emptyState.translatesAutoresizingMaskIntoConstraints = false
-        emptyState.addSubview(stateStack)
-        NSLayoutConstraint.activate([
-            stateStack.topAnchor.constraint(equalTo: emptyState.topAnchor, constant: 32),
-            stateStack.leadingAnchor.constraint(equalTo: emptyState.leadingAnchor, constant: 24), stateStack.trailingAnchor.constraint(equalTo: emptyState.trailingAnchor, constant: -24),
-            progress.widthAnchor.constraint(equalTo: stateStack.widthAnchor),
-        ])
-
-        // Composeur : champ multiligne (Entrée envoie, ⇧Entrée = saut de ligne), bouton envoyer / arrêter.
-        composer.font = Theme.sans(13); composer.textColor = Theme.text
-        composer.drawsBackground = false; composer.isRichText = false; composer.allowsUndo = true
-        composer.textContainerInset = NSSize(width: 0, height: 6)
-        composer.isVerticallyResizable = true; composer.isHorizontallyResizable = false
-        composer.autoresizingMask = [.width]
-        composer.textContainer?.widthTracksTextView = true
-        composer.delegate = self
-        composer.setAccessibilityLabel("Message à Luciole")
-        composerScroll.documentView = composer
-        composerScroll.drawsBackground = false; composerScroll.borderType = .noBorder; composerScroll.hasVerticalScroller = false
-        composerScroll.translatesAutoresizingMaskIntoConstraints = false
-        send.onClick = { [weak self] in self?.sendOrStop() }
-        let field = SurfaceView(fill: Theme.field, cornerRadius: Theme.radius)
-        field.border = Theme.line
-        for v in [composerScroll, placeholder, send] as [NSView] { field.addSubview(v) }
-        composerHeight = composerScroll.heightAnchor.constraint(equalToConstant: 32)
-        NSLayoutConstraint.activate([
-            composerScroll.topAnchor.constraint(equalTo: field.topAnchor, constant: 4), composerScroll.leadingAnchor.constraint(equalTo: field.leadingAnchor, constant: 12),
-            composerScroll.trailingAnchor.constraint(equalTo: send.leadingAnchor, constant: -4), composerHeight,
-            composerScroll.bottomAnchor.constraint(equalTo: field.bottomAnchor, constant: -4),
-            placeholder.leadingAnchor.constraint(equalTo: composerScroll.leadingAnchor, constant: 5), placeholder.centerYAnchor.constraint(equalTo: composerScroll.topAnchor, constant: 16),
-            placeholder.trailingAnchor.constraint(equalTo: composerScroll.trailingAnchor),
-            send.trailingAnchor.constraint(equalTo: field.trailingAnchor, constant: -6), send.bottomAnchor.constraint(equalTo: field.bottomAnchor, constant: -6),
-        ])
-        placeholder.isEnabled = false
-
-        let footer = NSStackView(views: [field, note])
-        footer.orientation = .vertical; footer.spacing = 8; footer.alignment = .leading
-        footer.edgeInsets = NSEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
-        footer.translatesAutoresizingMaskIntoConstraints = false
-        field.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -16).isActive = true
-
-        let contextRow = NSView(); contextRow.translatesAutoresizingMaskIntoConstraints = false
-        contextRow.addSubview(contextBox)
-        NSLayoutConstraint.activate([
-            contextBox.leadingAnchor.constraint(equalTo: contextRow.leadingAnchor, constant: 16), contextBox.topAnchor.constraint(equalTo: contextRow.topAnchor),
-            contextBox.bottomAnchor.constraint(equalTo: contextRow.bottomAnchor, constant: -8),
-            contextBox.trailingAnchor.constraint(lessThanOrEqualTo: contextRow.trailingAnchor, constant: -16),
-        ])
-
-        let topRule = rule(), bottomRule = rule(), leftRule = rule(vertical: true)
-        handle.translatesAutoresizingMaskIntoConstraints = false
-        for v in [header, contextRow, topRule, scroll, emptyState, bottomRule, footer, leftRule, handle] as [NSView] { addSubview(v) }
-        NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: topAnchor), header.leadingAnchor.constraint(equalTo: leadingAnchor), header.trailingAnchor.constraint(equalTo: trailingAnchor),
-            header.heightAnchor.constraint(equalToConstant: 48),
-            contextRow.topAnchor.constraint(equalTo: header.bottomAnchor), contextRow.leadingAnchor.constraint(equalTo: leadingAnchor), contextRow.trailingAnchor.constraint(equalTo: trailingAnchor),
-            topRule.topAnchor.constraint(equalTo: contextRow.bottomAnchor), topRule.leadingAnchor.constraint(equalTo: leadingAnchor), topRule.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: topRule.bottomAnchor), scroll.leadingAnchor.constraint(equalTo: leadingAnchor), scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
-            emptyState.topAnchor.constraint(equalTo: topRule.bottomAnchor), emptyState.leadingAnchor.constraint(equalTo: leadingAnchor), emptyState.trailingAnchor.constraint(equalTo: trailingAnchor),
-            emptyState.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
-            bottomRule.topAnchor.constraint(equalTo: scroll.bottomAnchor), bottomRule.leadingAnchor.constraint(equalTo: leadingAnchor), bottomRule.trailingAnchor.constraint(equalTo: trailingAnchor),
-            footer.topAnchor.constraint(equalTo: bottomRule.bottomAnchor), footer.leadingAnchor.constraint(equalTo: leadingAnchor), footer.trailingAnchor.constraint(equalTo: trailingAnchor),
-            footer.bottomAnchor.constraint(equalTo: bottomAnchor),
-            leftRule.leadingAnchor.constraint(equalTo: leadingAnchor), leftRule.topAnchor.constraint(equalTo: topAnchor), leftRule.bottomAnchor.constraint(equalTo: bottomAnchor),
-            handle.leadingAnchor.constraint(equalTo: leadingAnchor, constant: -3), handle.widthAnchor.constraint(equalToConstant: 8),
-            handle.topAnchor.constraint(equalTo: topAnchor), handle.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-    }
-
-    @objc private func toggleShare() { onToggleShare?() }
-
-    // MARK: Affichage
-
-    struct Screen {
-        var pose: LucioleState
-        var chip: String
-        var context: String
-        var title: String          // état vide / état du modèle
-        var text: String
-        var progress: Double?      // téléchargement
-        var offersDownload: Bool
-        var showsEmpty: Bool       // vrai : l'état vide remplace le fil
-        var suggestions: [(label: String, fill: String)]
-        var canAsk: Bool
-        var running: Bool
-        var placeholder: String
-    }
-
-    func show(_ screen: Screen) {
-        canAsk = screen.canAsk; running = screen.running
-        mascot.apply(screen.pose); bigMascot.apply(screen.pose)
-        chip.stringValue = screen.chip
-        context.stringValue = screen.context
-        contextBox.setAccessibilityLabel(screen.context)
-        emptyTitle.stringValue = screen.title
-        emptyText.stringValue = screen.text
-        progress.isHidden = screen.progress == nil
-        progress.doubleValue = screen.progress ?? 0
-        download.isHidden = !screen.offersDownload
-        emptyState.isHidden = !screen.showsEmpty
-        scroll.isHidden = screen.showsEmpty
-        suggestions.arrangedSubviews.forEach { suggestions.removeArrangedSubview($0); $0.removeFromSuperview() }
-        if screen.canAsk {
-            for suggestion in screen.suggestions {
-                let button = TextButton(suggestion.label, style: .secondary)
-                button.onClick = { [weak self] in self?.fill(suggestion.fill) }
-                suggestions.addArrangedSubview(button)
-            }
-        }
-        placeholder.stringValue = screen.placeholder
-        composer.isEditable = screen.canAsk && !screen.running
-        send.symbol = screen.running ? "stop.fill" : "arrow.up"
-        send.toolTip = screen.running ? "Arrêter" : "Envoyer"
-        send.setAccessibilityLabel(screen.running ? "Arrêter" : "Envoyer")
-        send.isEnabled = screen.running || (screen.canAsk && !composer.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        placeholder.isHidden = !composer.string.isEmpty
-    }
-
-    // MARK: Le fil
-
-    private func label(_ text: String, font: NSFont, color: NSColor, selectable: Bool = true) -> NSTextField {
-        let l = oreeLabel(text, font: font, color: color, lines: 0)
-        l.isSelectable = selectable
-        return l
-    }
-
-    private func author(_ name: String, color: NSColor) -> NSTextField {
-        let l = NSTextField(labelWithString: "")
-        l.attributedStringValue = NSAttributedString(string: name.uppercased(), attributes: [.font: Theme.sans(10.5, .bold), .foregroundColor: color, .kern: 0.6])
-        l.translatesAutoresizingMaskIntoConstraints = false
-        return l
-    }
-
-    /// Une pile de lignes qui prend toute la largeur du fil.
-    private func column(_ views: [NSView], spacing: CGFloat) -> NSStackView {
-        let s = NSStackView(views: views)
-        s.orientation = .vertical; s.alignment = .leading; s.spacing = spacing
-        s.translatesAutoresizingMaskIntoConstraints = false
-        return s
-    }
-
-    private func addFullWidth(_ view: NSView) {
-        stack.addArrangedSubview(view)
-        view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-    }
-
-    func setTranscript(_ messages: [AIMessage], writing: Bool, pending: AIPending?) {
-        stack.arrangedSubviews.forEach { stack.removeArrangedSubview($0); $0.removeFromSuperview() }
-        for (index, message) in messages.enumerated() {
-            let isLast = index == messages.count - 1
-            switch message.role {
-            case .user:
-                addFullWidth(column([author("Vous", color: Theme.muted), label(message.text, font: Theme.sans(13.5), color: Theme.text)], spacing: 3))
-            case .assistant:
-                var parts: [NSView] = []
-                if !message.trace.isEmpty { parts.append(traceView(message.trace, index: index, live: isLast && writing)) }
-                parts.append(author("Luciole", color: Theme.accentInk))
-                if message.text.isEmpty, isLast, writing, pending == nil { parts.append(label("▍", font: Theme.sans(13.5), color: Theme.muted, selectable: false)) }
-                else if !message.text.isEmpty { parts.append(label(message.text, font: Theme.sans(13.5), color: Theme.text)) }
-                if !message.sources.isEmpty { parts.append(sourcesView(message.sources)) }
-                if !message.text.isEmpty, !(isLast && writing) {
-                    let copy = TextButton("Copier", style: .ghost)
-                    copy.onClick = { [weak self] in self?.onCopy?(message.text) }
-                    parts.append(copy)
-                }
-                addFullWidth(column(parts, spacing: 6))
-            }
-        }
-        if let pending {
-            switch pending.kind {
-            case .confirm(let summary): addFullWidth(confirmCard(summary, armed: pending.armed))
-            case .question(let text): addFullWidth(questionCard(text))
-            }
-        }
-        document.layoutSubtreeIfNeeded()
-        let overflow = document.bounds.height - scroll.contentView.bounds.height
-        if overflow > 0 { scroll.contentView.scroll(to: NSPoint(x: 0, y: overflow)); scroll.reflectScrolledClipView(scroll.contentView) }
-        if case .question = pending?.kind, window?.firstResponder !== questionField.currentEditor() { window?.makeFirstResponder(questionField) }
-    }
-
-    /// Une ligne par action, avec son état. Repliée une fois la tâche finie (un clic sur l'en-tête la rouvre).
-    private func traceView(_ items: [AgentTraceItem], index: Int, live: Bool) -> NSView {
-        let expanded = live || expandedTraces.contains(index)
-        let failed = items.filter { $0.state == .failed }.count
-        var title = "\(expanded ? "▾" : "▸")  \(items.count) action" + (items.count > 1 ? "s" : "")
-        if failed > 0, !live { title += " · \(failed) échouée" + (failed > 1 ? "s" : "") }
-        let head = NSTextField(labelWithString: title)
-        head.font = Theme.sans(12, .medium); head.textColor = Theme.muted
-        head.translatesAutoresizingMaskIntoConstraints = false
-        head.setAccessibilityRole(.button)
-        head.setAccessibilityLabel("Actions de l'IA : \(items.count)")
-        var rows: [NSView] = [head]
-        if !live {
-            let click = NSClickGestureRecognizer(target: self, action: #selector(traceClicked(_:)))
-            head.addGestureRecognizer(click)
-            head.identifier = NSUserInterfaceItemIdentifier("\(index)")
-        }
-        if expanded {
-            for item in items {
-                let symbol = item.state == .running ? "circle.dotted" : item.state == .done ? "checkmark" : "xmark"
-                let image = NSImageView(image: NSImage(systemSymbolName: symbol, accessibilityDescription: item.state == .failed ? "Échec" : item.state == .done ? "Fait" : "En cours") ?? NSImage())
-                image.contentTintColor = item.state == .failed ? Theme.hueInk(.brique) : item.state == .done ? Theme.accentInk : Theme.muted
-                image.translatesAutoresizingMaskIntoConstraints = false
-                image.widthAnchor.constraint(equalToConstant: 14).isActive = true
-                let text = label(item.text, font: Theme.sans(12), color: Theme.muted)
-                let row = NSStackView(views: [image, text])
-                row.orientation = .horizontal; row.alignment = .firstBaseline; row.spacing = 6
-                row.translatesAutoresizingMaskIntoConstraints = false
-                rows.append(row)
-            }
-        }
-        return column(rows, spacing: 4)
-    }
-
-    @objc private func traceClicked(_ gesture: NSClickGestureRecognizer) {
-        guard let id = gesture.view?.identifier?.rawValue, let index = Int(id) else { return }
-        if expandedTraces.contains(index) { expandedTraces.remove(index) } else { expandedTraces.insert(index) }
-        onRefresh?()
-    }
-    var onRefresh: (() -> Void)?
-
-    private func sourcesView(_ urls: [String]) -> NSView {
-        var views: [NSView] = [label("Sources", font: Theme.sans(11, .semibold), color: Theme.muted, selectable: false)]
-        for string in urls.prefix(4) {
-            guard let url = URL(string: string) else { continue }
-            let button = NSButton(title: url.host ?? string, target: nil, action: nil)
-            button.isBordered = false; button.alignment = .left
-            button.contentTintColor = Theme.accentInk
-            button.font = Theme.sans(12)
-            button.toolTip = string
-            button.setAccessibilityLabel("Ouvrir la source \(url.host ?? string)")
-            button.target = self
-            button.action = #selector(openSource(_:))
-            button.cell?.representedObject = url
-            views.append(button)
-        }
-        return column(views, spacing: 2)
-    }
-
-    @objc private func openSource(_ sender: NSButton) { if let url = sender.cell?.representedObject as? URL { onOpenSource?(url) } }
-
-    /// La carte « à valider » : impossible à rater (cadre ocre, ombre), impossible à valider d'un geste réflexe (0,8 s, jamais la touche Entrée).
-    private func confirmCard(_ summary: String, armed: Bool) -> NSView {
-        let card = SurfaceView(fill: Theme.raised, cornerRadius: Theme.radius)
-        card.border = Theme.hue(.ocre); card.borderWidth = 1.5; card.elevation = .two
-        let heading = author("À valider", color: Theme.hueInk(.ocre))
-        let text = label(summary, font: Theme.sans(13.5, .medium), color: Theme.text)
-        let hint = label("Rien n'est envoyé tant que vous n'avez pas validé.", font: Theme.sans(11.5), color: Theme.muted)
-        let cancel = TextButton("Annuler", style: .secondary) { [weak self] in self?.onConfirm?(false) }
-        let ok = TextButton("Valider", style: .primary) { [weak self] in self?.onConfirm?(true) }
-        ok.alphaValue = armed ? 1 : 0.4
-        if !armed { ok.onClick = nil }
-        ok.setAccessibilityLabel(armed ? "Valider" : "Valider (disponible dans un instant)")
-        let buttons = NSStackView(views: [cancel, ok]); buttons.spacing = 8
-        let content = column([heading, text, hint, buttons], spacing: 8)
-        card.addSubview(content)
-        NSLayoutConstraint.activate([
-            content.topAnchor.constraint(equalTo: card.topAnchor, constant: 14), content.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -14),
-            content.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14), content.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
-        ])
-        card.setAccessibilityElement(true); card.setAccessibilityRole(.group); card.setAccessibilityLabel("Action à valider : \(summary)")
-        return card
-    }
-
-    private func questionCard(_ question: String) -> NSView {
-        let card = SurfaceView(fill: Theme.raised, cornerRadius: Theme.radius)
-        card.border = Theme.line
-        let heading = author("Luciole demande", color: Theme.accentInk)
-        let text = label(question, font: Theme.sans(13.5), color: Theme.text)
-        questionField.placeholderString = "Votre réponse"
-        questionField.font = Theme.sans(13); questionField.focusRingType = .none
-        questionField.isBordered = false; questionField.drawsBackground = true; questionField.backgroundColor = Theme.field
-        questionField.target = self; questionField.action = #selector(answerSubmitted)
-        questionField.translatesAutoresizingMaskIntoConstraints = false
-        questionField.heightAnchor.constraint(equalToConstant: 28).isActive = true
-        questionField.setAccessibilityLabel("Réponse à la question de Luciole")
-        let reply = TextButton("Répondre", style: .primary) { [weak self] in self?.answerSubmitted() }
-        let skip = TextButton("Passer", style: .ghost) { [weak self] in self?.questionField.stringValue = ""; self?.onAnswer?(nil) }
-        let buttons = NSStackView(views: [reply, skip]); buttons.spacing = 8
-        let content = column([heading, text, questionField, buttons], spacing: 8)
-        questionField.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-        card.addSubview(content)
-        NSLayoutConstraint.activate([
-            content.topAnchor.constraint(equalTo: card.topAnchor, constant: 14), content.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -14),
-            content.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14), content.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
-        ])
-        return card
-    }
-
-    @objc private func answerSubmitted() {
-        let text = questionField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        questionField.stringValue = ""
-        onAnswer?(text.isEmpty ? nil : text)
-    }
-
-    var focusedOnQuestion: Bool { questionField.currentEditor() != nil }
-    func focus() { window?.makeFirstResponder(composer) }
-    func fill(_ text: String) { composer.string = text; textDidChange(Notification(name: NSText.didChangeNotification)); focus() }
-    func clearComposer() { composer.string = ""; textDidChange(Notification(name: NSText.didChangeNotification)) }
-    var visibleText: String { stack.arrangedSubviews.map { $0.debugDescription }.joined() }
-
-    // MARK: Clavier
-
-    private func sendOrStop() {
-        if running { onStop?(); return }
-        let text = composer.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        if canAsk, !text.isEmpty { onSubmit?(text) }
-    }
-
-    func textDidChange(_ notification: Notification) {
-        placeholder.isHidden = !composer.string.isEmpty
-        send.isEnabled = running || (canAsk && !composer.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        guard let layout = composer.layoutManager, let container = composer.textContainer else { return }
-        layout.ensureLayout(for: container)
-        composerHeight.constant = min(max(layout.usedRect(for: container).height + 12, 32), 120)   // 1 à 5 lignes environ
-    }
-
-    func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        switch selector {
-        case #selector(NSResponder.insertNewline(_:)):
-            sendOrStop()                    // ⇧Entrée envoie `insertLineBreak:` : le saut de ligne reste libre
-            return true
-        case #selector(NSResponder.cancelOperation(_:)):
-            onClose?()
-            return true
-        default: return false
-        }
-    }
-}
-
 /// Fait le lien entre le panneau, le service IA, la page, la recherche, le téléchargement du modèle et l'agent launchd. Une conversation par onglet.
 ///
 /// Rien ne démarre avant la première ouverture : ni l'agent, ni la connexion au service. Une tâche à la fois (le service refuse la seconde).
@@ -505,9 +19,11 @@ final class AIPanelView: SurfaceView, NSTextViewDelegate {
 final class AIPanelController {
     struct Hooks {
         var activeWebView: () -> WKWebView?
+        var pageHost: () -> NSView?                // la zone de la page : Luciole s'y déplace au-dessus de la WebView
         var navigate: (String) async -> Bool
         var openTab: (URL) -> Void
         var windowWidth: () -> CGFloat
+        var isPrivate: () -> Bool                  // l'onglet actif est privé : rien n'est gardé
         var onLayout: (CGFloat) -> Void           // largeur dont la page doit s'écarter (0 : rien)
     }
 
@@ -521,10 +37,14 @@ final class AIPanelController {
     private let machName = ProcessInfo.processInfo.environment["HB_AI_MACH_NAME"] ?? OreeAIServiceInfo.machName
     private var widthConstraint: NSLayoutConstraint!
     private let search = SearchTab()
+    private let cursor = AgentCursor()
+    private func attachCursor() { if let host = hooks.pageHost() { cursor.attach(to: host) } }
 
     private var reachable: Bool?
     private var status: AIStatus?
     private var download: AIDownloadProgress?
+    private var downloadSpeed: Double = 0
+    private var lastSample: (date: Date, bytes: Int64)?
     private var downloadID: UUID?
     private var downloadTask: Task<Void, Never>?
     private var eventsTask: Task<Void, Never>?
@@ -533,7 +53,34 @@ final class AIPanelController {
     private var conversations: [UUID: [AIMessage]] = [:]
     private var currentTab: UUID?
     private var currentTitle = ""
+    // Mémoire (discussions passées + journal) : un fichier sur ce Mac, jamais en navigation privée.
+    private var memory = LucioleMemory.load()
+    private var discussionIDs: [UUID: UUID] = [:]            // onglet → discussion en cours
+    private var pendingFacts: [String] = []                  // ce que la personne a répondu aux questions de la tâche en cours
+    private static let saveQueue = DispatchQueue(label: "oree.luciole.memory")
+    private var memoryOn: Bool { SettingsStore.shared.lucioleMemoryEnabled && !hooks.isPrivate() }
+    /// Un lien ouvert depuis le panneau s'ouvre dans un nouvel onglet : la discussion l'y suit (sinon elle « disparaît » à chaque lien cliqué).
+    private var inheritFrom: UUID?
+    private var lastPartialRefresh = Date.distantPast
     private var shareContext = true
+    private var cloudKeys: Set<AIProvider> = AIPanelController.presentKeys()
+    private static func presentKeys() -> Set<AIProvider> { Set(AIProvider.allCases.filter { $0.isCloud && CloudKeychain($0).hasKey }) }
+    private var cloudKeyPresent: Bool { cloudKeys.contains(provider) }
+    /// LM Studio : le serveur local répond-il (nil : pas encore essayé) et quels modèles de conversation propose-t-il ?
+    private var lmStudio: (reachable: Bool?, models: [String]) = (nil, [])
+    private var lmModel: String? { LMStudio.chooseModel(preferred: SettingsStore.shared.aiModel(for: .lmstudio), available: lmStudio.models) }
+
+    private func probeLMStudio() async {
+        let url = LMStudio.modelsURL(base: SettingsStore.shared.lmStudioBase)
+        var request = URLRequest(url: url, timeoutInterval: 3)
+        request.httpMethod = "GET"
+        if let (data, response) = try? await URLSession.shared.data(for: request), (response as? HTTPURLResponse)?.statusCode == 200 {
+            lmStudio = (true, LMStudio.parseModels(data))
+        } else { lmStudio = (false, []) }
+        refresh()
+    }
+    /// Le fournisseur en usage : Groq (nuage) ou le modèle local. Les pages lues partent chez Groq quand il est choisi : le panneau le dit.
+    private var provider: AIProvider { AIProvider.effective(stored: SettingsStore.shared.aiProviderChoice, keys: cloudKeys) }
     // La tâche en cours
     private var agentTask: Task<Void, Never>?
     private var runTab: UUID?
@@ -560,14 +107,20 @@ final class AIPanelController {
         ])
         panel.onSubmit = { [weak self] text in self?.ask(text) }
         panel.onStop = { [weak self] in self?.stop() }
-        panel.onDownload = { [weak self] in self?.downloadModel() }
+        panel.onModelAction = { [weak self] action in self?.modelAction(action) }
         panel.onClose = { [weak self] in self?.close() }
         panel.onNewChat = { [weak self] in self?.newConversation() }
+        panel.onHistory = { [weak self] anchor in self?.showHistory(from: anchor) }
         panel.onToggleShare = { [weak self] in self?.shareContext.toggle(); self?.refresh() }
         panel.onConfirm = { [weak self] ok in self?.resolveConfirm(ok) }
         panel.onAnswer = { [weak self] text in self?.resolveQuestion(text) }
         panel.onCopy = { text in NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
-        panel.onOpenSource = { [weak self] url in self?.hooks.openTab(url) }
+        panel.onOpenSource = { [weak self] url in
+            guard let self else { return }
+            self.inheritFrom = self.currentTab
+            self.hooks.openTab(url)
+            self.inheritFrom = nil
+        }
         panel.onRefresh = { [weak self] in self?.refresh() }
         panel.currentWidth = { [weak self] in CGFloat(self?.width ?? 380) }
         panel.onResize = { [weak self] wanted in self?.resize(to: Double(wanted)) }
@@ -584,7 +137,24 @@ final class AIPanelController {
     var view: NSView { panel }
     var isOpen: Bool { !panel.isHidden }
 
-    private var availability: AIAvailability { AIAvailability(reachable: reachable, status: status, download: download) }
+    private var availability: AIAvailability {
+        #if DEBUG
+        // Dev (debug seulement) : `HB_AI_FAKE_STATE` montre un état du modèle sans le provoquer, pour relire les écrans.
+        switch ProcessInfo.processInfo.environment["HB_AI_FAKE_STATE"] {
+        case "needsModel": return .needsModel
+        case "downloading": return .downloading(AIDownloadProgress(received: Int64(Double(pin.size) * 0.56), total: pin.size))
+        case "verifying": return .verifying
+        case "corrupt": return .corrupt
+        case "connecting": return .connecting
+        case "unreachable": return .unreachable
+        default: break
+        }
+        #endif
+        if provider == .lmstudio {
+            switch lmStudio.reachable { case nil: return .connecting; case false?: return .unreachable; case true?: return lmStudio.models.isEmpty ? .unreachable : .ready(.warm) }
+        }
+        return provider.isCloud ? (cloudKeyPresent ? .ready(.warm) : .unreachable) : AIAvailability(reachable: reachable, status: status, download: download)
+    }
     private var isRunning: Bool { agentTask != nil }
     private var messages: [AIMessage] {
         get { currentTab.flatMap { conversations[$0] } ?? [] }
@@ -594,6 +164,7 @@ final class AIPanelController {
     func toggle() { isOpen ? close() : open() }
 
     func open() {
+        cloudKeys = Self.presentKeys()
         panel.isHidden = false
         onVisibilityChange?(true)
         dock()
@@ -613,12 +184,15 @@ final class AIPanelController {
     /// Le panneau pousse la page si la fenêtre est assez large ; sinon il la recouvre.
     private func dock() {
         guard isOpen else { return }
-        hooks.onLayout(AIPanelMetrics.pushesPage(windowWidth: Double(hooks.windowWidth())) ? CGFloat(width) : 0)
+        let windowWidth = hooks.windowWidth()
+        let pushes = AIPanelMetrics.pushesPage(windowWidth: Double(windowWidth))
+        panel.setOverlay(!pushes)
+        widthConstraint.constant = pushes ? CGFloat(width) : min(CGFloat(width), windowWidth * 0.86)      // par-dessus la page : au plus 86 % de la fenêtre
+        hooks.onLayout(pushes ? widthConstraint.constant : 0)
     }
 
     private func resize(to wanted: Double) {
         width = AIPanelMetrics.clamp(wanted)
-        widthConstraint.constant = CGFloat(width)
         dock()
     }
 
@@ -626,6 +200,8 @@ final class AIPanelController {
 
     /// L'onglet actif a changé : sa conversation revient. Le titre sert à la puce de contexte.
     func tabChanged(id: UUID?, title: String?) {
+        if currentTab != id { failure = nil }                                    // une erreur d'un autre onglet ne s'affiche pas ici
+        if let id, let source = inheritFrom, source != id, conversations[id] == nil { conversations[id] = conversations[source] }
         currentTab = id
         currentTitle = title ?? ""
         refresh()
@@ -634,6 +210,7 @@ final class AIPanelController {
 
     func newConversation() {
         if isRunning { stop() }
+        if let tab = currentTab { discussionIDs[tab] = nil }       // l'ancienne reste dans l'historique
         messages = []
         failure = nil
         refresh()
@@ -644,6 +221,8 @@ final class AIPanelController {
 
     /// Installe l'agent (une fois, sans danger à répéter), vérifie l'état du service puis le réveille pour que la première question parte vite.
     private func prepare() async {
+        if provider == .lmstudio { await probeLMStudio(); return }
+        guard provider == .local else { refresh(); return }          // fournisseur en nuage : rien à installer ni à réveiller sur ce Mac
         if !started {
             started = true
             reachable = await ensureAgent() ? nil : false
@@ -703,6 +282,7 @@ final class AIPanelController {
     // MARK: Questions
 
     func ask(_ text: String) {
+        cloudKeys = Self.presentKeys()
         guard availability.canAsk, !isRunning else { return }
         if currentTab == nil { currentTab = UUID() }      // aucune page ouverte (ou essai) : une conversation quand même
         let tab = currentTab!
@@ -710,12 +290,14 @@ final class AIPanelController {
         let run = UUID()
         runID = run
         failure = nil
+        pendingFacts = []
         let context = messages.suffix(6).map { ($0.role == .user ? "Vous : " : "Luciole : ") + String($0.text.prefix(240)) }
-        messages += [AIMessage(role: .user, text: text), AIMessage(role: .assistant, text: "")]
+        messages += [AIMessage(role: .user, text: text), AIMessage(role: .assistant, text: "", title: String(text.prefix(38)) + (text.count > 38 ? "…" : ""))]
         panel.clearComposer()
         agentTask = Task { [weak self] in
             guard let self else { return }
-            let outcome = await AgentLoop(environment: self).run(task: text, context: context)
+            let recalled = self.memoryOn ? self.memory.recall(host: self.hooks.activeWebView()?.url?.host, limit: self.provider.usesAPI ? 6 : 3) : []
+            let outcome = await AgentLoop(environment: self, style: self.provider.usesAPI ? .nativeTools : .jsonLine).run(task: text, context: context, memory: recalled)
             if self.runID == run { self.finish(outcome, in: tab) }
         }
         refresh()
@@ -725,27 +307,38 @@ final class AIPanelController {
         var list = conversations[tab] ?? []
         if var last = list.last, last.role == .assistant {
             switch outcome.reason {
-            case .done, .stepCap: last.text = outcome.answer
-            case .cancelled: if last.text.isEmpty { last.text = "Arrêté." }
+            case .done: last.text = outcome.answer
+            case .stepCap: last.text = outcome.answer; last.capped = true
+            case .cancelled: if last.text.isEmpty { last.text = Self.stoppedText(steps: last.trace.count) }
             case .failed(let message): failure = message; if last.text.isEmpty { last.text = "Je n'ai pas pu terminer." }
             }
             last.sources = outcome.sources
+            last.thinking = ""
             list[list.count - 1] = last
             conversations[tab] = list
         }
+        remember(outcome, in: tab)
         agentTask = nil
         runTab = nil
         pending = nil
+        cursor.settle()
         refresh()
+    }
+
+    /// « Arrêté à l'étape 3. Rien n'a été envoyé ; ce qui est déjà saisi reste dans la page. »
+    private static func stoppedText(steps: Int) -> String {
+        steps == 0 ? "Arrêté." : "Arrêté à l'étape \(steps). Rien n'a été envoyé ; ce qui est déjà saisi reste dans la page."
     }
 
     func stop() {
         guard agentTask != nil else { return }
         agentTask?.cancel()
+        cursor.hideNow()
         agentTask = nil                    // l'écran est libre tout de suite ; la tâche arrêtée finit en silence (son résultat est ignoré)
         runID = UUID()
         if let tab = runTab, var list = conversations[tab], var last = list.last, last.role == .assistant {
-            if last.text.isEmpty { last.text = "Arrêté." }
+            if last.text.isEmpty { last.text = Self.stoppedText(steps: last.trace.count) }
+            if !last.trace.isEmpty { last.stoppedAtStep = last.trace.count }
             list[list.count - 1] = last
             conversations[tab] = list
         }
@@ -769,6 +362,19 @@ final class AIPanelController {
         refresh()
     }
 
+    /// Modifie le texte de la réponse en cours, dans la conversation de l'onglet où la tâche a démarré.
+    private func mutateAnswer(_ change: (inout String) -> Void) {
+        guard let tab = runTab, var list = conversations[tab], list.last?.role == .assistant else { return }
+        change(&list[list.count - 1].text)
+        conversations[tab] = list
+    }
+
+    private func setThinking(_ text: String) {
+        guard let tab = runTab, var list = conversations[tab], list.last?.role == .assistant else { return }
+        list[list.count - 1].thinking = text
+        conversations[tab] = list
+    }
+
     private func setTrace(_ items: [AgentTraceItem]) {
         guard let tab = runTab, var list = conversations[tab], !list.isEmpty else { return }
         list[list.count - 1].trace = items
@@ -776,7 +382,98 @@ final class AIPanelController {
         refresh()
     }
 
+    // MARK: Mémoire
+
+    private func stored(_ list: [AIMessage]) -> [LucioleMemory.Message] {
+        list.map { m in
+            LucioleMemory.Message(isUser: m.role == .user, text: m.text, title: m.title, sources: m.sources,
+                                  trace: m.trace.map { .init(text: $0.text, detail: $0.detail, failed: $0.state == .failed) }, capped: m.capped, stoppedAtStep: m.stoppedAtStep)
+        }
+    }
+
+    private func restored(_ list: [LucioleMemory.Message]) -> [AIMessage] {
+        list.enumerated().map { index, m in
+            AIMessage(role: m.isUser ? .user : .assistant, text: m.text,
+                      trace: m.trace.enumerated().map { AgentTraceItem(id: $0.offset + 1, text: $0.element.text, detail: $0.element.detail, state: $0.element.failed ? .failed : .done) },
+                      sources: m.sources, title: m.title, stoppedAtStep: m.stoppedAtStep, capped: m.capped)
+        }
+    }
+
+    /// Après chaque tâche : la discussion est enregistrée (pour la rouvrir) et le journal retient ce qui a été fait (pour s'en souvenir). Sans valeurs saisies.
+    private func remember(_ outcome: AgentOutcome, in tab: UUID) {
+        guard memoryOn, let list = conversations[tab], let last = list.last, last.role == .assistant, let task = list.dropLast().last(where: { $0.role == .user }) else { return }
+        let host = hooks.activeWebView()?.url?.host
+        let id = discussionIDs[tab] ?? UUID()
+        discussionIDs[tab] = id
+        let first = list.first(where: { $0.role == .user })?.text ?? task.text
+        memory.upsert(.init(id: id, title: LucioleMemory.title(for: first), host: host, updatedAt: Date(), messages: stored(list)))
+        let actions = last.trace.map { ($0.detail ?? $0.text) + ($0.state == .failed ? " (échec)" : "") }
+        if !actions.isEmpty || !pendingFacts.isEmpty || !last.text.isEmpty {
+            memory.record(.init(date: Date(), host: host, task: task.text, actions: actions, answer: outcome.reason == .done ? last.text : "", facts: pendingFacts))
+        }
+        pendingFacts = []
+        let snapshot = memory
+        Self.saveQueue.async { snapshot.save() }          // une seule file : les copies s'écrivent dans l'ordre
+    }
+
+    /// Le bouton « Discussions précédentes » : un menu des dernières discussions ; en choisir une la rouvre dans cet onglet.
+    private func showHistory(from anchor: NSView) {
+        let menu = NSMenu()
+        let header = NSMenuItem(title: "Discussions précédentes", action: nil, keyEquivalent: ""); header.isEnabled = false
+        menu.addItem(header)
+        if memory.discussions.isEmpty {
+            let none = NSMenuItem(title: SettingsStore.shared.lucioleMemoryEnabled ? "Aucune pour l'instant" : "La mémoire est coupée (Réglages › Assistant IA)", action: nil, keyEquivalent: ""); none.isEnabled = false
+            menu.addItem(none)
+        }
+        let formatter = RelativeDateTimeFormatter(); formatter.locale = Locale(identifier: "fr_FR"); formatter.unitsStyle = .short
+        for discussion in memory.discussions.prefix(15) {
+            let when = formatter.localizedString(for: discussion.updatedAt, relativeTo: Date())
+            let item = ClosureMenuItem(title: discussion.title + (discussion.host.map { " — \($0)" } ?? "") + "  ·  " + when) { [weak self] in self?.open(discussion) }
+            menu.addItem(item)
+        }
+        if !memory.discussions.isEmpty || !memory.journal.isEmpty {
+            menu.addItem(.separator())
+            menu.addItem(ClosureMenuItem(title: "Effacer la mémoire de Luciole…") { [weak self] in self?.confirmErase() })
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: anchor.bounds.height + 4), in: anchor)
+    }
+
+    private func open(_ discussion: LucioleMemory.Discussion) {
+        if isRunning { stop() }
+        if currentTab == nil { currentTab = UUID() }
+        messages = restored(discussion.messages)
+        if let tab = currentTab { discussionIDs[tab] = discussion.id }
+        failure = nil
+        refresh()
+        panel.focus()
+    }
+
+    private func confirmErase() {
+        let alert = NSAlert()
+        alert.messageText = "Effacer la mémoire de Luciole ?"
+        alert.informativeText = "Toutes les discussions enregistrées et le journal de ses actions seront supprimés de ce Mac. La discussion ouverte reste affichée."
+        alert.addButton(withTitle: "Effacer"); alert.addButton(withTitle: "Annuler")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        memory.clear(); LucioleMemory.erase(); discussionIDs = [:]
+    }
+
     // MARK: Modèle
+
+    private func modelAction(_ action: AIPanelView.ModelAction) {
+        switch action {
+        case .download, .resume: downloadModel()
+        case .later: close()
+        case .retry: failure = nil; reachable = nil; started = false; lmStudio = (nil, []); refresh(); Task { await prepare() }
+        case .cancelDownload:
+            if let id = downloadID { downloads?.cancel(id) }
+            downloadTask?.cancel(); downloadTask = nil; downloadID = nil; download = nil; downloadSpeed = 0; lastSample = nil
+            refresh()
+        case .deleteReceived:
+            try? FileManager.default.removeItem(at: ModelFile.url(for: pin))
+            failure = nil; refresh()
+        }
+    }
 
     /// Après l'accord de l'utilisateur (le bouton) : télécharge le modèle avec le moteur de téléchargement d'Orée (reprise, vitesse), puis le service le vérifie.
     private func downloadModel() {
@@ -798,6 +495,12 @@ final class AIPanelController {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let item = downloads.items.first(where: { $0.id == id }) else { break }
+                let now = Date()
+                if let last = self.lastSample, now.timeIntervalSince(last.date) > 0 {
+                    let instant = Double(item.received - last.bytes) / now.timeIntervalSince(last.date)
+                    self.downloadSpeed = self.downloadSpeed == 0 ? max(instant, 0) : self.downloadSpeed * 0.7 + max(instant, 0) * 0.3      // lissée
+                }
+                self.lastSample = (now, item.received)
                 self.download = AIDownloadProgress(received: item.received, total: item.total ?? self.pin.size)
                 self.refresh()
                 if item.phase == .finished { break }
@@ -805,6 +508,7 @@ final class AIPanelController {
             }
             self.download = nil
             self.downloadID = nil
+            self.downloadSpeed = 0; self.lastSample = nil
             await self.prepare()               // le service vérifie le fichier (SHA-256) puis le réveille
         }
     }
@@ -816,53 +520,131 @@ final class AIPanelController {
         return !ActionPolicy.isForbiddenPage(url)
     }
 
+    /// « 1,3 Go », « 640 Mo ».
+    private func size(_ bytes: Int64) -> String {
+        bytes >= 1_000_000_000 ? String(format: "%.1f Go", Double(bytes) / 1e9).replacingOccurrences(of: ".", with: ",") : "\(Int((Double(bytes) / 1e6).rounded())) Mo"
+    }
+
+    /// Une page qu'Orée garde hors de portée de l'IA (ni http(s), ni la page de démarrage) : le panneau passe en lecture seule.
+    private var pageIsProtected: Bool {
+        guard let url = hooks.activeWebView()?.url, let scheme = url.scheme?.lowercased() else { return false }
+        return !["http", "https", "oree", "about"].contains(scheme)
+    }
+
+    private func modelScreen(_ state: AIAvailability) -> AIPanelView.ModelScreen? {
+        let total = pin.size
+        if provider == .lmstudio, lmStudio.reachable == false || lmStudio.models.isEmpty, lmStudio.reachable != nil {
+            let base = SettingsStore.shared.lmStudioBase.absoluteString
+            return lmStudio.reachable == true
+                ? .init(title: "Aucun modèle chargé dans LM Studio.", text: "Le serveur répond, mais il ne propose aucun modèle de conversation. Chargez-en un dans LM Studio, puis réessayez.", primary: ("Réessayer", .retry))
+                : .init(title: "LM Studio n'est pas joignable.", text: "Lancez LM Studio, chargez un modèle et démarrez le serveur local (onglet Developer › Start Server). Adresse essayée : \(base). Le reste d'Orée fonctionne normalement.", primary: ("Réessayer", .retry))
+        }
+        if provider.isCloud, !cloudKeyPresent {
+            return .init(title: "Ajoutez votre clé \(provider.displayName).", text: "Réglages › Assistant IA › \(provider.displayName) : collez votre clé API. Elle reste dans le Trousseau de ce Mac.")
+        }
+        if pageIsProtected, messages.isEmpty {
+            return .init(title: "Je détourne les yeux.", text: "Les réglages d'Orée, les paiements et les mots de passe restent hors de portée de l'IA. Sur un autre onglet, je reprends là où nous en étions.")
+        }
+        switch state {
+        case .ready: return nil
+        case .connecting: return .init(title: "Luciole se réveille.", text: "Moins d'une seconde.", indeterminate: true)
+        case .unreachable:
+            return .init(title: "Luciole n'est pas joignable pour l'instant.", text: "Le service IA ne répond pas. Il se lance au premier usage : réessayez, ou relancez Orée si cela dure. Le reste d'Orée fonctionne normalement.",
+                         primary: ("Réessayer", .retry))
+        case .needsModel:
+            if let failure {
+                var screen = AIPanelView.ModelScreen(title: "Le téléchargement s'est interrompu.", text: "Ce qui a déjà été reçu est gardé : la reprise repart de là.",
+                                                    primary: ("Reprendre", .resume), secondary: ("Supprimer ce qui a été reçu", .deleteReceived))
+                screen.footnote = "Détail : " + failure
+                return screen
+            }
+            var free = ""
+            if let bytes = try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage {
+                free = "Il faut \(size(Int64(Double(total) * 1.6))) d'espace libre pendant l'installation ; ce Mac en a \(size(bytes))."
+            }
+            return .init(title: "Luciole dort encore.", text: "Pour lire, résumer et agir sans internet, Luciole a besoin de son modèle. Rien ne se télécharge sans votre accord.",
+                         facts: [("arrow.down", size(total), ", téléchargé une seule fois."), ("lock", "", "Reste sur ce Mac. Ce que vous lisez ne part sur aucun serveur."),
+                                 ("slider.horizontal.3", "", "Supprimable à tout moment dans Réglages › Assistant IA.")],
+                         primary: ("Télécharger (\(size(total)))", .download), secondary: ("Plus tard", .later), footnote: free.isEmpty ? nil : free)
+        case .downloading(let progress):
+            let done = progress.received, all = progress.total ?? total
+            var right = ""
+            if downloadSpeed > 0 { right = "\(ByteFormat.speed(downloadSpeed)) · environ \(Int(max(Double(all - done) / downloadSpeed, 1))) s" }
+            return .init(title: "Téléchargement du modèle", text: "Vous pouvez continuer à naviguer. Luciole s'allume tout seul à la fin.",
+                         progress: all > 0 ? Double(done) / Double(all) : nil, indeterminate: all <= 0,
+                         progressLeft: "\(size(done)) sur \(size(all))", progressRight: right, secondary: ("Annuler le téléchargement", .cancelDownload))
+        case .verifying: return .init(title: "Vérification du modèle", text: "Orée vérifie le fichier avant de le charger : quelques secondes.", indeterminate: true)
+        case .corrupt:
+            return .init(title: "Le modèle est abîmé.", text: "Le fichier reçu ne correspond pas à ce qui était attendu. Il sera remplacé par une nouvelle copie.", primary: ("Télécharger à nouveau", .download))
+        }
+    }
+
     private func refresh() {
         let state = availability
         let list = messages
         let running = isRunning && runTab == currentTab
         let streaming = running && !(list.last?.text.isEmpty ?? true)
         let hasPending = pending != nil && runTab == currentTab
-        let pose: LucioleState
-        if hasPending { pose = pending.map { if case .question = $0.kind { .ask } else { .wait } } ?? .wait }
+        let model = modelScreen(state)
+        var pose: LucioleState
+        if pageIsProtected { pose = .off }
+        else if hasPending { pose = pending.map { if case .question = $0.kind { .ask } else { .wait } } ?? .wait }
         else if running, list.last?.trace.last?.state == .running { pose = .act }
         else { pose = LucioleState.pose(availability: state, running: running, streaming: streaming, failed: failure != nil) }
-        var title = "Bonjour. Que puis-je faire pour vous ?", text = "Je tourne sur ce Mac, sans internet. Je peux me tromper : vérifiez ce qui compte."
-        var suggestions: [(label: String, fill: String)] = []
-        var chip = ""
-        var fraction: Double?
+        if provider.isCloud, !cloudKeyPresent { pose = .sleep }
+
+        // Puce d'état
+        var chipText = "Prêt", dot = AIPanelView.Dot.accent
         switch state {
-        case .connecting: chip = "Réveil"; title = "Un instant…"; text = state.line(modelBytes: pin.size)
-        case .unreachable: chip = "Indisponible"; title = "L'IA ne répond pas"; text = state.line(modelBytes: pin.size)
-        case .needsModel: chip = "À installer"; title = "L'IA locale n'est pas installée"; text = state.line(modelBytes: pin.size)
-        case .downloading(let progress):
-            chip = "Téléchargement"; title = "Téléchargement du modèle"; text = state.line(modelBytes: pin.size)
-            if let total = progress.total, total > 0 { fraction = Double(progress.received) / Double(total) }
-        case .verifying: chip = "Vérification"; title = "Vérification du modèle"; text = state.line(modelBytes: pin.size)
-        case .corrupt: chip = "Erreur"; title = "Le modèle est abîmé"; text = state.line(modelBytes: pin.size)
+        case .connecting: chipText = "Réveil"
+        case .unreachable where provider.isCloud: chipText = "Clé manquante"; dot = .outline
+        case .unreachable: chipText = "Indisponible"; dot = .muted
+        case .needsModel: chipText = failure != nil ? "Erreur" : "Non installé"; dot = failure != nil ? .alert : .outline
+        case .downloading(let p):
+            chipText = p.total.map { $0 > 0 ? "Téléchargement · \(Int(Double(p.received) / Double($0) * 100)) %" : "Téléchargement" } ?? "Téléchargement"
+        case .verifying: chipText = "Vérification"
+        case .corrupt: chipText = "Erreur"; dot = .alert
         case .ready:
-            if hasPending { chip = "Attend votre accord" }
-            else if running { chip = list.last?.trace.last?.state == .running ? "Agit…" : "Réfléchit…" }
-            else { chip = "Prêt" }
-            if shareContext, pageIsReadable {
-                suggestions = [("Résumer cette page", "Résume cette page."), ("Remplir ce formulaire", "Remplis le formulaire de cette page avec mes informations."), ("Chercher sur le web…", "Cherche sur le web : ")]
-            } else {
-                suggestions = [("Chercher sur le web…", "Cherche sur le web : "), ("Expliquer un mot ou une idée", "Explique-moi simplement : "), ("Écrire un court e-mail", "Écris un court e-mail pour ")]
-            }
+            if failure != nil { chipText = "Erreur"; dot = .alert }
+            else if hasPending { chipText = "Attend votre accord" }
+            else if running { chipText = "Au travail" }
+            else { chipText = provider.usesAPI ? provider.displayName : "Prêt" }
         }
-        if let failure { chip = pose == .err ? "Erreur" : chip; text = failure + (state.canAsk ? "\n" : " ") + text }
-        let shows = list.isEmpty || !state.canAsk
-        let contextLine: String
-        if !pageIsReadable { contextLine = "Page protégée ou vide · non lue" }
-        else if !shareContext { contextLine = "Page non partagée · cliquer pour partager" }
-        else { contextLine = "Lit : " + (currentTitle.isEmpty ? "cette page" : currentTitle) }
+
+        // Puce de contexte
+        let url = hooks.activeWebView()?.url
+        let host = url?.host
+        var contextText = "Lit : " + (currentTitle.isEmpty ? (host ?? "cette page") : currentTitle)
+        var locked = false
+        if pageIsProtected { contextText = "Page protégée · Luciole ne lit pas"; locked = true }
+        else if host == nil { contextText = "Aucune page à lire"; locked = true }
+        else if !shareContext { contextText = "Ne lit pas cette page" }
+
+        // Corps
+        let canRead = shareContext && !locked
+        let mode: AIPanelView.Mode
+        if let model { mode = .model(model) }
+        else if list.isEmpty {
+            let suggestions: [(symbol: String, label: String, fill: String, web: Bool)] = canRead
+                ? [("text.alignleft", "Résumer cette page", "Résume cette page.", false), ("globe", "Chercher sur le web…", "Cherche sur le web : ", true), ("magnifyingglass", "Quels sont les points clés ?", "Quels sont les points clés de cette page ?", false)]
+                : [("globe", "Chercher sur le web…", "Cherche sur le web : ", true), ("text.alignleft", "Expliquer un mot ou une idée", "Explique-moi simplement : ", false), ("pencil", "Écrire un court e-mail", "Écris un court e-mail pour ", false)]
+            mode = .empty(title: "Bonjour, je suis Luciole.", text: "Je lis la page ouverte, je cherche sur le web et je peux remplir un formulaire à votre place. Avant tout envoi, je vous montre ce qui part.", suggestions: suggestions)
+        } else { mode = .conversation }
+
+        // Composeur
+        let placeholder: String
+        if pageIsProtected { placeholder = "Indisponible sur cette page protégée" }
+        else if hasPending { placeholder = "Validez ou annulez d'abord" }
+        else if running { placeholder = "Luciole travaille… Arrêter reste possible" }
+        else if !state.canAsk { placeholder = "Luciole n'est pas encore prête" }
+        else { placeholder = "Demandez à Luciole…" }
         panel.show(.init(
-            pose: pose, chip: chip, context: contextLine,
-            title: title, text: text, progress: fraction, offersDownload: state.offersDownload,
-            showsEmpty: shows, suggestions: suggestions, canAsk: state.canAsk, running: isRunning,
-            placeholder: state.canAsk ? "Demandez quelque chose…" : "L'IA n'est pas encore prête"))
+            pose: pose, chipText: chipText, chipDot: dot, contextText: contextText, contextLetter: host, contextShared: shareContext, contextLocked: locked,
+            mode: mode, placeholder: placeholder, composerEnabled: state.canAsk && !pageIsProtected && !hasPending, running: running, showsStop: !(pending.map { if case .confirm = $0.kind { true } else { false } } ?? false),
+            note: provider == .lmstudio ? (LMStudio.isLoopback(SettingsStore.shared.lmStudioBase) ? "LM Studio : tout reste sur ce Mac · Luciole peut se tromper" : "LM Studio (réseau) : les pages lues sont envoyées à \(SettingsStore.shared.lmStudioBase.host ?? "ce serveur") · Luciole peut se tromper") : provider.isCloud ? "\(provider.displayName) (nuage) : les pages lues lui sont envoyées · Luciole peut se tromper" : "Tout reste sur ce Mac · Luciole peut se tromper"))
         panel.setTranscript(list, writing: running, pending: hasPending ? pending : nil)
-        if let p = pending, !p.armed {            // « Valider » devient actif après 0,8 s : on redessine à ce moment-là
-            Task { try? await Task.sleep(for: .milliseconds(850)); self.refresh() }
+        if let p = pending, !p.armed {            // « Valider » devient actif après 1,2 s : on redessine à ce moment-là
+            Task { try? await Task.sleep(for: .milliseconds(1250)); self.refresh() }
         }
     }
 
@@ -871,9 +653,67 @@ final class AIPanelController {
     /// Dev : ce que le panneau dit et montre (même format que l'ancienne barre, pour `ai_check.py`).
     var report: String {
         let last = messages.last(where: { $0.role == .assistant })
-        let trace = last?.trace.map { "\($0.state):\($0.text)" }.joined(separator: " | ") ?? ""
-        return "open=\(isOpen) state=\(availability) running=\(isRunning) width=\(Int(width)) pose=\(panel.mascot.state.rawValue) pending=\(pending.map { "\($0.kind)" } ?? "none") trace=[\(trace)] line=\(failure ?? "")| answer=\((last?.text ?? "").replacingOccurrences(of: "\n", with: " ⏎ "))"
+        let trace = last?.trace.map { "\($0.state):\($0.text)" + ($0.detail.map { " — " + $0 } ?? "") }.joined(separator: " | ") ?? ""
+        return "open=\(isOpen) state=\(availability) running=\(isRunning) width=\(Int(width)) pose=\(panel.mascot.state.rawValue) pending=\(pending.map { "\($0.kind)" } ?? "none") cursor=[\(cursor.report)] think=\(last?.thinking.count ?? 0) trace=[\(trace)] line=\(failure ?? "")| answer=\((last?.text ?? "").replacingOccurrences(of: "\n", with: " ⏎ "))"
     }
+
+    #if DEBUG
+    /// Dev (debug seulement) : comme un clic sur une source du panneau.
+    func devOpenSource(_ url: URL) { panel.onOpenSource?(url) }
+
+    /// Dev (debug seulement) : les treize poses de Luciole à 64 pt, côte à côte, pour les comparer à la fiche de la mascotte.
+    static func devLucioleSheet(to path: String) -> String {
+        let states = LucioleState.allCases
+        let cell: CGFloat = 96, scale: CGFloat = 2
+        let width = cell * CGFloat(states.count), height = cell
+        guard let context = CGContext(data: nil, width: Int(width * scale), height: Int(height * scale), bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return "no context" }
+        context.scaleBy(x: scale, y: scale)
+        context.setFillColor(Theme.cg(Theme.chrome, in: NSView()))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        for (i, state) in states.enumerated() {
+            let view = LucioleView(size: 64)
+            view.frame = CGRect(x: 0, y: 0, width: 64, height: 64)
+            view.apply(state)
+            view.layoutSubtreeIfNeeded()
+            context.saveGState()
+            context.translateBy(x: CGFloat(i) * cell + 16, y: 16)
+            view.layer?.render(in: context)
+            context.restoreGState()
+        }
+        guard let image = context.makeImage(), let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { return "no image" }
+        try? png.write(to: URL(fileURLWithPath: path))
+        return path
+    }
+
+    /// Dev (debug seulement) : une image fidèle du panneau seul (les captures de fenêtre déforment les vues à fond posé sur le calque).
+    func devSnapshot(to path: String) -> String {
+        panel.layoutSubtreeIfNeeded()
+        let size = panel.bounds.size
+        var target: CALayer? = panel.layer
+        if let path = try? String(contentsOfFile: "/tmp/oree-panel-which.txt", encoding: .utf8) {
+            var view: NSView = panel
+            for part in path.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ",") {
+                guard let i = Int(part), view.subviews.indices.contains(i) else { break }
+                view = view.subviews[i]
+            }
+            target = view.layer      // diagnostic : un seul sous-ensemble du panneau (indices de sous-vues séparés par des virgules)
+        }
+        guard size.width > 0, let layer = target else { return "panel not visible" }
+        let scale: CGFloat = 2
+        guard let context = CGContext(data: nil, width: Int(size.width * scale), height: Int(size.height * scale), bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return "no context" }
+        context.scaleBy(x: scale, y: scale)
+        context.translateBy(x: 0, y: size.height); context.scaleBy(x: 1, y: -1)       // le calque est en y vers le haut
+        context.translateBy(x: 0, y: size.height); context.scaleBy(x: 1, y: -1)
+        layer.render(in: context)
+        guard let image = context.makeImage() else { return "no image" }
+        let rep = NSBitmapImageRep(cgImage: image)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return "no png" }
+        try? png.write(to: URL(fileURLWithPath: path))
+        return "\(path) \(Int(size.width))x\(Int(size.height)) subviews=" + panel.subviews.map { "\(type(of: $0)):\(Int($0.frame.minX)),\(Int($0.frame.minY)),\(Int($0.frame.width))x\(Int($0.frame.height))" }.joined(separator: " ")
+    }
+    #endif
 
     /// Dev : répond à la carte « à valider » ou à la question affichées.
     func devResolve(_ text: String) {
@@ -908,10 +748,34 @@ extension AIPanelController: AgentEnvironment {
     }
     #endif
 
+    /// Le texte qui s'écrit : affiché dans la réponse en cours (au plus 10 fois par seconde), sauf si le modèle écrit une ligne JSON (un appel d'outil, pas une réponse).
+    private func showPartial(_ text: String, thinking: String) {
+        guard !text.trimmingCharacters(in: .whitespaces).hasPrefix("{") else { return }
+        mutateAnswer { $0 = text }
+        setThinking(text.isEmpty ? thinking : "")
+        let now = Date()
+        if now.timeIntervalSince(lastPartialRefresh) > 0.1 { lastPartialRefresh = now; refresh() }
+    }
+
     func askModel(_ prompt: String) async throws -> String {
         #if DEBUG
         if let scripted = Self.scriptedReply() { Self.logTurn(prompt, scripted); return scripted }
         #endif
+        if provider.usesAPI {
+            guard let model = provider == .lmstudio ? lmModel : SettingsStore.shared.aiModel(for: provider) else { throw AgentFailure(message: "Aucun modèle chargé dans LM Studio.") }
+            do {
+                mutateAnswer { $0 = "" }                      // un nouveau tour : on repart d'un texte vide
+                setThinking("")
+                let text = try await CloudClient(provider: provider, model: model, endpoint: SettingsStore.shared.aiEndpoint(for: provider)).complete(prompt: prompt) { [weak self] partial, thinking in
+                    self?.showPartial(partial, thinking: thinking)
+                }
+                Self.logTurn(prompt, text)
+                return text
+            } catch is CancellationError { throw CancellationError() }
+            catch let error as URLError where error.code == .cancelled { throw CancellationError() }
+            catch let error as CloudClient.Failure { throw AgentFailure(message: error.message) }
+            catch { throw AgentFailure(message: "\(provider.displayName) est injoignable : \(error.localizedDescription)") }
+        }
         await cancelling?.value
         let request = AIRunRequest(userText: prompt)
         let id = request.taskID
@@ -945,7 +809,7 @@ extension AIPanelController: AgentEnvironment {
     /// Carte de la page affichée, réduite pour tenir dans les 4 096 jetons du contexte (avec la réponse et les consignes).
     func pageMap() async -> String? {
         guard shareContext, pageIsReadable, let web = hooks.activeWebView(), let map = await PageMapScript.capture(web) else { return nil }
-        return map.render(maxElements: 30, maxText: 1200)
+        return provider.usesAPI ? map.render(maxElements: 45, maxText: 2800) : map.render(maxElements: 30, maxText: 1200)
     }
 
     func perform(_ call: AgentCall) async -> AgentToolResult {
@@ -953,10 +817,21 @@ extension AIPanelController: AgentEnvironment {
         switch call.name {
         case "search_web":
             guard let query = args["query"] as? String, !query.isEmpty else { return AgentToolResult(ok: false, text: "Il manque « query ».", summary: "Requête vide") }
+            if query.count > 120 {       // une très longue requête peut transporter du texte de la page vers le moteur de recherche
+                let request = ConfirmRequest(title: "Lancer cette recherche ?", rows: [(key: "Requête", value: String(query.prefix(200)))], warning: "Je vais envoyer ce texte à un moteur de recherche.", host: "duckduckgo.com")
+                guard await confirm(request) else { return AgentToolResult(ok: false, text: "La personne a refusé cette recherche. N'insiste pas : réponds avec done.", summary: "Recherche refusée par vous") }
+            }
             return await search.search(query)
         case "open_url":
             guard let string = args["url"] as? String, let url = URL(string: string), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
                 return AgentToolResult(ok: false, text: "Adresse refusée : seules les adresses http(s) s'ouvrent.", summary: "Adresse refusée")
+            }
+            // Une adresse vers un autre site avec des paramètres (ou très longue) peut transporter du texte de la page : on demande d'abord.
+            let current = hooks.activeWebView()?.url?.host
+            if url.host != current, url.query != nil || string.count > 80 {
+                let request = ConfirmRequest(title: "Ouvrir cette adresse ?", rows: [(key: "Site", value: url.host ?? string), (key: "Adresse", value: String(string.prefix(160)))],
+                                             warning: "Je vais ouvrir cette adresse dans votre onglet. Elle contient des paramètres : vérifiez qu'elle ne transporte rien de privé.", host: url.host ?? string)
+                guard await confirm(request) else { return AgentToolResult(ok: false, text: "La personne a refusé d'ouvrir cette adresse. N'insiste pas : réponds avec done.", summary: "Adresse refusée par vous") }
             }
             let ok = await hooks.navigate(string)
             return AgentToolResult(ok: ok, text: ok ? "Page ouverte : \(hooks.activeWebView()?.title ?? string)" : "La page n'a pas chargé.", summary: ok ? "Ouverture de \(url.host ?? string)" : "Page non chargée", sources: ok ? [string] : [])
@@ -966,14 +841,15 @@ extension AIPanelController: AgentEnvironment {
         case "ask_user":
             guard let question = args["question"] as? String, !question.isEmpty else { return AgentToolResult(ok: false, text: "Il manque « question ».") }
             guard let answer = await ask(question) else { return AgentToolResult(ok: false, text: "La personne n'a pas répondu.", summary: "Sans réponse") }
+            if LucioleMemory.isSafeFact(question: question, answer: answer) { pendingFacts.append("\(question) → \(answer)") }
             return AgentToolResult(ok: true, text: "Réponse de la personne : \(answer)", summary: "Réponse reçue")
         default:
             guard let web = hooks.activeWebView() else { return AgentToolResult(ok: false, text: "Aucune page ouverte.") }
             let action: AIAction
             do { action = try AIAction.parse(name: call.name, argumentsJSON: call.argumentsJSON) }
             catch { return AgentToolResult(ok: false, text: "Arguments invalides pour \(call.name) : \(error).", summary: "Arguments invalides") }
-            let result = await ActionExecutor.execute(action, in: web, profile: ProfileKeychain().load()) { [weak self] question in
-                await self?.confirm(question) ?? false
+            let result = await ActionExecutor.execute(action, in: web, profile: ProfileKeychain().load(), presence: { attachCursor(); return cursor }()) { [weak self] request in
+                await self?.confirm(request) ?? false
             }
             return AgentToolResult(ok: result.ok, text: result.message, summary: result.message)
         }
@@ -982,15 +858,16 @@ extension AIPanelController: AgentEnvironment {
     func ask(_ question: String) async -> String? {
         await withCheckedContinuation { continuation in
             questionContinuation = continuation
+            cursor.hold(.ask)
             pending = AIPending(kind: .question(question), since: Date())
             refresh()
         }
     }
 
-    private func confirm(_ summary: String) async -> Bool {
+    private func confirm(_ request: ConfirmRequest) async -> Bool {
         await withCheckedContinuation { continuation in
             confirmContinuation = continuation
-            pending = AIPending(kind: .confirm(summary), since: Date())
+            pending = AIPending(kind: .confirm(request), since: Date())
             refresh()
         }
     }

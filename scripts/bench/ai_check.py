@@ -46,7 +46,7 @@ def main():
         print("ignoré : le modèle n'est pas sur le disque (ce script ne télécharge pas 1,3 Go)"); return 0
     tmp = tempfile.mkdtemp(prefix="aicheck-"); ext = os.path.join(tmp, "ext"); os.makedirs(ext)
     before = pids()
-    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_NO_AGENT=1", f"HB_AI_MACH_NAME={MACH}", "HB_AI_TRACE=/tmp/aitrace.txt"]
+    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_NO_AGENT=1", f"HB_AI_MACH_NAME={MACH}", "HB_AI_TRACE=/tmp/aitrace.txt", "HB_AI_PROVIDER=local"]
     subprocess.run(["open", "-g", "-n", *[x for e in env for x in ("--env", e)], APP, "--args", "--automation"]); time.sleep(5)
     mine = pids() - before
     results = []

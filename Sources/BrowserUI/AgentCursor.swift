@@ -1,0 +1,176 @@
+import AppKit
+import WebKit
+import BrowserCore
+import OreeAIClient
+
+/// Ce que l'exécuteur d'actions demande à la « présence » de Luciole dans la page : aller vers l'élément, appuyer, repartir.
+@MainActor
+protocol AgentPresence: AnyObject {
+    func reveal(rect: CGRect, in web: WKWebView, kind: PresenceKind) async
+    func press() async
+    func hold(_ pose: LucioleState)
+    func settle()
+    func hideNow()
+}
+
+enum PresenceKind {
+    case click, type, select
+    var verb: String { switch self { case .click: "Luciole clique…"; case .type: "Luciole écrit…"; case .select: "Luciole choisit…" } }
+    var pose: LucioleState { self == .type ? .write : .act }
+}
+
+/// Luciole qui se déplace dans la page : une petite luciole vole jusqu'à l'élément visé, un cadre d'accent l'entoure, elle « appuie » (une onde part de l'élément),
+/// puis elle repart vers le panneau quand la tâche est finie. Dessiné par Orée dans une couche au-dessus de la WKWebView — jamais injecté dans le DOM du site —
+/// et sans prise sur la souris. Avec « réduire les animations », elle apparaît à sa place sans voler.
+@MainActor
+final class AgentCursor: NSView, AgentPresence {
+    private let mascot = LucioleView(size: 34)
+    private let ring = SurfaceView(fill: Theme.accentSoft, cornerRadius: 6)
+    private let tagBox = SurfaceView(fill: Theme.raised, cornerRadius: Theme.pill)
+    private let tagLabel = NSTextField(labelWithString: "")
+    private var target: CGPoint = .zero
+    private var placed = false
+    private var generation = 0            // chaque nouvelle tâche (ou arrêt) invalide un départ programmé
+
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        isHidden = true
+        ring.border = Theme.accent; ring.borderWidth = 2
+        ring.translatesAutoresizingMaskIntoConstraints = true
+        mascot.translatesAutoresizingMaskIntoConstraints = true
+        mascot.frame = NSRect(x: 0, y: 0, width: 34, height: 34)
+        tagBox.translatesAutoresizingMaskIntoConstraints = true
+        tagBox.elevation = .two
+        tagLabel.font = Theme.sans(11.5, .semibold); tagLabel.textColor = Theme.text
+        tagLabel.translatesAutoresizingMaskIntoConstraints = false
+        tagBox.addSubview(tagLabel)
+        NSLayoutConstraint.activate([tagLabel.leadingAnchor.constraint(equalTo: tagBox.leadingAnchor, constant: 9), tagLabel.centerYAnchor.constraint(equalTo: tagBox.centerYAnchor)])
+        for v in [ring, tagBox, mascot] as [NSView] { addSubview(v) }
+        ring.alphaValue = 0; tagBox.alphaValue = 0
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func attach(to host: NSView) {
+        guard superview !== host else { return }
+        host.addSubview(self)
+        NSLayoutConstraint.activate([topAnchor.constraint(equalTo: host.topAnchor), bottomAnchor.constraint(equalTo: host.bottomAnchor),
+                                     leadingAnchor.constraint(equalTo: host.leadingAnchor), trailingAnchor.constraint(equalTo: host.trailingAnchor)])
+    }
+
+    /// Une durée de pause qui ne bloque pas le fil principal.
+    private func pause(_ seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
+
+    /// Le rectangle de l'élément (pixels CSS de la fenêtre de la page) dans les coordonnées de la couche.
+    private func convert(_ rect: CGRect, in web: WKWebView) -> CGRect {
+        let zoom = max(web.pageZoom, 0.1)
+        let local = NSRect(x: rect.minX * zoom, y: web.isFlipped ? rect.minY * zoom : web.bounds.height - (rect.maxY * zoom), width: rect.width * zoom, height: rect.height * zoom)
+        return self.convert(local, from: web)
+    }
+
+    func reveal(rect: CGRect, in web: WKWebView, kind: PresenceKind) async {
+        generation += 1
+        layoutSubtreeIfNeeded()
+        let box = convert(rect, in: web)
+        guard box.width > 0, box.height > 0 else { return }
+        isHidden = false
+        target = CGPoint(x: box.midX, y: box.midY)
+        tagLabel.stringValue = kind.verb
+        mascot.apply(kind.pose)
+        let tagSize = NSSize(width: ceil(tagLabel.intrinsicContentSize.width) + 18, height: 22)
+        // La luciole se pose au-dessus et à droite du centre de l'élément (la « lanterne » touche l'élément, la page reste lisible).
+        var home = CGPoint(x: min(box.midX + 6, bounds.maxX - 40 - tagSize.width), y: max(box.minY - 38, 4))
+        home.x = max(home.x, 4)
+        let tagFrame = NSRect(x: home.x + 36, y: home.y + 6, width: tagSize.width, height: tagSize.height)
+        let ringFrame = box.insetBy(dx: -3, dy: -3)
+        if !placed { mascot.frame.origin = CGPoint(x: bounds.maxX + 6, y: home.y); mascot.alphaValue = 0 }       // elle arrive du panneau, à droite
+        ring.frame = ringFrame
+        tagBox.frame = tagFrame
+        placed = true
+        if Motion.reduced {
+            mascot.frame.origin = home; mascot.alphaValue = 1; ring.alphaValue = 1; tagBox.alphaValue = 1
+            await pause(0.15)
+            return
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.5
+                context.timingFunction = Motion.timing
+                context.allowsImplicitAnimation = true
+                self.mascot.animator().frame.origin = home
+                self.mascot.animator().alphaValue = 1
+                self.tagBox.animator().frame = tagFrame
+                self.tagBox.animator().alphaValue = 1
+                self.ring.animator().frame = ringFrame
+                self.ring.animator().alphaValue = 1
+            }, completionHandler: { MainActor.assumeIsolated { continuation.resume() } })
+        }
+        await pause(0.12)
+    }
+
+    /// « Appuie » : un petit rebond de la luciole et une onde d'accent qui part du point visé ; le clic réel suit 0,15 s plus tard.
+    func press() async {
+        guard !isHidden else { return }
+        if Motion.reduced { await pause(0.1); return }
+        let size: CGFloat = 36
+        let wave = CAShapeLayer()
+        wave.path = CGPath(ellipseIn: CGRect(x: -size / 2, y: -size / 2, width: size, height: size), transform: nil)
+        wave.position = target
+        wave.fillColor = Theme.cg(Theme.accent.withAlphaComponent(0.28), in: self)
+        wave.opacity = 0
+        layer?.addSublayer(wave)
+        let grow = CABasicAnimation(keyPath: "transform.scale"); grow.fromValue = 0.25; grow.toValue = 1.7
+        let fade = CAKeyframeAnimation(keyPath: "opacity"); fade.values = [0.9, 0]; fade.keyTimes = [0, 1]
+        let group = CAAnimationGroup(); group.animations = [grow, fade]; group.duration = Motion.slow + 0.1; group.timingFunction = Motion.timing
+        wave.add(group, forKey: "wave")
+        // Rebond de la luciole : s'écrase puis revient (120 ms).
+        if let host = mascot.layer {
+            let squash = CAKeyframeAnimation(keyPath: "transform.scale"); squash.values = [1, 0.84, 1]; squash.keyTimes = [0, 0.45, 1]; squash.duration = Motion.quick
+            host.add(squash, forKey: "press")
+        }
+        await pause(0.15)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { wave.removeFromSuperlayer() }
+    }
+
+    /// Elle reste près de l'élément tant qu'une question ou une validation attend, avec la pose qui va avec.
+    func hold(_ pose: LucioleState) { if !isHidden { mascot.apply(pose) } }
+
+    /// Fin de tâche : le cadre s'efface et la luciole repart vers le panneau.
+    func settle() {
+        guard !isHidden else { return }
+        generation += 1
+        let mine = generation
+        mascot.apply(.happy)
+        let leave = { [weak self] in
+            guard let self else { return }
+            self.ring.alphaValue = 0; self.tagBox.alphaValue = 0
+            self.mascot.animator().frame.origin = CGPoint(x: self.bounds.maxX + 6, y: self.mascot.frame.minY)
+            self.mascot.animator().alphaValue = 0
+        }
+        if Motion.reduced { hideNow(); return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.generation == mine else { return }          // une autre tâche a commencé entre-temps : on ne touche à rien
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.4; context.timingFunction = Motion.timing; context.allowsImplicitAnimation = true
+                    leave()
+                }, completionHandler: { MainActor.assumeIsolated { if self.generation == mine { self.hideNow() } } })
+            }
+        }
+    }
+
+    /// Dev : où est Luciole (pour les essais).
+    var report: String { isHidden ? "hidden" : "at=\(Int(mascot.frame.minX)),\(Int(mascot.frame.minY)) target=\(Int(target.x)),\(Int(target.y)) pose=\(mascot.state.rawValue)" }
+
+    /// Arrêt immédiat (Stop, fermeture du panneau) : tout disparaît tout de suite.
+    func hideNow() {
+        generation += 1
+        isHidden = true; placed = false
+        ring.alphaValue = 0; tagBox.alphaValue = 0; mascot.alphaValue = 0
+    }
+}

@@ -34,6 +34,19 @@ import Foundation
         if case .refuse = ActionPolicy.decide(.scroll(direction: "down"), target: field, pageURL: nil) {} else { Issue.record("sans page") }
     }
 
+    @Test func secretFieldsAreMaskedOnTheConfirmationCard() {
+        #expect(ActionTarget.Field(label: "Carte", value: "", secret: true, last4: "4242").shown == "•••• 4242")
+        #expect(ActionTarget.Field(label: "Mot de passe", value: "", secret: true).shown == "••••••••")
+        #expect(ActionTarget.Field(label: "Nom", value: "Nolhan").shown == "Nolhan")
+    }
+
+    @Test func writingProfileDataNeedsConfirmation() {
+        let field = ActionTarget(ref: 2, tag: "input", type: "text", label: "Nom")
+        if case .confirm = ActionPolicy.decide(.type(ref: 2, text: "{{profil.nom}}", submit: false), target: field, pageURL: page) {} else { Issue.record("jeton de profil sans accord") }
+        if case .confirm = ActionPolicy.decide(.select(ref: 2, option: "{{profil.pays}}"), target: field, pageURL: page) {} else { Issue.record("jeton de profil sans accord (liste)") }
+        #expect(ActionPolicy.decide(.type(ref: 2, text: "Lisbonne", submit: false), target: field, pageURL: page) == .allow)
+    }
+
     @Test func profileTokensAreResolvedIndividually() throws {
         let profile = ["nom": "Galinat", "prenom": "Nolhan"]
         #expect(try ProfileTokens.resolve("{{profil.prenom}} {{ profil.nom }}", profile: profile) == "Nolhan Galinat")

@@ -150,11 +150,13 @@ final class TextButton: HoverView {
     private let style: Style
     private let title: String
 
-    init(_ title: String, style: Style = .secondary, onClick: (() -> Void)? = nil) {
-        self.title = title; self.style = style; self.onClick = onClick
+    private let height: CGFloat
+
+    init(_ title: String, style: Style = .secondary, height: CGFloat = 30, onClick: (() -> Void)? = nil) {
+        self.title = title; self.style = style; self.onClick = onClick; self.height = height
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 30).isActive = true
+        heightAnchor.constraint(equalToConstant: height).isActive = true
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel(title)
@@ -165,7 +167,7 @@ final class TextButton: HoverView {
         let color: NSColor = style == .primary ? Theme.onAccent : Theme.text
         return NSAttributedString(string: title, attributes: [.font: Theme.sans(12.5, .semibold), .foregroundColor: color])
     }
-    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.size().width) + 28, height: 30) }
+    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.size().width) + 28, height: height) }
 
     override func draw(_ dirtyRect: NSRect) {
         let path = NSBezierPath(roundedRect: bounds, xRadius: Theme.radiusSmall + 2, yRadius: Theme.radiusSmall + 2)

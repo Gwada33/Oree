@@ -31,15 +31,25 @@ enum PageActionScript {
       const type = tag === 'input' ? (el.type || 'text').toLowerCase() : null;
       const isSubmit = !!form && ((tag === 'button' && (el.getAttribute('type') || 'submit').toLowerCase() === 'submit') || (tag === 'input' && ['submit', 'image'].includes(type)));
       const secretIn = f => !!f && [...f.querySelectorAll('input')].some(i => i.type === 'password' || CARD.test(i.autocomplete + ' ' + i.name + ' ' + i.id));
-      return { ref, tag, type, label: label(el), isSubmit, inForm: !!form, formHasSecret: secretIn(form), href: tag === 'a' ? el.getAttribute('href') : null, download: el.hasAttribute('download') };
+      const fields = [];
+      if (form) for (const f of form.elements) {
+        if (fields.length >= 8) break;
+        const ft = (f.type || '').toLowerCase();
+        if (!['INPUT', 'SELECT', 'TEXTAREA'].includes(f.tagName) || ['hidden', 'submit', 'button', 'reset', 'image', 'file'].includes(ft) || !f.getClientRects().length) continue;
+        const secret = ft === 'password' || CARD.test((f.autocomplete || '') + ' ' + f.name + ' ' + f.id);
+        let value = f.tagName === 'SELECT' ? (f.selectedOptions[0] ? f.selectedOptions[0].textContent.trim() : '') : (ft === 'checkbox' || ft === 'radio' ? (f.checked ? 'Oui' : 'Non') : f.value);
+        if (!secret && !value) continue;
+        const digits = secret ? (f.value || '').replace(/\\D/g, '') : '';
+        fields.push({ label: label(f).slice(0, 40), value: secret ? '' : value.slice(0, 80), secret, last4: digits.length >= 12 ? digits.slice(-4) : null });
+      }
+      return { ref, tag, type, label: label(el), isSubmit, inForm: !!form, formHasSecret: secretIn(form), href: tag === 'a' ? el.getAttribute('href') : null, download: el.hasAttribute('download'), fields };
     }
     el.scrollIntoView({ block: 'center', inline: 'nearest' });
-    // Surlignage : un cadre fin de la couleur de l'accent autour de l'élément visé, une seconde (sans animation si le mouvement est réduit).
-    { const r = el.getBoundingClientRect(); const box = document.createElement('div');
-      box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #2F7354;border-radius:6px;background:rgba(47,115,84,.10);left:' + (r.left - 3) + 'px;top:' + (r.top - 3) + 'px;width:' + (r.width + 6) + 'px;height:' + (r.height + 6) + 'px;';
-      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) box.style.transition = 'opacity .26s cubic-bezier(.2,.8,.2,1)';
-      document.documentElement.appendChild(box);
-      setTimeout(() => { box.style.opacity = '0'; setTimeout(() => box.remove(), 300); }, 1000); }
+    // Le surlignage et le déplacement de Luciole sont dessinés par Orée au-dessus de la page (AgentCursor), jamais dans le DOM du site.
+    if (op === 'reveal') {
+      const r = el.getBoundingClientRect();
+      return { ok: true, x: r.left, y: r.top, w: r.width, h: r.height };
+    }
     if (op === 'click') {
       for (const t of ['pointerover', 'mouseover', 'pointerdown', 'mousedown']) fire(el, t);
       if (el.focus) el.focus();
@@ -92,10 +102,27 @@ enum ActionExecutor {
         return try? JSONDecoder().decode(ActionTarget.self, from: data)
     }
 
+    /// La carte « Validation requise » : ce qui va partir, en clair (les secrets masqués), et ce que fait le clic.
+    private static func request(for action: AIAction, targets: [Int: ActionTarget], reasons: [String], host: String) -> ConfirmRequest {
+        let target = targets.values.first { $0.isSubmit || !$0.fields.isEmpty } ?? targets.values.first
+        let label = target?.label ?? "le bouton"
+        var title = "Envoyer ce formulaire ?"
+        let profileUse = reasons.contains { $0.hasPrefix("Profil") }
+        if profileUse { title = "Remplir avec vos informations ?" }
+        if reasons.contains(where: { $0.hasPrefix("Achat") }) { title = "Valider cet achat ?" }
+        else if reasons.contains(where: { $0.hasPrefix("Télécharger") }) { title = "Télécharger ce fichier ?" }
+        else if reasons.contains(where: { $0.hasPrefix("Connexion") || $0.hasPrefix("Se connecter") }) { title = "Se connecter ?" }
+        var rows = profileUse ? [(key: "Champ", value: label), (key: "Données", value: reasons.first { $0.hasPrefix("Profil") }?.components(separatedBy: "(").last?.components(separatedBy: ")").first ?? "profil")] : (target?.fields ?? []).map { (key: $0.label.isEmpty ? "Champ" : $0.label, value: $0.shown) }
+        if rows.isEmpty { rows = [(key: "Page", value: host), (key: "Action", value: label)] }
+        let download = target.map(ActionPolicy.isDownloadLink) ?? false
+        let warning = profileUse ? "Je vais écrire vos informations dans cette page ; le site pourra les lire. Je ne les envoie à aucun fournisseur d'IA." : download ? "Je vais télécharger « \(label) »." : "Je vais cliquer sur « \(label) ». Une fois envoyé, je ne pourrai pas l'annuler."
+        return ConfirmRequest(title: title, rows: rows, warning: warning, host: host)
+    }
+
     /// - Parameters:
     ///   - profile: les valeurs des jetons `{{profil.xxx}}` (Trousseau).
     ///   - confirm: reçoit la phrase à montrer à la personne ; vrai = elle a validé.
-    static func execute(_ action: AIAction, in web: WKWebView, profile: [String: String], confirm: (String) async -> Bool) async -> Result {
+    static func execute(_ action: AIAction, in web: WKWebView, profile: [String: String], presence: AgentPresence? = nil, confirm: (ConfirmRequest) async -> Bool) async -> Result {
         let url = web.url
         // 1. Les jetons : remplacés ici, jamais envoyés au modèle ; un jeton inconnu arrête tout.
         var resolved: [String]
@@ -116,18 +143,27 @@ enum ActionExecutor {
         for ref in refs {
             guard let target = await describe(web, ref) else { return Result(ok: false, message: "L'élément @e\(ref) n'est plus sur la page. Relisez la page.") }
             targets[ref] = target
-            let single: AIAction = { if case .fillForm = action { return .type(ref: ref, text: "", submit: false) }; return action }()
+            let single: AIAction = { if case .fillForm(let fields) = action { return .type(ref: ref, text: fields.first { $0.ref == ref }?.value ?? "", submit: false) }; return action }()
             switch ActionPolicy.decide(single, target: target, pageURL: url) {
             case .allow: break
             case .refuse(let reason): return Result(ok: false, message: reason)
             case .confirm(let reason): reasons.append(reason)
             }
         }
+        // Luciole va jusqu'à l'élément AVANT de demander l'accord : la personne voit de quoi il s'agit, et elle reste là pendant qu'elle décide.
+        func reveal(_ ref: Int, _ kind: PresenceKind) async {
+            guard let presence, let raw = await call(web, ["op": "reveal", "ref": ref]), raw["ok"] as? Bool == true,
+                  let x = raw["x"] as? Double, let y = raw["y"] as? Double, let w = raw["w"] as? Double, let h = raw["h"] as? Double else { return }
+            await presence.reveal(rect: CGRect(x: x, y: y, width: w, height: h), in: web, kind: kind)
+        }
+        let singleKind: PresenceKind? = { switch action { case .click: .click; case .type: .type; case .select: .select; default: nil } }()
+        if let ref = refs.first, let singleKind, refs.count == 1 { await reveal(ref, singleKind) }
         var asked = false
         if !reasons.isEmpty {
+            presence?.hold(.wait)
             asked = true
             let host = url?.host ?? "cette page"
-            guard await confirm("\(reasons.joined(separator: " · ")) — sur \(host)") else { return Result(ok: false, message: "La personne a refusé.", askedConfirmation: true) }
+            guard await confirm(Self.request(for: action, targets: targets, reasons: reasons, host: host)) else { return Result(ok: false, message: "La personne a refusé. N'insiste pas : réponds avec done.", askedConfirmation: true) }
         }
 
         // 3. Les gestes.
@@ -137,9 +173,13 @@ enum ActionExecutor {
         case .scroll(let direction):
             return Result(ok: await run(["op": "scroll", "direction": direction]), message: "Page défilée.")
         case .click(let ref):
+            presence?.hold(.act)
+            await presence?.press()
             let ok = await run(["op": "click", "ref": ref])
             return Result(ok: ok, message: ok ? "Clic sur \(label(ref))." : "Le clic a échoué.", askedConfirmation: asked)
         case .type(let ref, _, let submit):
+            presence?.hold(.write)
+            if submit { await presence?.press() }
             let ok = await run(["op": "type", "ref": ref, "value": resolved[0], "submit": submit])
             return Result(ok: ok, message: ok ? "Saisie dans \(label(ref))." : "La saisie a échoué.", askedConfirmation: asked)
         case .select(let ref, _):
@@ -149,6 +189,7 @@ enum ActionExecutor {
             var done = 0
             for (index, field) in fields.enumerated() {
                 let isSelect = targets[field.ref]?.tag == "select"
+                await reveal(field.ref, isSelect ? .select : .type)
                 if await run(["op": isSelect ? "select" : "type", "ref": field.ref, "value": resolved[index]]) { done += 1 }
             }
             return Result(ok: done == fields.count, message: "Remplissage de \(done) champ\(done > 1 ? "s" : "") sur \(fields.count).", askedConfirmation: asked)

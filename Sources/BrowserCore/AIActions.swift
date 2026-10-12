@@ -79,9 +79,20 @@ public struct ActionTarget: Equatable, Sendable, Codable {
     public var formHasSecret = false     // le formulaire contient un mot de passe ou une carte
     public var href: String?
     public var download = false
-    public init(ref: Int, tag: String, type: String? = nil, label: String, isSubmit: Bool = false, inForm: Bool = false, formHasSecret: Bool = false, href: String? = nil, download: Bool = false) {
+    /// Les champs du formulaire visé, pour la carte de validation : un champ secret n'arrive jamais avec sa valeur (seulement ses 4 derniers chiffres pour une carte).
+    public var fields: [Field] = []
+    public struct Field: Equatable, Sendable, Codable {
+        public var label: String
+        public var value: String
+        public var secret: Bool
+        public var last4: String?
+        public init(label: String, value: String, secret: Bool = false, last4: String? = nil) { self.label = label; self.value = value; self.secret = secret; self.last4 = last4 }
+        /// Ce qu'on montre : « •••• 4242 » pour une carte, « •••••••• » pour un mot de passe, la valeur sinon.
+        public var shown: String { !secret ? value : (last4.map { "•••• \($0)" } ?? "••••••••") }
+    }
+    public init(ref: Int, tag: String, type: String? = nil, label: String, isSubmit: Bool = false, inForm: Bool = false, formHasSecret: Bool = false, href: String? = nil, download: Bool = false, fields: [Field] = []) {
         self.ref = ref; self.tag = tag; self.type = type; self.label = label; self.isSubmit = isSubmit
-        self.inForm = inForm; self.formHasSecret = formHasSecret; self.href = href; self.download = download
+        self.inForm = inForm; self.formHasSecret = formHasSecret; self.href = href; self.download = download; self.fields = fields
     }
     /// Champ secret : jamais rempli par l'IA (le remplissage automatique du navigateur s'en charge).
     public var isSecret: Bool { PageMap.isSecret(type: type, hints: [label]) }
@@ -104,7 +115,7 @@ public enum ActionPolicy {
         return !["http", "https"].contains(scheme)
     }
 
-    static func isDownloadLink(_ target: ActionTarget) -> Bool {
+    public static func isDownloadLink(_ target: ActionTarget) -> Bool {
         if target.download { return true }
         guard let href = target.href, let path = URL(string: href)?.path ?? Optional(href) else { return false }
         return downloadExtensions.contains((path as NSString).pathExtension.lowercased())
@@ -115,11 +126,16 @@ public enum ActionPolicy {
         if isForbiddenPage(pageURL) { return .refuse(reason: "L'IA n'agit pas sur cette page.") }
         switch action {
         case .scroll: return .allow
-        case .type(_, _, let submit):
+        case .type(_, let text, let submit):
             if target.isSecret { return .refuse(reason: "Les mots de passe et les cartes se remplissent avec le remplissage automatique, pas avec l'IA.") }
+            // Vos informations de profil ne vont dans une page qu'avec votre accord : le script du site peut lire un champ avant même tout envoi.
+            let keys = ProfileTokens.keys(in: text)
+            if !keys.isEmpty { return .confirm(reason: "Profil : écrire vos informations (\(keys.joined(separator: ", "))) dans « \(target.label) »") }
             return submit ? .confirm(reason: "Envoyer le formulaire") : .allow
-        case .select:
-            return target.isSecret ? .refuse(reason: "Champ protégé.") : .allow
+        case .select(_, let option):
+            if target.isSecret { return .refuse(reason: "Champ protégé.") }
+            let keys = ProfileTokens.keys(in: option)
+            return keys.isEmpty ? .allow : .confirm(reason: "Profil : écrire vos informations (\(keys.joined(separator: ", "))) dans « \(target.label) »")
         case .fillForm:
             return target.isSecret ? .refuse(reason: "Champ protégé.") : .allow
         case .click:

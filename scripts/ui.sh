@@ -1,7 +1,7 @@
 #!/bin/bash
 # Drives a running HyperBrowser launched with --automation.
 #   scripts/ui.sh snapshot [/path/out.png] | tree | state | type "text" | key cmd+l | click X Y
-#   scripts/ui.sh tab translate|untranslate|translation|copy|pasteboard|notice|night|nightsite|geometry|resume|pressnotice|resumeforget|aiask|aiget|digest|digestget|digestcook|digestshot|digestservings|boostapply|boostmodel|boostreport|boostremove|eventget|eventmodel|pagemap|pagemapget|act|actget|airesolve|aibar|aistate|aiquery|aistop|fmask 0
+#   scripts/ui.sh tab translate|untranslate|translation|copy|pasteboard|notice|night|nightsite|geometry|resume|pressnotice|resumeforget|aiask|aiget|digest|digestget|digestcook|digestshot|digestservings|boostapply|boostmodel|boostreport|boostremove|eventget|eventmodel|pagemap|pagemapget|act|actget|groqkey|lucioleSheet|aiopensource|aipanelshot|airesolve|aibar|aistate|aiquery|aistop|fmask 0
 #   scripts/ui.sh action focusAddressBar | eval "document.title"
 DIR="${HB_AUTOMATION_DIR:-$HOME/Library/Application Support/HyperBrowser/Automation}"
 ID=$$-$RANDOM

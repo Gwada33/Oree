@@ -1085,10 +1085,87 @@ final class AssistantProfileModel: ObservableObject {
     }
 }
 
+@MainActor
+final class AssistantProviderModel: ObservableObject {
+    @Published var provider: AIProvider { didSet { SettingsStore.shared.aiProviderChoice = provider; model = SettingsStore.shared.aiModel(for: provider); hasKey = CloudKeychain(provider).hasKey; keyDraft = ""; if provider == .lmstudio { refreshModels() } } }
+    @Published var model: String { didSet { if provider.usesAPI { SettingsStore.shared.setAIModel(model, for: provider) } } }
+    @Published var keyDraft = ""
+    @Published var tick = 0                 // relance l'affichage après un réglage écrit hors du modèle
+    @Published var hasKey: Bool
+    // LM Studio : adresse du serveur local et modèles qu'il propose.
+    @Published var lmURL = SettingsStore.shared.lmStudioBaseText { didSet { SettingsStore.shared.setLMStudioBase(text: lmURL) } }
+    @Published var lmModels: [String] = []
+    @Published var lmStatus = ""
+    func refreshModels() {
+        lmStatus = "Recherche des modèles…"
+        let base = SettingsStore.shared.lmStudioBase
+        Task { @MainActor in
+            var request = URLRequest(url: LMStudio.modelsURL(base: base), timeoutInterval: 3)
+            request.httpMethod = "GET"
+            if let (data, response) = try? await URLSession.shared.data(for: request), (response as? HTTPURLResponse)?.statusCode == 200 {
+                lmModels = LMStudio.parseModels(data)
+                lmStatus = lmModels.isEmpty ? "Le serveur répond mais aucun modèle de conversation n'est chargé." : "\(lmModels.count) modèle\(lmModels.count > 1 ? "s" : "") trouvé\(lmModels.count > 1 ? "s" : "") sur \(base.host ?? "le serveur")."
+                if !lmModels.contains(model) { model = lmModels.first ?? "" }
+            } else {
+                lmModels = []
+                lmStatus = "LM Studio ne répond pas sur \(base.absoluteString). Lancez-le et démarrez le serveur local (Developer › Start Server)."
+            }
+        }
+    }
+    init() {
+        let keys = Set(AIProvider.allCases.filter { $0.isCloud && CloudKeychain($0).hasKey })
+        let current = AIProvider.effective(stored: SettingsStore.shared.aiProviderChoice, keys: keys)
+        provider = current
+        hasKey = keys.contains(current)
+        model = SettingsStore.shared.aiModel(for: current)
+    }
+    func saveKey() { let keychain = CloudKeychain(provider); if keychain.save(keyDraft) { keyDraft = ""; hasKey = keychain.hasKey } }
+    func removeKey() { CloudKeychain(provider).delete(); hasKey = false }
+}
+
 struct AssistantSection: View {
     @StateObject private var profile = AssistantProfileModel()
+    @StateObject private var provider = AssistantProviderModel()
 
     var body: some View {
+        Section("Cerveau de l'assistant") {
+            Picker("Fournisseur", selection: $provider.provider) {
+                ForEach(AIProvider.allCases, id: \.self) { Text($0.title).tag($0) }
+            }.pickerStyle(.menu)
+            if provider.provider == .lmstudio {
+                TextField("Adresse du serveur", text: $provider.lmURL, prompt: Text("http://localhost:1234/v1"))
+                    .onSubmit { provider.refreshModels() }
+                HStack {
+                    Picker("Modèle", selection: $provider.model) {
+                        if !provider.lmModels.contains(provider.model) { Text(provider.model.isEmpty ? "Choisir…" : provider.model).tag(provider.model) }
+                        ForEach(provider.lmModels, id: \.self) { Text($0).tag($0) }
+                    }
+                    Button("Actualiser") { provider.refreshModels() }
+                }
+                if !provider.lmStatus.isEmpty { Text(provider.lmStatus).font(.caption).foregroundStyle(.secondary) }
+                Text("LM Studio prête à Orée les modèles que vous avez téléchargés chez lui : lancez son serveur local (onglet Developer), chargez un modèle, puis actualisez. Avec l'adresse par défaut (localhost), rien ne quitte votre Mac. Choisissez un modèle qui sait appeler des outils (par exemple gpt-oss ou Qwen) : sans cela, Luciole répond en texte mais n'agit pas.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if provider.provider.isCloud {
+                TextField("Modèle \(provider.provider.displayName)", text: $provider.model)
+                HStack {
+                    SecureField(provider.hasKey ? "Clé enregistrée (collez-en une autre pour la remplacer)" : "Clé API \(provider.provider.displayName)", text: $provider.keyDraft)
+                    Button("Enregistrer") { provider.saveKey() }.disabled(provider.keyDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                    if provider.hasKey { Button("Retirer") { provider.removeKey() } }
+                }
+                Text("Avec \(provider.provider.displayName), l'assistant appelle de vrais outils et répond bien plus vite, mais le texte de la page que vous lui demandez de lire (titres, libellés des champs, extraits) et vos questions sont envoyés à \(provider.provider.displayName), dans le nuage. Les valeurs de votre profil, elles, restent sur ce Mac : seuls les jetons {{profil.xxx}} sont envoyés. La clé est gardée dans le Trousseau.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("Le modèle local tourne sur ce Mac, sans internet : rien ne quitte votre ordinateur. Il est plus lent et se trompe plus souvent sur les actions.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        Section("Mémoire de Luciole") {
+            Toggle("Garder les discussions et un journal de ce que Luciole a fait", isOn: Binding(get: { SettingsStore.shared.lucioleMemoryEnabled }, set: { SettingsStore.shared.lucioleMemoryEnabled = $0; provider.tick += 1 }))
+            Text("Luciole peut ainsi rouvrir une discussion, et se souvenir de ce qu'elle a fait sur un site ou de ce que vous lui avez appris (par exemple votre prénom, si elle vous l'a demandé). Tout reste dans un fichier de ce Mac. Les valeurs saisies dans les formulaires ne sont jamais gardées, ni rien en navigation privée.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Effacer la mémoire de Luciole", role: .destructive) { LucioleMemory.erase(); provider.tick += 1 }
+        }
+        .id(provider.tick)
         Section("Profil pour l'assistant") {
             ForEach(AssistantProfileModel.fields, id: \.key) { field in
                 TextField(field.label, text: profile.binding(field.key))

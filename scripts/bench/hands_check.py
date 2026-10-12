@@ -55,7 +55,7 @@ def main():
         r = refs()
         out = act("type", {"ref": f"@e{r['Nom']}", "text": "Nolhan"}); print("  ", out)
         check("la frappe dans le champ « React » est vue par le framework", '"name":"Nolhan"' in js("document.getElementById('state').textContent"))
-        out = act("type", {"ref": r["Ville"], "text": "{{profil.ville}}"}, profile={"ville": "Lisbonne"}); print("  ", out)
+        out = act("type", {"ref": r["Ville"], "text": "{{profil.ville}}"}, approve=True, profile={"ville": "Lisbonne"}); print("  ", out)
         check("le jeton {{profil.ville}} est remplacé par la vraie valeur", '"ville":"Lisbonne"' in js("document.getElementById('state').textContent"))
         check("la valeur du profil ne revient pas dans le résultat", "Lisbonne" not in out)
         out = act("type", {"ref": r["Ville"], "text": "{{profil.inconnu}}"}, profile={"ville": "x"})

@@ -362,7 +362,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             tabOperation: { [weak self] op, index in
                 guard let self, self.visibleTabs().indices.contains(index) else { return "no such tab" }
                 let tab = self.visibleTabs()[index]
-                if op == "pagemap" || op == "pagemapget" || op == "act" || op == "actget" { return self.pageMapOp(op, tab) }      // hors du `switch` : il est déjà à la limite du compilateur
+                if op == "pagemap" || op == "pagemapget" || op == "act" || op == "actget" || op == "groqkey" || op == "cloudkey" { return self.pageMapOp(op, tab) }      // hors du `switch` : il est déjà à la limite du compilateur
                 switch op {
                 case "select": self.selectTab(tab); return "selected \(index)"
                 case "sleep": self.sleepTab(tab); return "sleeping \(index)"
@@ -380,6 +380,25 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     // Dev: pose à la barre IA la question écrite dans /tmp/oree-ai-query.txt (la vraie question, par le vrai service).
                     guard let text = try? String(contentsOfFile: "/tmp/oree-ai-query.txt", encoding: .utf8) else { return "no query file" }
                     self.aiBar().ask(text.trimmingCharacters(in: .whitespacesAndNewlines)); return self.aiBar().report
+                case "aiopensource":
+                    #if DEBUG
+                    if let text = try? String(contentsOfFile: "/tmp/oree-ai-query.txt", encoding: .utf8), let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) { self.aiBarController?.devOpenSource(url) }
+                    return self.aiBarController?.report ?? "no panel"
+                    #else
+                    return "debug only"
+                    #endif
+                case "lucioleSheet":
+                    #if DEBUG
+                    return AIPanelController.devLucioleSheet(to: "/tmp/oree-luciole.png")
+                    #else
+                    return "debug only"
+                    #endif
+                case "aipanelshot":
+                    #if DEBUG
+                    return self.aiBarController?.devSnapshot(to: "/tmp/oree-panel.png") ?? "no panel"
+                    #else
+                    return "debug only"
+                    #endif
                 case "aistop": self.aiBarController?.stop(); return self.aiBarController?.report ?? ""
                 case "airesolve":
                     // Dev : répond à la carte « à valider » (yes / no) ou à la question affichée (texte du fichier).
@@ -1768,7 +1787,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window?.toolbar = nil
         applySidebarMode(animated: false)
     }
-    public func windowDidEnterFullScreen(_ notification: Notification) { applySidebarMode(animated: false) }
+    public func windowDidEnterFullScreen(_ notification: Notification) { settleLayout() }
     public func windowWillExitFullScreen(_ notification: Notification) {
         isFullScreen = false
         window?.toolbar = titleToolbar
@@ -1781,11 +1800,56 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window?.toolbar = nil
         window?.toolbar = titleToolbar
         window?.toolbarStyle = .unified
-        applySidebarMode(animated: false)
+        settleLayout()
     }
 
     public func windowDidResize(_ notification: Notification) {
         applySidebarMode(animated: false)
+        if windowExceedsScreen() { DispatchQueue.main.async { [weak self] in self?.clampWindowToScreen() } }
+    }
+
+    public func windowDidChangeScreen(_ notification: Notification) { settleLayout() }
+
+    // MARK: Retour du plein écran : tout remettre d'aplomb
+
+    /// AppKit finit d'attacher la barre de titre et de rendre ses dimensions à la fenêtre un peu après `windowDidExitFullScreen` : le mode compact
+    /// (rail, décalage des boutons) et la page doivent être recalculés une fois la transition vraiment terminée, pas seulement à son annonce.
+    private func settleLayout() {
+        relayoutWindow()
+        for delay in [0.12, 0.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.relayoutWindow() }
+        }
+    }
+
+    private func relayoutWindow() {
+        clampWindowToScreen()
+        applySidebarMode(animated: false)
+        contentContainer.needsLayout = true
+        window?.contentView?.layoutSubtreeIfNeeded()
+        activeTab?.webView?.needsLayout = true
+    }
+
+    private func windowExceedsScreen() -> Bool {
+        guard let window, !window.styleMask.contains(.fullScreen), !isFullScreen, let visible = window.screen?.visibleFrame else { return false }
+        return window.frame.width > visible.width + 1 || window.frame.height > visible.height + 1
+    }
+
+    /// Une fenêtre ne doit jamais être plus grande que l'écran qui la porte (une page qui impose une largeur, un retour du plein écran mal
+    /// terminé, un écran débranché…) : sinon la page déborde et on ne peut plus attraper les bords.
+    private func clampWindowToScreen() {
+        guard windowExceedsScreen(), let window, let visible = window.screen?.visibleFrame else { return }
+        var frame = window.frame
+        frame.size.width = min(frame.width, visible.width)
+        frame.size.height = min(frame.height, visible.height)
+        frame.origin.x = max(visible.minX, min(frame.origin.x, visible.maxX - frame.width))
+        frame.origin.y = max(visible.minY, min(frame.origin.y, visible.maxY - frame.height))
+        window.setFrame(frame, display: true)
+    }
+
+    @objc func automationHugeWindow() {
+        guard var frame = window?.frame else { return }
+        frame.size.width = 6000
+        window?.setFrame(frame, display: true)
     }
 
     /// Favorites grid: three equal columns right under the search field.
@@ -1905,11 +1969,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard await VaultUnlocker.shared.authenticate(reason: "Remplir le mot de passe de \(login.username) pour \(host)") else { return }
         do {
             guard let password = try vault.password(origin: origin, username: login.username) else { return }
-            _ = try? await webView.callAsyncJavaScript(
-                "return window.__hbFill(u, p);",
-                arguments: ["u": login.username, "p": password],
-                in: nil, contentWorld: .page
-            )
+            _ = await webView.safeCall("return window.__hbFill(u, p);", arguments: ["u": login.username, "p": password], world: .page)
         } catch {
             Log.security.error("Autofill failed: \(String(describing: error), privacy: .public)")
         }
@@ -3249,7 +3309,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     @objc func closeFindBar() {
         findBarContainer?.isHidden = true
-        activeTab?.webView?.evaluateJavaScript("window.getSelection().removeAllRanges()")
+        activeTab?.webView?.safeRun("window.getSelection().removeAllRanges()", world: .page)
         if let webView = activeTab?.webView {
             window?.makeFirstResponder(webView)
         }
@@ -3265,7 +3325,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             .replacingOccurrences(of: "'", with: "\\'")
         guard !term.isEmpty else { return }
         let js = "window.find('\(term)', false, \(backwards), true, false, true, false)"
-        tab.webView?.evaluateJavaScript(js, completionHandler: nil)
+        tab.webView?.safeRun(js, world: .page)
     }
 
     @objc func addBookmark() {
@@ -3316,7 +3376,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         lastBoostSignature = boostSignature()
         for tab in tabs {
             tab.setUserScripts(userScripts(for: tab.currentURL))
-            if let web = tab.webView { Task { _ = try? await web.evaluateJavaScript(BoostScript.source(config), in: nil, contentWorld: BoostScript.world) } }
+            if let web = tab.webView { Task { _ = await web.safeEvaluate(BoostScript.source(config), world: BoostScript.world) } }
         }
     }
 
@@ -3550,6 +3610,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Dev : la carte de page (ce que lirait l'IA) de l'onglet, avec son poids estimé.
     private func pageMapOp(_ op: String, _ tab: Tab) -> String {
         if op == "pagemapget" || op == "actget" { return pageMapResult }
+        #if DEBUG
+        if op == "groqkey" || op == "cloudkey" {
+            // Dev (debug seulement) : range dans le Trousseau la clé écrite dans /tmp/oree-cloud-key.txt (ligne 1 : mistral ou groq ; ligne 2 : la clé), puis efface le fichier.
+            let path = "/tmp/oree-cloud-key.txt"
+            defer { try? FileManager.default.removeItem(atPath: path) }
+            let lines = ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+            guard lines.count == 2, let provider = AIProvider(rawValue: lines[0]), provider.isCloud else { return "no key file" }
+            let keychain = CloudKeychain(provider)
+            return keychain.save(lines[1]) ? "saved \(provider.rawValue) (hasKey=\(keychain.hasKey))" : "keychain refused"
+        }
+        #endif
         pageMapResult = "pending"
         if op == "act" {
             Task { @MainActor in pageMapResult = await actOp(tab) }
@@ -3570,8 +3641,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         do { action = try AIAction.parse(name: name, argumentsJSON: argsJSON) } catch { return "parse error: \(error)" }
         let approve = spec["approve"] as? Bool ?? false
         var asked = ""
-        let result = await ActionExecutor.execute(action, in: web, profile: spec["profile"] as? [String: String] ?? [:]) { question in
-            asked = question
+        let result = await ActionExecutor.execute(action, in: web, profile: spec["profile"] as? [String: String] ?? [:]) { request in
+            asked = request.title + " · " + request.rows.map { "\($0.key)=\($0.value)" }.joined(separator: ", ") + " · " + request.warning
             return approve
         }
         return "ok=\(result.ok) asked=\(result.askedConfirmation) msg=\(result.message)" + (asked.isEmpty ? "" : " question=\(asked)")
@@ -3686,7 +3757,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func pushPage(by pushed: CGFloat) {
         guard let edge = pageTrailing else { return }
-        Motion.animate(Motion.standard) { edge.animator().constant = -pushed }
+        // 8 pt de « chrome » entre la page et le panneau (où se trouve la poignée) ; la page arrondit son coin haut-droit à 14 quand elle est poussée.
+        contentContainer.maskedCorners = pushed > 0 ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMaxYCorner]
+        Motion.animate(Motion.slow) { edge.animator().constant = pushed > 0 ? -(pushed + 8) : 0 }
     }
 
     private func aiBar() -> AIPanelController {
@@ -3694,9 +3767,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard let contentView = window?.contentView else { fatalError("fenêtre sans contenu") }
         let hooks = AIPanelController.Hooks(
             activeWebView: { [weak self] in self?.activeTab?.webView },
+            pageHost: { [weak self] in self?.contentContainer },
             navigate: { [weak self] urlString in await self?.agentNavigate(urlString) ?? false },
             openTab: { [weak self] url in _ = self?.newTab(urlString: url.absoluteString, isPrivate: false) },
             windowWidth: { [weak self] in self?.window?.contentView?.bounds.width ?? 1200 },
+            isPrivate: { [weak self] in self?.activeTab?.isPrivate ?? false },
             onLayout: { [weak self] pushed in self?.pushPage(by: pushed) })
         let created = AIPanelController(contentView: contentView, top: contentContainer.topAnchor, downloads: downloads, hooks: hooks)
         created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open }
@@ -3845,7 +3920,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         noticePill.show(message: message, button: "Reprendre", seconds: 12) { [weak tab] in
             guard let web = tab?.webView else { return }
-            Task { _ = try? await web.callAsyncJavaScript(call.body, arguments: call.arguments, in: nil, contentWorld: ResumeScript.world) }
+            Task { _ = await web.safeCall(call.body, arguments: call.arguments, world: ResumeScript.world) }
         }
     }
 
@@ -3871,7 +3946,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         for tab in tabs {
             tab.setUserScripts(userScripts(for: tab.currentURL))
             if let web = tab.webView {
-                Task { _ = try? await web.evaluateJavaScript(NightScript.source(config), in: nil, contentWorld: NightScript.world) }
+                Task { _ = await web.safeEvaluate(NightScript.source(config), world: NightScript.world) }
             }
         }
         if let tab = activeTab { updateNightButton(for: tab) }

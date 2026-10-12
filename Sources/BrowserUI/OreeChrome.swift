@@ -47,6 +47,7 @@ class SurfaceView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override var wantsUpdateLayer: Bool { true }
+    override func layout() { super.layout(); if cornerRadius > 50 { needsDisplay = true } }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -62,7 +63,8 @@ class SurfaceView: NSView {
     override func updateLayer() {
         guard let layer else { return }
         layer.backgroundColor = fill.map { Theme.cg($0, in: self) }
-        layer.cornerRadius = cornerRadius
+        // Une pastille (rayon 999) est arrondie à la moitié de son plus petit côté : un rayon démesuré dessine de grandes formes parasites au rendu logiciel.
+        layer.cornerRadius = cornerRadius > 50 ? min(cornerRadius, min(bounds.width, bounds.height) / 2) : cornerRadius
         layer.maskedCorners = maskedCorners
         layer.masksToBounds = clips
         layer.borderWidth = border == nil ? 0 : borderWidth
