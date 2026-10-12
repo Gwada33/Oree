@@ -64,9 +64,12 @@ let package = Package(
         // NSHostingController — it doesn't otherwise touch SwiftUI.
         .target(
             name: "BrowserUI",
-            dependencies: ["BrowserCore", "BrowserStorage", "BrowserSettingsUI", "DownloadKit", "DownloadProtocol", "OreeAIClient", "OreeAIEngine"],
+            dependencies: ["BrowserCore", "BrowserStorage", "BrowserSettingsUI", "DownloadKit", "DownloadProtocol", "OreeAIClient", "OreeAIEngine", "OreeObjC"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+
+        // Un seul fichier Objective-C : attraper les exceptions de WebKit, que Swift ne sait pas attraper (voir OreeObjC.h).
+        .target(name: "OreeObjC"),
 
         // Côté navigateur du service IA local : client XPC et décisions d'état (testables avec un faux service).
         .target(

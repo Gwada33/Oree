@@ -44,7 +44,7 @@ extension Tab {
         // Dev only: HB_GHOST_PROBE=<js> runs in the ghost (isolated world) and its answer joins the report.
         var probe = ""
         if let script = ProcessInfo.processInfo.environment["HB_GHOST_PROBE"] {
-            probe = (try? await view.evaluateJavaScript(script, in: nil, contentWorld: GhostScript.world)).map { "\($0)" } ?? "probe error"
+            probe = (await view.safeEvaluate(script, world: GhostScript.world)).map { "\($0)" } ?? "probe error"
         }
         func mb(_ pid: Int32?) -> Double { pid.flatMap { MemoryBudget.footprint(ofProcess: $0) }.map { Double($0) / 1_048_576 } ?? 0 }
         let ghostPID = (view.value(forKey: "_webProcessIdentifier") as? NSNumber)?.int32Value

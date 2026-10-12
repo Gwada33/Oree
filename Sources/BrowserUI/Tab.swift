@@ -303,7 +303,7 @@ final class Tab: NSObject {
                 continuation.resume(returning: value)
             }
             Task { @MainActor in
-                let value = try? await webView.evaluateJavaScript(script, in: frame, contentWorld: world)
+                let value = await webView.safeEvaluate(script, frame: frame, world: world)
                 finish(value as? String)
             }
             Task { @MainActor in
@@ -317,7 +317,7 @@ final class Tab: NSObject {
     func restorePageStateIfNeeded() {
         guard let json = savedPageState, let webView else { return }
         savedPageState = nil
-        webView.evaluateJavaScript(TabPageState.restoreCall(json: json), in: nil, in: TabPageState.world) { _ in }
+        webView.safeRun(TabPageState.restoreCall(json: json), world: TabPageState.world)
     }
 
     // MARK: - Freeze / thaw
@@ -702,7 +702,7 @@ final class Tab: NSObject {
                 continuation.resume(returning: value)
             }
             Task { @MainActor in
-                let value = try? await webView.callAsyncJavaScript(body, arguments: arguments, in: nil, contentWorld: GhostScript.world)
+                let value = await webView.safeCall(body, arguments: arguments, world: GhostScript.world)
                 finish(value as? String)
             }
             Task { @MainActor in

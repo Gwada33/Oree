@@ -94,12 +94,12 @@ final class GhostView: NSObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loadTime = loadStarted.map { Date().timeIntervalSince($0) }
         // Scroll first, reveal after: the ghost must never be seen at the top of the page for a frame.
-        webView.evaluateJavaScript(GhostScript.restoreScroll(x: record.scrollX, y: record.scrollY), in: nil, in: GhostScript.world) { [weak self] _ in
-            MainActor.assumeIsolated { self?.isReady = true; self?.onReady?() }
+        webView.safeRun(GhostScript.restoreScroll(x: record.scrollX, y: record.scrollY), world: GhostScript.world) { [weak self] in
+            self?.isReady = true; self?.onReady?()
         }
         // Images and fonts arrive after didFinish and can move things: restore again once the layout has settled.
         let endBoot = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.webView.evaluateJavaScript(GhostScript.endBoot, in: nil, in: GhostScript.world) { _ in } }
+            MainActor.assumeIsolated { self?.webView.safeRun(GhostScript.endBoot, world: GhostScript.world) }
         }
         restoreWork.append(endBoot)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: endBoot)
@@ -111,7 +111,7 @@ final class GhostView: NSObject, WKNavigationDelegate {
     }
 
     private func restoreScroll() {
-        webView.evaluateJavaScript(GhostScript.restoreScroll(x: record.scrollX, y: record.scrollY), in: nil, in: GhostScript.world) { _ in }
+        webView.safeRun(GhostScript.restoreScroll(x: record.scrollX, y: record.scrollY), world: GhostScript.world)
     }
 }
 

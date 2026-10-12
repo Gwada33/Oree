@@ -207,7 +207,7 @@ final class DigestPanelView: NSView, WKNavigationDelegate {
 
     /// What the pop-up looks like (PNG), optionally scrolled.
     func snapshot(to path: String, scrollY: Int = 0) async {
-        _ = try? await web.evaluateJavaScript("window.scrollTo(0, \(scrollY))", in: nil, contentWorld: .defaultClient)
+        _ = await web.safeEvaluate("window.scrollTo(0, \(scrollY))", world: .defaultClient)
         try? await Task.sleep(for: .milliseconds(300))
         guard let image = try? await card.snapshotImage(), let tiff = image.tiffRepresentation,
               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
@@ -217,7 +217,7 @@ final class DigestPanelView: NSView, WKNavigationDelegate {
     /// Automation: drives the servings slider the way a click on "+" would, returns the ingredient text afterwards.
     func debugSetServings(_ count: Int) async -> String {
         let script = "var s=document.getElementById('sv'); if(!s) 'no slider'; else { s.value=\(count); s.dispatchEvent(new Event('input')); Array.from(document.querySelectorAll('.t')).map(e=>e.textContent).join(' | ') + ' @ ' + document.getElementById('who').textContent }"
-        return ((try? await web.evaluateJavaScript(script, in: nil, contentWorld: .page)) as? String) ?? "error"
+        return (await web.safeEvaluate(script, world: .page) as? String) ?? "error"
     }
 
     // MARK: Rendering
@@ -245,7 +245,7 @@ final class DigestPanelView: NSView, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
-            shownText = ((try? await webView.evaluateJavaScript("document.body ? document.body.innerText : ''", in: nil, contentWorld: .defaultClient)) as? String) ?? ""
+            shownText = (await webView.safeEvaluate("document.body ? document.body.innerText : ''", world: .defaultClient) as? String) ?? ""
         }
     }
 }

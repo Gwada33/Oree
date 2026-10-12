@@ -34,7 +34,7 @@ final class OreeWebView: WKWebView {
         let zoom = max(pageZoom, 0.1)
         let call = "\(Self.hitTest)(\(point.x / zoom), \((isFlipped ? point.y : bounds.height - point.y) / zoom))"
         Task { @MainActor in
-            let json = (try? await evaluateJavaScript(call)) as? String
+            let json = await safeEvaluate(call, world: .page) as? String
             let hit = json.flatMap { try? JSONDecoder().decode(Hit.self, from: Data($0.utf8)) } ?? Hit()
             NSMenu.popUpContextMenu(makeMenu(for: hit), with: event, for: self)
         }

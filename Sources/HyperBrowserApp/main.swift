@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         LaunchTrace.mark("didFinishLaunching")
+        // Le panneau « correction orthographique » d'une page web (la bulle « Voulez-vous dire… ? ») plante parfois l'application : AppKit lève une
+        // exception en l'affichant dans une fenêtre (rapport du 11 octobre, `NSRemoteView containingWindowWillOrderOnScreen:`). On le coupe par défaut ;
+        // le soulignement des fautes reste, et un réglage explicite de l'utilisateur (Édition › Orthographe) l'emporte.
+        UserDefaults.standard.register(defaults: ["WebAutomaticSpellingCorrectionEnabled": false, "NSAutomaticSpellingCorrectionEnabled": false])
         DiagnosticsReporter.shared.start()
         ThemeBootstrap.start()
 

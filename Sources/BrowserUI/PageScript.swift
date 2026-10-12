@@ -1,4 +1,6 @@
 import WebKit
+import OreeObjC
+import BrowserCore
 
 extension WKWebView {
     /// Runs `body` (an async function body) in `world` of the main frame and returns its result decoded from JSON; nil on error, or
@@ -15,7 +17,7 @@ extension WKWebView {
                 continuation.resume(returning: value)
             }
             Task { @MainActor in
-                finish(try? await self.callAsyncJavaScript(wrapped, arguments: arguments, in: nil, contentWorld: world) as? String)
+                finish(await self.safeCall(wrapped, arguments: arguments, world: world) as? String)
             }
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(seconds))
@@ -23,5 +25,75 @@ extension WKWebView {
             }
         }
         return json.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8), options: [.fragmentsAllowed]) }
+    }
+}
+
+
+/// Les appels JavaScript « sans filet » plantaient l'application quand WebKit levait une exception Objective-C (onglet fermé ou endormi pendant le
+/// script) : ces versions l'attrapent et répondent nil, comme pour une erreur ordinaire. À utiliser à la place de `evaluateJavaScript` /
+/// `callAsyncJavaScript` en `async`.
+/// Un résultat JavaScript (valeur de liste de propriétés) qui traverse un `await` : il n'est lu que par l'appelant, sur le fil principal.
+struct JSResult: @unchecked Sendable { var value: Any? }
+
+/// Garantit qu'une suite (`continuation`) n'est reprise qu'une fois : une seconde reprise ferait planter l'application.
+final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    func callAsFunction(_ body: () -> Void) { lock.lock(); let first = !done; done = true; lock.unlock(); if first { body() } }
+}
+
+extension WKWebView {
+    /// Lance un script sans attendre sa réponse (avec le même filet contre les exceptions).
+    @MainActor
+    func safeRun(_ script: String, world: WKContentWorld = .page, completion: (@MainActor () -> Void)? = nil) {
+        var reason: NSString?
+        let started = OreeTryObjC({
+            self.evaluateJavaScript(script, in: nil, in: world) { _ in
+                if let completion { MainActor.assumeIsolated { completion() } }
+            }
+        }, &reason)
+        if !started { Log.tabs.error("evaluateJavaScript a levé une exception, ignorée : \((reason as String?) ?? "?", privacy: .public)") }
+    }
+
+    @MainActor
+    func safeEvaluate(_ script: String, frame: WKFrameInfo? = nil, world: WKContentWorld = .page) async -> Any? {
+        let boxed: JSResult = await withCheckedContinuation { (continuation: CheckedContinuation<JSResult, Never>) in
+            var reason: NSString?
+            let once = ResumeOnce()
+            let started = OreeTryObjC({
+                self.evaluateJavaScript(script, in: frame, in: world) { result in
+                    switch result {
+                    case .success(let value): once { continuation.resume(returning: JSResult(value: value)) }
+                    case .failure: once { continuation.resume(returning: JSResult(value: nil)) }
+                    }
+                }
+            }, &reason)
+            if !started {
+                Log.tabs.error("evaluateJavaScript a levé une exception, ignorée : \((reason as String?) ?? "?", privacy: .public)")
+                once { continuation.resume(returning: JSResult(value: nil)) }
+            }
+        }
+        return boxed.value
+    }
+
+    @MainActor
+    func safeCall(_ body: String, arguments: [String: Any] = [:], world: WKContentWorld) async -> Any? {
+        let boxed: JSResult = await withCheckedContinuation { (continuation: CheckedContinuation<JSResult, Never>) in
+            var reason: NSString?
+            let once = ResumeOnce()
+            let started = OreeTryObjC({
+                self.callAsyncJavaScript(body, arguments: arguments, in: nil, in: world) { result in
+                    switch result {
+                    case .success(let value): once { continuation.resume(returning: JSResult(value: value)) }
+                    case .failure: once { continuation.resume(returning: JSResult(value: nil)) }
+                    }
+                }
+            }, &reason)
+            if !started {
+                Log.tabs.error("callAsyncJavaScript a levé une exception, ignorée : \((reason as String?) ?? "?", privacy: .public)")
+                once { continuation.resume(returning: JSResult(value: nil)) }
+            }
+        }
+        return boxed.value
     }
 }
