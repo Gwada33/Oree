@@ -215,14 +215,6 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .mini-page i:first-child{height:16px;width:46%;background:var(--field)}
 
 /* Fin */
-.camp .dl-mark{width:92px;height:92px;filter:drop-shadow(0 0 22px var(--glow));margin-bottom:10px}
-.camp .say-big{font-size:clamp(48px,8vw,110px)}
-.camp details{margin-top:30px;max-width:560px;text-align:left}
-.camp summary{cursor:pointer;color:var(--ink-2);font-size:14px;text-align:center}
-.camp ol{counter-reset:s;display:grid;gap:10px;margin-top:14px}
-.camp li{counter-increment:s;position:relative;padding-left:38px;font-size:14px;color:var(--ink-2)}
-.camp li::before{content:counter(s);position:absolute;left:0;top:-2px;width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent-text);display:grid;place-items:center;font:italic 400 16px/1 var(--serif)}
-.camp li em{font-style:normal;color:var(--ink);font-weight:600}
 .small-print{padding:30px 0 10px}
 .small-print .nope{font-size:14px;color:var(--ink-2);text-align:center;margin-bottom:26px}
 .faq{display:grid;gap:8px;max-width:760px;margin:0 auto}
@@ -349,3 +341,35 @@ kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px
 .seg button{border:0;background:transparent;color:var(--ink-2);font:600 13.5px/1 var(--sans);padding:10px 14px;border-radius:9px;cursor:pointer}
 .seg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 @media (prefers-reduced-motion:reduce){.tab8,.tab8 *{transition:none!important}.ram-bar span{transition:none}.go .win .b,.go .stream .sg::after{animation-duration:.01s;animation-delay:0s}.go .stream time{animation-delay:0s}}
+
+/* Fin : une route de lumière file vers l'aube */
+.camp{position:relative;overflow:hidden;min-height:100vh;align-items:start;padding-top:12vh;padding-bottom:30vh}
+.camp .wrap{position:relative;z-index:2;width:100%;max-width:900px;margin:0 auto;display:flex;flex-direction:column;align-items:center;text-align:center}
+.camp .say-big{font-size:clamp(64px,13vw,200px);line-height:.95;margin:0 0 6vh}
+.camp .eyebrow{font:italic 400 clamp(18px,2vw,24px)/1 var(--serif);color:var(--accent-text);margin-bottom:14px}
+.horizon{position:absolute;left:0;right:0;bottom:0;height:62%;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 60% 42% at 50% 100%,var(--glow),transparent 70%),radial-gradient(ellipse 22% 9% at 50% 100%,var(--accent),transparent 75%);opacity:.75}
+.road{position:absolute;left:0;right:0;bottom:0;height:72%;z-index:1;pointer-events:none;
+  background:repeating-conic-gradient(from -90deg at 50% 100%,var(--line) 0 .3deg,transparent .3deg 6deg);
+  -webkit-mask-image:linear-gradient(to top,#000 10%,transparent 90%);mask-image:linear-gradient(to top,#000 10%,transparent 90%);animation:breathe 6s ease-in-out infinite}
+@keyframes breathe{50%{opacity:.45}}
+.camp details{margin-top:30px;max-width:560px;text-align:left}
+.camp summary{cursor:pointer;color:var(--ink-2);font-size:14px;text-align:center}
+.camp ol{counter-reset:s;display:grid;gap:10px;margin-top:14px}
+.camp li{counter-increment:s;position:relative;padding-left:38px;font-size:14px;color:var(--ink-2)}
+.camp li::before{content:counter(s);position:absolute;left:0;top:-2px;width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent-text);display:grid;place-items:center;font:italic 400 16px/1 var(--serif)}
+.camp li em{font-style:normal;color:var(--ink);font-weight:600}
+@media (prefers-reduced-motion:reduce){.road{animation:none}}
+
+/* Bouton de téléchargement final */
+.dl-cta{display:inline-flex;align-items:center;gap:16px;padding:10px 34px 10px 10px;border-radius:999px;background:var(--ink);color:var(--paper);text-decoration:none;box-shadow:0 0 0 1px var(--line),0 18px 40px -18px var(--accent),0 0 60px -14px var(--glow);transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s}
+.dl-cta:hover{transform:translateY(-3px);box-shadow:0 0 0 1px var(--line),0 24px 50px -16px var(--accent),0 0 90px -8px var(--glow)}
+.dl-cta:active{transform:scale(.98)}
+.dl-ic{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--accent-ink)}
+.dl-ic .ic{width:22px;height:22px}
+.dl-tx{display:grid;gap:5px;text-align:left}
+.dl-tx b{font:600 18px/1 var(--sans)}
+.dl-tx small{font:400 13px/1 var(--sans);opacity:.65}
+.camp .cta-row{margin-top:6px}
+.camp .fine{margin-top:26px}
+.camp details{margin-top:38px}

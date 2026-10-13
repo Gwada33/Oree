@@ -23,7 +23,7 @@
 <link rel="preload" href="assets/fonts/InstrumentSans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" type="image/png" href="assets/favicon.png">
-<link rel="stylesheet" href="styles.css?v=41">
+<link rel="stylesheet" href="styles.css?v=47">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Orée","operatingSystem":"macOS 15.4+","applicationCategory":"BrowserApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"downloadUrl":"https://github.com/Gwada33/oree/releases/latest/download/Oree-macOS-arm64.dmg"}</script>
 </head>
 <body>
@@ -212,10 +212,10 @@
 
 <section class="moment center camp" id="telecharger" data-pose="happy" data-say="Bonne route !" data-anchor="#route">
   <div class="wrap center">
-    <svg class="dl-mark" aria-hidden="true"><use href="#mark"/></svg>
+    <p class="eyebrow reveal">Prêt quand tu l’es</p>
     <h2 class="say-big reveal">Bonne route.</h2>
     <div class="cta-row reveal" style="justify-content:center">
-      <a class="btn btn-primary btn-lg" id="dl-btn" href="https://github.com/Gwada33/oree/releases/latest/download/Oree-macOS-arm64.dmg" data-lu="happy|Allez !"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Télécharger le .dmg</a>
+      <a class="dl-cta" id="dl-btn" href="https://github.com/Gwada33/oree/releases/latest/download/Oree-macOS-arm64.dmg" data-lu="happy|Allez !"><span class="dl-ic"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg></span><span class="dl-tx"><b>Télécharger pour Mac</b><small>Apple silicon · fichier .dmg</small></span></a>
     </div>
     <p class="fine reveal" id="dl-fine">Dernière version · Apple silicon (M1 et suivants)</p>
     <details class="reveal"><summary>Premier lancement</summary>
@@ -226,7 +226,9 @@
       </ol>
     </details>
   </div>
-  <span class="station" id="route" style="left:calc(50% + 230px);top:56%"></span>
+  <div class="horizon" aria-hidden="true"></div>
+  <div class="road" aria-hidden="true"></div>
+  <span class="station" id="route" style="left:calc(50% + 250px);top:72%"></span>
 </section>
 
 <section class="small-print" id="faq">
@@ -256,6 +258,6 @@
   </div>
 </footer>
 
-<script src="script.js?v=41"></script>
+<script src="script.js?v=47"></script>
 </body>
 </html>
