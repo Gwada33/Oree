@@ -90,4 +90,62 @@ enum GhostScript {
       return JSON.stringify(out);
     })()
     """
+
+    // MARK: User state (phase 4): what the user did in the ghost before the swap
+
+    /// Read in the GHOST: what the user changed since it was shown (typed text, ticked boxes), the focused field with its
+    /// caret, and the selected text. Fields are matched by id, then name, then position among the form controls; passwords
+    /// are never read. Returns JSON.
+    static let readUserState = """
+    (function () {
+      function controls() { return Array.prototype.slice.call(document.querySelectorAll('input,textarea,select')); }
+      function key(e, i) { return e.id ? '#' + e.id : (e.name ? e.tagName + '[name=' + e.name + ']:' + i : e.tagName + ':' + i); }
+      var out = { fields: [], focus: null, selection: '' };
+      controls().forEach(function (e, i) {
+        if (e.type === 'password' || e.type === 'file' || e.type === 'hidden') return;
+        var isBox = e.type === 'checkbox' || e.type === 'radio';
+        var changed = isBox ? e.checked !== e.defaultChecked : (e.tagName === 'SELECT' ? e.selectedIndex !== -1 && !e.options[e.selectedIndex].defaultSelected : e.value !== e.defaultValue);
+        if (changed) out.fields.push({ k: key(e, i), tag: e.tagName, type: e.type, v: isBox ? e.checked : e.value });
+      });
+      var a = document.activeElement;
+      if (a && a !== document.body && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.type !== 'password') {
+        out.focus = { k: key(a, controls().indexOf(a)), s: a.selectionStart, e: a.selectionEnd };
+      }
+      var sel = window.getSelection();
+      if (sel && !sel.isCollapsed) out.selection = sel.toString().slice(0, 500);
+      return JSON.stringify(out);
+    })()
+    """
+
+    /// Run in the REAL page: puts that state back. Values go through the native setter and fire `input` / `change`, so
+    /// frameworks that track their own value (React, Vue) notice. A field the page no longer has is skipped.
+    static func applyUserState(_ json: String) -> String {
+        let literal = (try? String(data: JSONEncoder().encode(json), encoding: .utf8)) ?? "\"{}\""
+        return """
+        (function () {
+          var st = JSON.parse(\(literal));
+          var list = Array.prototype.slice.call(document.querySelectorAll('input,textarea,select'));
+          function key(e, i) { return e.id ? '#' + e.id : (e.name ? e.tagName + '[name=' + e.name + ']:' + i : e.tagName + ':' + i); }
+          function find(k) { for (var i = 0; i < list.length; i++) if (key(list[i], i) === k) return list[i]; return null; }
+          function native(e, prop, v) {
+            var proto = e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : e.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+            var d = Object.getOwnPropertyDescriptor(proto, prop); if (d && d.set) d.set.call(e, v); else e[prop] = v;
+          }
+          st.fields.forEach(function (f) {
+            var e = find(f.k); if (!e || e.tagName !== f.tag || e.type !== f.type) return;
+            var box = f.type === 'checkbox' || f.type === 'radio';
+            if (box ? e.checked === f.v : e.value === f.v) return;
+            native(e, box ? 'checked' : 'value', f.v);
+            e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+          if (st.focus) {
+            var e = find(st.focus.k);
+            if (e) { e.focus({ preventScroll: true }); try { e.setSelectionRange(st.focus.s, st.focus.e); } catch (x) {} }
+          } else if (st.selection && window.find) {
+            window.getSelection().removeAllRanges(); window.find(st.selection, true, false, false);
+          }
+          return 'ok';
+        })()
+        """
+    }
 }

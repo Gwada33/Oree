@@ -115,6 +115,8 @@ final class LoadingBarView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     private var progress: CGFloat = 0
+    /// Opacity the user sees right now (mid-animation included): for the invisibility recorder.
+    var visibleOpacity: Float { fill.presentation()?.opacity ?? fill.opacity }
 
     /// `progress` is 0...1; the bar fades out shortly after reaching 1 or when loading stops.
     func update(progress newValue: Double, isLoading: Bool) {

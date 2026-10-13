@@ -313,8 +313,7 @@ final class RailTabView: HoverView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         badge.configureFavicon(host: host.isEmpty ? title : host, fallbackText: host.isEmpty ? title : host)
-        badge.alphaValue = sleeping ? 0.5 : 1
-        addSubview(badge)
+                addSubview(badge)
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: 36), heightAnchor.constraint(equalToConstant: 30),
             badge.centerXAnchor.constraint(equalTo: centerXAnchor), badge.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -1106,7 +1105,7 @@ final class TabStripView: NSView {
     let tabsStack = NSStackView()
     let spaceChip = SpaceChipButton()
     let newTabButton = ChromeIconButton(symbol: "plus", label: "Nouvel onglet  ⌘T")
-    /// The room between the space chip and the + button: the tabs share exactly this width, no scrolling.
+    /// The room right of the space chip: the tabs and the + button share exactly this width, no scrolling.
     private let tabsHost = NSView()
     private lazy var chipLeading = spaceChip.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 92)
     /// Room for the traffic lights (none in full screen).
@@ -1121,7 +1120,7 @@ final class TabStripView: NSView {
         tabsHost.wantsLayer = true
         tabsHost.layer?.masksToBounds = false
         tabsHost.addSubview(tabsStack)
-        [spaceChip, tabsHost, newTabButton].forEach(addSubview)
+        [spaceChip, tabsHost].forEach(addSubview)   // the + button lives at the end of `tabsStack`, right after the last tab
         // Optional trailing edge: with an absurd number of tabs the strip overflows instead of breaking layout.
         let trailing = tabsStack.trailingAnchor.constraint(lessThanOrEqualTo: tabsHost.trailingAnchor)
         trailing.priority = .init(600)
@@ -1130,9 +1129,7 @@ final class TabStripView: NSView {
             spaceChip.centerYAnchor.constraint(equalTo: centerYAnchor),
             tabsHost.leadingAnchor.constraint(equalTo: spaceChip.trailingAnchor, constant: 8),
             tabsHost.topAnchor.constraint(equalTo: topAnchor), tabsHost.bottomAnchor.constraint(equalTo: bottomAnchor),
-            tabsHost.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -4),
-            newTabButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            newTabButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            tabsHost.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             tabsStack.leadingAnchor.constraint(equalTo: tabsHost.leadingAnchor),
             tabsStack.centerYAnchor.constraint(equalTo: centerYAnchor),   // the same centre line as the chip and the + button
             trailing,
@@ -1158,8 +1155,11 @@ final class TabStripView: NSView {
         for tab in tabs { tab.setStripWidth(width) }
     }
 
-    /// Re-share the width after the tab list changed.
-    func tabsChanged() { needsLayout = true }
+    /// Re-share the width after the tab list changed. The + button goes (back) after the last tab.
+    func tabsChanged() {
+        if newTabButton.superview !== tabsStack || tabsStack.arrangedSubviews.last !== newTabButton { tabsStack.addArrangedSubview(newTabButton) }
+        needsLayout = true
+    }
 
     /// Kept for callers: every tab is always in view now.
     func reveal(_ view: NSView) {}

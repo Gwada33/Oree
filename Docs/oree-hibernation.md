@@ -223,7 +223,16 @@ defaults write com.nolhan.hyperbrowser oree.hibernation.ghost -bool true   # ou 
 ```
 Ouvrez une page longue, défilez, allez sur un autre onglet, endormez le premier (clic droit → Mettre en veille, ou ⌥⌘E), revenez dessus. Le journal (`log stream --predicate 'subsystem == "com.nolhan.hyperbrowser" AND category == "tabs"' --info`) affiche `Ghost: swap after … — ready=ready/painted/…/visible text=… position=…`. `painted` + `visible` = la vraie page a bien produit ses frames avant l'échange.
 
+## Phase 4 (en cours) — état de l'utilisateur, aucun signe visible
+- **Aucun indice de veille dans l'interface** : plus de lune, de flocon, de titre grisé ni de favicon atténué sur les onglets (barre latérale, rail, aperçu des espaces) ; le compteur « N en veille » est retiré. L'état reste interne (préréveil au survol).
+- **État transféré au moment de l'échange** (`GhostScript.readUserState` / `applyUserState`) : texte saisi et cases cochées (champs changés depuis l'affichage du fantôme, jamais les mots de passe), champ actif avec son curseur, texte sélectionné (`window.find`, approximatif si le texte se répète). Les valeurs passent par le setter natif puis `input`/`change` (React/Vue). Aller-retour vérifié sur une page de test ; **non vérifié** : sur de vraies pages avec framework, et avec une fenêtre visible.
+- Le préchargement au survol de la barre latérale existe déjà (`prewake`). Pas de préchargement pour ⌃Tab (le changement est immédiat) : non fait.
+- **Réveil silencieux** : tant qu'un onglet se réveille derrière son fantôme, ni barre de chargement en haut, ni anneau sur l'onglet, ni bouton « arrêter » (`Tab.showsLoading`).
+- **Mesure continue** : `scripts/bench/invisible_check.py` (enregistreur dans l'app, un échantillon toutes les 8 ms : pile affichée, barre, anneau, bouton stop). Rapport et historique dans `scripts/bench/invisible-report.json`. Dernier relevé (5 sites) : 0 ms de barre, d'anneau, de bouton stop, d'image blanche ou de fondu ; échange en 0,7 à 2,1 s.
+- **Échange plus tôt, sans saut** (12 oct.) : le fantôme part dès que la vraie page est complète, montre le même texte aux mêmes endroits et n'a pas bougé pendant ~200 ms (avant : attente de « rien ne bouge pendant 150 ms », jusqu'à 2,5 s sur les pages qui bougent toujours). Le défilement est recalé tout de suite si la vraie page ne l'a pas restauré. Le chargement du réveil reste silencieux après l'échange, jusqu'à sa fin ou jusqu'à ce que l'utilisateur aille ailleurs.
+- Mesure (`invisible_check.py` mesure aussi, après l'échange : rechargements, saut de défilement, re-rendus) : 5 sites, 0 rechargement, 0 saut, 0 re-rendu ; échange en 1,3 à 3,5 s, MDN a mis 6,8 s lors d'un relevé sur deux (page qui se stabilise tard). Le fantôme reste affiché tout ce temps : non cliquable (pas de JS).
+- Reste : clics pendant la restauration (file puis rejeu), état dans les iframes.
+
 ## Suite
-4. Transfert de l'état utilisateur ; **préchargement au survol** (condition du bénéfice de réveil).
 5. Score de fidélité ; gel noyau `SIGSTOP`/`SIGCONT` (flag `oree.hibernation.kernelFreeze`).
 6. Chiffrement AES-GCM, banc automatique d'invisibilité.

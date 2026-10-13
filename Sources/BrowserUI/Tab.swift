@@ -76,6 +76,30 @@ final class Tab: NSObject {
     /// Set by `wake()`, cleared once the fresh page finishes loading — tells
     /// the caller when it's safe to drop the snapshot image.
     private(set) var isAwaitingWakeReveal = false
+    /// What the interface may show of the load: nothing while a woken tab loads behind its snapshot/ghost, so waking
+    /// leaves no trace (no bar at the top, no spinner on the tab, no stop button).
+    /// The load that wakes a tab stays silent after the swap too, until it ends or the user goes to another page: modern pages
+    /// keep "loading" (trackers, ads) long after they are ready, and a bar appearing then would give the sleep away.
+    var showsLoading: Bool { webView?.isLoading == true && !isAwaitingWakeReveal && !silentWakeLoad }
+    private var silentWakeLoad = false
+    private var wakeURL: URL?
+    /// What is stacked on screen right now, for the invisibility recorder (`tab invisstart`): "G" ghost, "S<alpha>" snapshot,
+    /// "W<alpha>" real page; "-" when the slot is hidden. A frame with none of them on top is a blank flash.
+    var probeStack: String {
+        guard !contentSlot.isHidden else { return "-" }
+        var parts: [String] = []
+        if let g = ghostView?.webView, g.superview != nil, !g.isHidden { parts.append("G") }
+        // Presentation layer = what is on screen mid-animation (the model value jumps to the end at once).
+        func shown(_ v: NSView) -> Double { Double(v.layer?.presentation()?.opacity ?? Float(v.alphaValue)) }
+        if !snapshotImageView.isHidden { parts.append(String(format: "S%.2f", shown(snapshotImageView))) }
+        if let w = webView, !w.isHidden { parts.append(String(format: "W%.2f", shown(w))) }
+        return parts.joined(separator: "+")
+    }
+    private func reportProgress() {
+        guard let webView else { return }
+        if !webView.isLoading { silentWakeLoad = false }
+        onProgress?(showsLoading ? webView.estimatedProgress : 0, showsLoading)
+    }
     /// The new page committed (its first content is in the view) — the snapshot may only come down after this.
     private var hasCommittedSinceWake = false
     private var wakeStartedAt: Date?
@@ -272,6 +296,7 @@ final class Tab: NSObject {
         eventCandidate = nil
         isDirty = false
         hasCommittedSinceWake = true
+        if silentWakeLoad, webView?.url != wakeURL { silentWakeLoad = false }   // the user went elsewhere: a real load
     }
 
     /// Reads field values and the video position before a forced teardown.
@@ -364,7 +389,7 @@ final class Tab: NSObject {
         // card instead of WKWebView's white default background flashing.
         webView.alphaValue = 0
         progressObservation = webView.observe(\.estimatedProgress, options: [.new]) { [weak self] web, _ in
-            MainActor.assumeIsolated { self?.onProgress?(web.estimatedProgress, web.isLoading) }
+            MainActor.assumeIsolated { self?.reportProgress() }
         }
         titleObservation = webView.observe(\.title, options: [.new]) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.onTitleChange?() }
@@ -392,7 +417,7 @@ final class Tab: NSObject {
             MainActor.assumeIsolated { self?.onURLChange?() }
         }
         loadingObservation = webView.observe(\.isLoading, options: [.new]) { [weak self] web, _ in
-            MainActor.assumeIsolated { self?.onProgress?(web.estimatedProgress, web.isLoading) }
+            MainActor.assumeIsolated { self?.reportProgress() }
         }
         // Ask WebKit to tell us when real content first paints: that is the right moment to drop the snapshot.
         let renderingSelector = NSSelectorFromString("_setObservedRenderingProgressEvents:")
@@ -603,7 +628,34 @@ final class Tab: NSObject {
         // swaps after 2.5 s. A page that is still *loading* is worse than the ghost, so for that case we keep waiting
         // (up to three rounds, ~8 s) and swap only when it is there.
         var readiness: String?
-        for _ in 0..<3 {
+        // Fast path: the moment the real page is complete AND shows what the ghost shows (same text, same places), it is
+        // there. Waiting for "nothing moved for 150 ms" instead holds the ghost up to 2.5 s on pages that never stop moving
+        // (carousels, clocks, trackers), during which the page looks frozen (no scripts in the ghost).
+        let matchDeadline = Date().addingTimeInterval(6)
+        var lastMatch = "never complete", scrollFixes = 0, stablePolls = 0, previousReal: [GhostItem] = []
+        while Date() < matchDeadline {
+            guard ghostView === ghost, isAwaitingWakeReveal else { return }
+            if ghost.isReady, await evaluateWithTimeout("document.readyState", in: webView, world: GhostScript.world, seconds: 1) == "complete" {
+                let g = GhostMatcher.parse(await evaluateWithTimeout(GhostScript.visibleItems, in: ghost.webView, world: GhostScript.world, seconds: 1) ?? "")
+                let r = GhostMatcher.parse(await evaluateWithTimeout(GhostScript.visibleItems, in: webView, world: GhostScript.world, seconds: 1) ?? "")
+                let similarity = GhostMatcher.similarity(ghost: g, real: r)
+                lastMatch = String(format: "text=%.0f%% pos=%.0f%% items=%d/%d g=%@ r=%@", similarity.textMatch * 100, similarity.positionMatch * 100, g.count, r.count, g.prefix(6).map { "\($0.t)@\(Int($0.x)),\(Int($0.y))#\($0.h % 1000)" }.joined(separator: " "), r.prefix(6).map { "\($0.t)@\(Int($0.x)),\(Int($0.y))#\($0.h % 1000)" }.joined(separator: " "))
+                // Matching is not enough: a page that is still shifting (late hydration, lazy images) would jump right after the
+                // swap. It must also have shown the same thing, at the same places, for two polls in a row (~200 ms).
+                stablePolls = r == previousReal ? stablePolls + 1 : 0
+                previousReal = r
+                if similarity.textMatch >= 0.95, similarity.positionMatch >= 0.9, stablePolls >= 2 { readiness = "matched"; break }
+                // The same text, but somewhere else: the real page did not restore the scroll (or did, partly). Line it up now.
+                if scrollFixes < 3, let dy = GhostMatcher.scrollDelta(ghost: g, real: r), abs(dy) >= 1 {
+                    scrollFixes += 1
+                    _ = await evaluateWithTimeout("window.scrollBy(0, \(dy)); String(window.scrollY)", in: webView, world: GhostScript.world, seconds: 1)
+                    continue
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        if readiness == nil { Log.tabs.notice("Ghost: no match in 6 s (\(lastMatch, privacy: .public))") }
+        for _ in 0..<3 where readiness == nil {
             readiness = await callAsyncWithTimeout(GhostScript.ready, arguments: ["timeoutMs": 2500], seconds: 3.1)
             guard ghostView === ghost, isAwaitingWakeReveal else { return }
             if let r = readiness, r.hasPrefix("timeout"), r.contains("/loading/") { continue }
@@ -611,7 +663,7 @@ final class Tab: NSObject {
         }
         guard ghostView === ghost, isAwaitingWakeReveal else { return }          // slept or woke again meanwhile
 
-        var note = "ready=\(readiness ?? "no answer")"
+        var note = "ready=\(readiness ?? "no answer")" + (readiness == "matched" ? "" : " (no match in 6 s: \(lastMatch))")
         // The swap needs a frame the real page has drawn, and a tab that is not on screen draws none (a hover pre-wake
         // wakes tabs in the background). Hold the ghost until the tab is shown (30 s at most), then check the page paints.
         let waitStart = Date()
@@ -633,6 +685,11 @@ final class Tab: NSObject {
                 _ = await callAsyncWithTimeout("await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return 'ok'", arguments: [:], seconds: 1)
                 note += " scrollFix=\(Int(dy))pt"
             }
+            if let state = await evaluateWithTimeout(GhostScript.readUserState, in: ghost.webView, world: GhostScript.world, seconds: 1),
+               state != "{\"fields\":[],\"focus\":null,\"selection\":\"\"}" {
+                _ = await evaluateWithTimeout(GhostScript.applyUserState(state), in: webView, world: GhostScript.world, seconds: 1)
+                note += " userState=carried"
+            }
             if let directory = ProcessInfo.processInfo.environment["HB_GHOST_SWAP_DUMP"] { await dumpSwap(ghost: ghost.webView, real: webView, to: directory) }
         } else {
             note += " (ghost not painted yet)"
@@ -650,6 +707,7 @@ final class Tab: NSObject {
         CATransaction.setDisableActions(true)
         webView?.alphaValue = 1
         isAwaitingWakeReveal = false
+        reportProgress()
         snapshotImageView.isHidden = true; snapshotImageView.image = nil; snapshotImageView.alphaValue = 1
         snapshotImageView.layer?.backgroundColor = nil
         snapshotData = nil
@@ -842,6 +900,8 @@ final class Tab: NSObject {
             snapshotImageView.isHidden = false
         }
         if let ghost { showGhost(ghost) }
+        silentWakeLoad = true; wakeURL = suspendedURL
+        isAwaitingWakeReveal = true     // before the load starts: its first progress must already be hidden
         let webView = createWebView()
         if ghost != nil { webView.alphaValue = 1 }
         if let state = suspendedInteractionState {
@@ -851,7 +911,6 @@ final class Tab: NSObject {
             webView.load(URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad))
         }
         wakeStartedAt = Date()
-        isAwaitingWakeReveal = true
         hasCommittedSinceWake = false
         isSuspended = false
         // Safety net: if WebKit never reports a paint, don't leave the snapshot up forever.
@@ -872,6 +931,7 @@ final class Tab: NSObject {
         // truly ready and swaps in one frame (see below). Calling this again is harmless.
         if ghostView != nil { beginHydration(); return }
         isAwaitingWakeReveal = false
+        reportProgress()
         snapshotData = nil
         if let started = wakeStartedAt {
             Log.tabs.notice("Wake: live page visible after \(Int(Date().timeIntervalSince(started) * 1000)) ms")

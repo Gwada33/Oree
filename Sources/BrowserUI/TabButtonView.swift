@@ -7,10 +7,9 @@ import BrowserCore
 final class TabButtonView: NSView {
     private let badge = LetterBadgeView(size: 18, cornerRadius: 5)
     private let spinner = SpinnerRingView()
-    private let moon = NSImageView()
     private var isSleeping = false
     private var isFrozen = false
-    private var isLoading = false
+    private(set) var isLoading = false
     private var badgeLeading: NSLayoutConstraint!
     private var heightConstraint: NSLayoutConstraint!
     private var widthConstraint: NSLayoutConstraint?
@@ -72,12 +71,8 @@ final class TabButtonView: NSView {
         audioButton.translatesAutoresizingMaskIntoConstraints = false
         audioButton.isHidden = true
 
-        moon.image = .oreeSymbol("moon", size: 10, weight: .medium) { Theme.muted }
-        moon.translatesAutoresizingMaskIntoConstraints = false
-        moon.isHidden = true
         addSubview(badge)
         addSubview(spinner)
-        addSubview(moon)
         addSubview(titleLabel)
         addSubview(audioButton)
         addSubview(closeButton)
@@ -91,11 +86,8 @@ final class TabButtonView: NSView {
 
             spinner.centerXAnchor.constraint(equalTo: badge.centerXAnchor),
             spinner.centerYAnchor.constraint(equalTo: badge.centerYAnchor),
-            moon.trailingAnchor.constraint(equalTo: audioButton.leadingAnchor, constant: -2),
-            moon.centerYAnchor.constraint(equalTo: centerYAnchor),
             titleLabel.leadingAnchor.constraint(equalTo: badge.trailingAnchor, constant: 10),
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: moon.leadingAnchor, constant: -4),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: audioButton.leadingAnchor, constant: -4),
 
             audioButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -2),
@@ -173,28 +165,11 @@ final class TabButtonView: NSView {
 
     @objc private func audioTapped() { onToggleMute?() }
 
-    /// Sleeping tab: grey title, desaturated half-transparent favicon, moon.
-    func setSleeping(_ sleeping: Bool) {
-        isSleeping = sleeping
-        applyRestSymbol()
-        badge.alphaValue = sleeping ? 0.5 : 1
-        badge.layer?.filters = sleeping ? [Self.desaturate] : nil
-        updateAppearance(animated: false)
-    }
+    /// Sleeping/frozen tabs look exactly like awake ones: hibernation must be invisible (no moon, no grey, no dimmed favicon).
+    /// The state is only kept for behaviour (hover pre-wake).
+    func setSleeping(_ sleeping: Bool) { isSleeping = sleeping }
 
-    /// Frozen tab (page paused but alive, resumes instantly): a small snowflake, favicon slightly dimmed.
-    func setFrozen(_ frozen: Bool) {
-        isFrozen = frozen
-        applyRestSymbol()
-        if !isSleeping { badge.alphaValue = frozen ? 0.75 : 1 }
-    }
-
-    private func applyRestSymbol() {
-        moon.isHidden = !(isSleeping || isFrozen)
-        moon.image = isSleeping
-            ? .oreeSymbol("moon", size: 10, weight: .medium) { Theme.muted }
-            : .oreeSymbol("snowflake", size: 10, weight: .medium) { Theme.muted }
-    }
+    func setFrozen(_ frozen: Bool) { isFrozen = frozen }
 
     /// Fires once the pointer has rested on a sleeping tab for a moment — the app wakes it ahead of the click.
     var onHoverDwell: (() -> Void)?
@@ -207,12 +182,6 @@ final class TabButtonView: NSView {
         dwellWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
-
-    private static let desaturate: CIFilter = {
-        let f = CIFilter(name: "CIColorControls")!
-        f.setValue(0, forKey: "inputSaturation")
-        return f
-    }()
 
     /// Loading ring replaces the favicon while the page loads, in the space color.
     func setLoading(_ loading: Bool, hue: OreeTokens.Hue) {
@@ -341,7 +310,7 @@ final class TabButtonView: NSView {
         }
 
         if isActive { Theme.apply(.one, to: highlight) } else { highlight.shadowOpacity = 0 }
-        titleLabel.textColor = isSleeping ? Theme.muted : (isActive ? Theme.text : Theme.muted)
+        titleLabel.textColor = isActive ? Theme.text : Theme.muted
         titleLabel.font = Theme.sans(13, isActive ? .semibold : .regular)
         let showClose = isActive || isHovered
         if animated {

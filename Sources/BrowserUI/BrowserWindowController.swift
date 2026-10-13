@@ -61,6 +61,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var extensionButtons: [String: ExtensionButton] = [:]
     private let loadingBar = LoadingBarView()
     private let noticePill = NoticePill()
+    private var webStoreOffered: Set<String> = []   // extensions whose "add to Orée" offer was already shown
     /// La barre IA, créée à la première ouverture (rien ne démarre avant : ni l'agent, ni la connexion au service).
     private var aiBarController: AIPanelController?
     /// Écart entre le bord droit de la page et celui de la fenêtre quand le panneau IA pousse la page.
@@ -367,6 +368,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 case "select": self.selectTab(tab); return "selected \(index)"
                 case "sleep": self.sleepTab(tab); return "sleeping \(index)"
                 case "prewake": self.prewake(tab); return "prewoken \(index)"
+                case "invisstart": self.startInvisibilityRecording(); return "recording"
+                case "invisstop": return self.stopInvisibilityRecording()
                 case "translate": tab.translator.translate(); return tab.translator.report
                 case "untranslate": tab.translator.restore(); return tab.translator.report
                 case "translation": return tab.translator.report
@@ -828,6 +831,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         downloadsButton.onClick = { [weak self] in self?.toggleDownloads() }
         downloads.onChange = { [weak self] in self?.downloadsChanged() }
         downloads.onFinish = { [weak self] in self?.downloadsButton.pulse() }
+        downloads.onFinishedFile = { [weak self] file in self?.offerExtensionInstall(fromFile: file) }
         downloads.onStart = { [weak self] in
             guard let self else { return }
             self.downloadsButton.pulse()
@@ -2456,7 +2460,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         updateTabCount()
         if previouslyActive?.id != tab.id { extensionManager.tabActivated(tab, previous: previouslyActive) }
         refreshExtensionToolbar()
-        loadingBar.update(progress: tab.webView?.estimatedProgress ?? 0, isLoading: tab.webView?.isLoading ?? false)
+        loadingBar.update(progress: tab.showsLoading ? (tab.webView?.estimatedProgress ?? 0) : 0, isLoading: tab.showsLoading)
         if let webView = tab.webView {
             window?.makeFirstResponder(webView)
         }
@@ -2530,14 +2534,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func visibleTabs() -> [Tab] { tabs.filter { $0.spaceIndex == currentSpace } }
 
-    /// Header of the tab column: "N onglets · N en veille" for the current space.
+    /// Header of the tab column: "N onglets" (never mentions sleeping tabs: hibernation is invisible).
     private func updateTabCount() {
         let mine = visibleTabs()
-        let sleeping = mine.filter(\.isSuspended).count
-        let frozen = mine.filter(\.isFrozen).count
         let count = mine.count
-        spaceMetaLabel.stringValue = "\(count) onglet\(count > 1 ? "s" : "") · \(sleeping) en veille" + (frozen > 0 ? " · \(frozen) en pause" : "")
-        sleepMetaLabel.stringValue = sleeping > 0 ? "\(sleeping) en veille" : ""
+        spaceMetaLabel.stringValue = "\(count) onglet\(count > 1 ? "s" : "")"
+        sleepMetaLabel.stringValue = ""
         spaceRail.setTabs(mine.map { tab in
             (tab.displayTitle, tab.badgeHost, tab.id == activeTabID, tab.isSuspended,
              { [weak self, weak tab] in if let tab { self?.selectTab(tab) } })
@@ -2592,12 +2594,26 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 container.addArrangedSubview(tab.tabButton)
             }
         }
+        if !horizontal {
+            // Right after the last tab, where the eye is when the list is long (the one at the top stays for the shortcut).
+            let row = inlineNewTabRow ?? makeInlineNewTabRow()
+            container.addArrangedSubview(row)
+        }
         if horizontal {
             tabStrip.spaceChip.configure(currentSpaceStyle)
             tabStrip.tabsChanged()
             if let active = activeTab, active.tabButton.superview === tabStrip.tabsStack { tabStrip.reveal(active.tabButton) }
         }
         updateTabCount()
+    }
+
+    private var inlineNewTabRow: SidebarRowView?
+    private func makeInlineNewTabRow() -> SidebarRowView {
+        let row = SidebarRowView(symbol: "plus", title: "Nouvel onglet", shortcut: nil)
+        row.onClick = { [weak self] in self?.newTabAction() }
+        row.setAccessibilityLabel("Nouvel onglet")
+        inlineNewTabRow = row
+        return row
     }
 
     private func toggleGroup(_ id: UUID) {
@@ -3039,6 +3055,54 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Puts a tab to sleep by hand. The active tab first hands over to a neighbour in its space.
+    // MARK: Invisibility recorder (dev): samples what the user could notice, every 8 ms, until stopped
+
+    private var invisTimer: Timer?
+    private var invisSamples: [[String: Any]] = []
+    private var invisStart = Date()
+    private var invisTicks = 0
+
+    /// Called by the navigation delegate while recording: a navigation after the swap is a real reload.
+    private func noteNavigation(_ kind: String, _ webView: WKWebView) {
+        guard invisTimer != nil, let tab = tab(for: webView) else { return }
+        invisSamples.append(["t": Int(Date().timeIntervalSince(invisStart) * 1000), "tab": tab.id.uuidString.prefix(4).description, "nav": kind])
+    }
+
+    /// Every ~100 ms: where the real page is scrolled, its readyState and a hash of what it shows, to see it move after the swap.
+    private func samplePage(of tab: Tab) {
+        guard let web = tab.webView else { return }
+        let tag = tab.id.uuidString.prefix(4).description
+        let js = "(function(){var h=5381,s=JSON.stringify((function(){var o=[],a=document.body?document.body.querySelectorAll('p,h1,h2,h3,li,img'):[];for(var i=0;i<a.length&&o.length<80;i++){var r=a[i].getBoundingClientRect();if(r.bottom>0&&r.top<innerHeight)o.push([a[i].tagName,Math.round(r.top),Math.round(r.height)])}return o})());for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return Math.round(scrollY)+'|'+document.readyState+'|'+h})()"
+        Task { @MainActor in
+            guard let out = await web.safeEvaluate(js, frame: nil, world: GhostScript.world) as? String, self.invisTimer != nil else { return }
+            self.invisSamples.append(["t": Int(Date().timeIntervalSince(self.invisStart) * 1000), "tab": tag, "page": out])
+        }
+    }
+
+    private func startInvisibilityRecording() {
+        invisTimer?.invalidate()
+        invisSamples = []; invisStart = Date(); invisTicks = 0
+        invisTimer = Timer.scheduledTimer(withTimeInterval: 0.008, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let tab = self.activeTab else { return }
+                self.invisTicks += 1
+                if self.invisTicks % 12 == 0 { self.samplePage(of: tab) }
+                self.invisSamples.append([
+                    "t": Int(Date().timeIntervalSince(self.invisStart) * 1000), "tab": tab.id.uuidString.prefix(4).description,
+                    "stack": tab.probeStack, "bar": Double(self.loadingBar.visibleOpacity), "spin": tab.tabButton.isLoading,
+                    "stop": self.reloadButton.symbol == "xmark",
+                ])
+            }
+        }
+    }
+
+    /// Writes the samples to /tmp/oree-invis.json and returns how many were taken.
+    private func stopInvisibilityRecording() -> String {
+        invisTimer?.invalidate(); invisTimer = nil
+        if let data = try? JSONSerialization.data(withJSONObject: invisSamples) { try? data.write(to: URL(fileURLWithPath: "/tmp/oree-invis.json")) }
+        return "samples=\(invisSamples.count)"
+    }
+
     func sleepTab(_ tab: Tab) {
         guard !tab.isSuspended, tab.webView != nil else { return }
         if splitContains(tab.id) { endSplit(keeping: nil) }
@@ -3291,7 +3355,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func updateLoadingIndicator(for tab: Tab) {
         guard tab.id == activeTabID else { return }
         downloads.pageLoading(tab.webView?.isLoading == true)       // downloads yield to the page being loaded
-        if tab.webView?.isLoading == true {
+        if tab.showsLoading {
             reloadButton.symbol = "xmark"
             reloadButton.onClick = { [weak self] in self?.stopLoadingAction() }
             reloadButton.setAccessibilityLabel("Arrêter le chargement")
@@ -4268,11 +4332,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard let tab = tab(for: webView) else { return }
+        noteNavigation("start", webView)
         updateLoadingIndicator(for: tab)
     }
 
     public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard let tab = tab(for: webView) else { return }
+        noteNavigation("commit", webView)
         tab.interstitial.hide()
         tab.pageDidCommit()
         // A reload keeps the pop-up; another page takes it away.
@@ -4307,6 +4373,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         tab.restorePageStateIfNeeded()
         tab.revealWebView()
         extensionManager.tabChanged(tab, [.loading, .title])
+        offerWebStoreInstall(for: tab)
         tab.upgradedFromHTTP = nil
         tab.upgradeAttempts = [:]
         if let url = webView.url, url.absoluteString != "about:blank", url.scheme != "oree", !tab.isPrivate {
@@ -4440,11 +4507,67 @@ extension BrowserWindowController {
         extensionBar.isHidden = entries.isEmpty
     }
 
+    // MARK: Installing extensions without the manual steps
+
+    /// A .crx finished downloading (from the Web Store or anywhere): offer to install it right away, in a clear prompt.
+    private func offerExtensionInstall(fromFile file: URL) {
+        guard file.pathExtension.lowercased() == "crx" else { return }
+        noticePill.show(message: "Installer cette extension dans Orée ?", button: "Installer", seconds: 30) { [weak self] in
+            self?.installExtension(from: file)
+        }
+    }
+
+    /// On a Chrome Web Store page the "Add to Chrome" button does nothing in Orée: offer the same thing natively.
+    private func offerWebStoreInstall(for tab: Tab) {
+        guard tab.id == activeTabID, !tab.isPrivate, let id = WebStoreExtension.id(from: tab.webView?.url),
+              !webStoreOffered.contains(id), let package = WebStoreExtension.packageURL(id: id) else { return }
+        webStoreOffered.insert(id)
+        let name = WebStoreExtension.name(fromTitle: tab.webView?.title)
+        noticePill.show(message: "Ajouter « \(name) » à Orée ?", button: "Ajouter", seconds: 20) { [weak self] in
+            self?.noticePill.show(message: "Téléchargement de « \(name) »…", button: "Masquer", seconds: 60) { }
+            Task { @MainActor [weak self] in
+                do {
+                    let (temporary, response) = try await URLSession.shared.download(from: package)
+                    guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+                    let file = FileManager.default.temporaryDirectory.appendingPathComponent("\(id).crx")
+                    try? FileManager.default.removeItem(at: file)
+                    try FileManager.default.moveItem(at: temporary, to: file)
+                    self?.installExtension(from: file)
+                } catch {
+                    self?.webStoreOffered.remove(id)
+                    self?.noticePill.show(message: "Impossible de télécharger « \(name) ».", button: "OK", seconds: 8) { }
+                }
+            }
+        }
+    }
+
+    private func installExtension(from file: URL) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.extensionManager.install(from: file)
+                self.noticePill.show(message: "Extension installée.", button: "OK", seconds: 6) { }
+            } catch is CancellationError {
+                // The user declined in the permission prompt.
+            } catch {
+                self.noticePill.show(message: "Installation impossible : \(error.localizedDescription)", button: "OK", seconds: 10) { }
+            }
+        }
+    }
+
     /// Shows an extension's popup next to its toolbar button.
     func presentExtensionPopup(_ action: WKWebExtension.Action, for context: WKWebExtensionContext) {
         guard let popover = action.popupPopover else { return }
-        let anchor: NSView = extensionButtons[context.uniqueIdentifier] ?? addressPill
-        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .maxY)
+        // The button lives in the sidebar: when the sidebar is hidden (compact mode, collapsed, other tab layout) the button has no
+        // place on screen and the popover would open in a corner of the window. Fall back on the address bar, then on the page's top.
+        func usable(_ view: NSView?) -> NSView? {
+            guard let view, view.window != nil, !view.isHiddenOrHasHiddenAncestor, view.bounds.width > 0, view.bounds.height > 0 else { return nil }
+            return view
+        }
+        let anchor: NSView = usable(extensionButtons[context.uniqueIdentifier]) ?? usable(addressPill) ?? contentContainer
+        popover.behavior = .transient
+        popover.show(relativeTo: anchor === contentContainer ? NSRect(x: anchor.bounds.midX - 1, y: anchor.bounds.maxY - 2, width: 2, height: 2) : anchor.bounds,
+                     of: anchor, preferredEdge: anchor === contentContainer ? .minY : .maxY)
     }
 }
 

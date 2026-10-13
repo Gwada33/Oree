@@ -232,7 +232,7 @@ private final class SpaceCardView: SurfaceView {
                 stack.addArrangedSubview(oreeLabel(group, font: Theme.sans(11.5, .semibold), color: Theme.muted))
             }
             lastGroup = .some(entry.group)
-            let line = oreeLabel(entry.title.isEmpty ? entry.host : entry.title, font: Theme.sans(12.5), color: entry.sleeping ? Theme.muted : Theme.text)
+            let line = oreeLabel(entry.title.isEmpty ? entry.host : entry.title, font: Theme.sans(12.5), color: Theme.text)
             line.lineBreakMode = .byTruncatingTail
             stack.addArrangedSubview(line)
             line.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: entry.group == nil ? 0 : -12).isActive = true

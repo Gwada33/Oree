@@ -55,6 +55,8 @@ final class DownloadsController {
     var onChange: (() -> Void)?
     var onStart: (() -> Void)?
     var onFinish: (() -> Void)?
+    /// A file finished downloading (to offer something with it, e.g. install a .crx extension).
+    var onFinishedFile: ((URL) -> Void)?
     /// The web view to resume interrupted WebKit downloads in.
     var resumeWebView: () -> WKWebView? = { nil }
 
@@ -216,6 +218,7 @@ final class DownloadsController {
         DistributedNotificationCenter.default().post(name: Notification.Name("com.apple.DownloadFileFinished"), object: entry.destination.path)
         update(entry.itemID) { $0.phase = .finished; $0.fileURL = entry.destination; $0.received = $0.total ?? $0.received; $0.bytesPerSecond = 0; $0.connections = 0 }
         onFinish?()
+        onFinishedFile?(entry.destination)
     }
 
     func webkitFailed(_ download: WKDownload, error: Error, resumeData: Data?) {
@@ -249,14 +252,15 @@ final class DownloadsController {
 
     private func apply(_ snapshots: [DownloadSnapshot]) {
         var finishedNow = false
+        var finishedFiles: [URL] = []
         for snapshot in snapshots {
-            if merge(snapshot, notify: false) { finishedNow = true }
+            if merge(snapshot, notify: false) { finishedNow = true; finishedFiles.append(snapshot.destination) }
         }
         // Engine items the engine no longer reports (cancelled / removed elsewhere) disappear.
         let known = Set(snapshots.map(\.id))
         items.removeAll { $0.origin == .engine && !known.contains($0.id) && $0.phase != .running || ($0.origin == .engine && !known.contains($0.id) && Date().timeIntervalSince(firstSeen[$0.id] ?? .distantPast) > 5) }
         fire()
-        if finishedNow { onFinish?() }
+        if finishedNow { onFinish?(); finishedFiles.forEach { onFinishedFile?($0) } }
     }
 
     /// - Returns: true if this snapshot completed a download we saw running.
