@@ -632,7 +632,7 @@ final class Tab: NSObject {
         // there. Waiting for "nothing moved for 150 ms" instead holds the ghost up to 2.5 s on pages that never stop moving
         // (carousels, clocks, trackers), during which the page looks frozen (no scripts in the ghost).
         let matchDeadline = Date().addingTimeInterval(6)
-        var lastMatch = "never complete", scrollFixes = 0, stablePolls = 0, previousReal: [GhostItem] = []
+        var lastMatch = "never complete", scrollFixes = 0, lastScroll: Date?, stablePolls = 0, previousReal: [GhostItem] = []
         while Date() < matchDeadline {
             guard ghostView === ghost, isAwaitingWakeReveal else { return }
             if ghost.isReady, await evaluateWithTimeout("document.readyState", in: webView, world: GhostScript.world, seconds: 1) == "complete" {
@@ -649,6 +649,7 @@ final class Tab: NSObject {
                 if scrollFixes < 3, let dy = GhostMatcher.scrollDelta(ghost: g, real: r), abs(dy) >= 1 {
                     scrollFixes += 1
                     _ = await evaluateWithTimeout("window.scrollBy(0, \(dy)); String(window.scrollY)", in: webView, world: GhostScript.world, seconds: 1)
+                    lastScroll = Date()
                     continue
                 }
             }
@@ -682,6 +683,7 @@ final class Tab: NSObject {
             note += String(format: " text=%.0f%% position=%.0f%%", similarity.textMatch * 100, similarity.positionMatch * 100)
             if let dy = GhostMatcher.scrollDelta(ghost: ghostItems, real: realItems), abs(dy) >= 1 {
                 _ = await evaluateWithTimeout("window.scrollBy(0, \(dy)); String(window.scrollY)", in: webView, world: GhostScript.world, seconds: 1)
+                lastScroll = Date()
                 _ = await callAsyncWithTimeout("await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return 'ok'", arguments: [:], seconds: 1)
                 note += " scrollFix=\(Int(dy))pt"
             }
@@ -695,7 +697,15 @@ final class Tab: NSObject {
             note += " (ghost not painted yet)"
         }
         guard ghostView === ghost, isAwaitingWakeReveal else { return }
-        await afterNextPresentation(of: webView)
+        // A scroll just before the swap leaves the real page without drawn tiles for a moment (the recording of 13 Oct shows ~250 ms of
+        // black right after the ghost leaves): give WebKit time to draw them, and wait for a real presentation, not for a timeout.
+        if let lastScroll {
+            let wait = 0.6 - Date().timeIntervalSince(lastScroll)
+            if wait > 0 { try? await Task.sleep(for: .milliseconds(Int(wait * 1000))) }
+        }
+        let presented = await afterNextPresentation(of: webView, timeout: 0.9)
+        if !presented { try? await Task.sleep(for: .milliseconds(300)) }
+        note += presented ? " presented=yes" : " presented=NO(timeout)"
         guard ghostView === ghost, isAwaitingWakeReveal else { return }
         swapGhostForRealPage()
         Log.tabs.notice("Ghost: swap after \(Int(Date().timeIntervalSince(started) * 1000)) ms of hydration — \(note, privacy: .public)")
@@ -735,17 +745,19 @@ final class Tab: NSObject {
     }
 
     /// Resumes once WebKit has presented the web view's next frame (private call, guarded), or after 250 ms.
-    private func afterNextPresentation(of view: WKWebView) async {
+    /// - Returns: true if WebKit really presented a frame, false if the wait ended on the timeout (or the private call is missing).
+    @discardableResult
+    private func afterNextPresentation(of view: WKWebView, timeout: Double = 0.25) async -> Bool {
         let selector = NSSelectorFromString("_doAfterNextPresentationUpdate:")
         guard view.responds(to: selector), let imp = view.method(for: selector) else {
-            try? await Task.sleep(for: .milliseconds(50)); return
+            try? await Task.sleep(for: .milliseconds(50)); return false
         }
         typealias Function = @convention(c) (AnyObject, Selector, @escaping @convention(block) () -> Void) -> Void
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             var done = false
-            let finish = { if !done { done = true; continuation.resume() } }
-            unsafeBitCast(imp, to: Function.self)(view, selector) { DispatchQueue.main.async(execute: finish) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: finish)
+            let finish = { (presented: Bool) in if !done { done = true; continuation.resume(returning: presented) } }
+            unsafeBitCast(imp, to: Function.self)(view, selector) { DispatchQueue.main.async { finish(true) } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { finish(false) }
         }
     }
 
