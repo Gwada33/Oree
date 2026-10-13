@@ -61,6 +61,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var extensionButtons: [String: ExtensionButton] = [:]
     private let loadingBar = LoadingBarView()
     private let noticePill = NoticePill()
+    private let nowPlaying = NowPlayingView()
+    private let audioRoute = AudioRoute()
+    private var mediaTabID: UUID?                      // the tab the card is about
+    private var artworkCache: [String: NSImage] = [:]
     private var webStoreOffered: Set<String> = []   // extensions whose "add to Orée" offer was already shown
     /// La barre IA, créée à la première ouverture (rien ne démarre avant : ni l'agent, ni la connexion au service).
     private var aiBarController: AIPanelController?
@@ -368,6 +372,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 case "select": self.selectTab(tab); return "selected \(index)"
                 case "sleep": self.sleepTab(tab); return "sleeping \(index)"
                 case "prewake": self.prewake(tab); return "prewoken \(index)"
+                case "media": return "\(self.nowPlaying.summary) | tab=\(self.mediaTabID == tab.id ? "this" : "other") | out=\(self.audioRoute.output.name) bt=\(self.audioRoute.output.bluetooth)"
+                case "mediatoggle": self.mediaCommand(tab, "toggle"); return "ok"
+                case "mediaskip": self.mediaCommand(tab, "skip", 10); return "ok"
+                case "mediaseek": self.mediaCommand(tab, "seek", (tab.media?.duration ?? 0) / 2); return "ok"
+                case "mediapip": self.mediaCommand(tab, "pip"); return "pip native can=\((tab.webView?.value(forKey: "_canTogglePictureInPicture") as? Bool).map(String.init) ?? "nil") active=\(tab.pictureInPictureActive)"
                 case "invisstart": self.startInvisibilityRecording(); return "recording"
                 case "invisstop": return self.stopInvisibilityRecording()
                 case "translate": tab.translator.translate(); return tab.translator.report
@@ -567,7 +576,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Scripts injected into a page: fingerprint protection (all pages) and,
     /// when ad blocking is on, the cosmetic CSS matching this URL.
     private func userScripts(for url: URL?) -> [WKUserScript] {
-        var scripts: [WKUserScript] = [CredentialScript.makeUserScript()]
+        var scripts: [WKUserScript] = [CredentialScript.makeUserScript(), MediaScript.makeUserScript()]
         if SettingsStore.shared.resumeEnabled { scripts.append(ResumeScript.makeUserScript()) }
         scripts.append(BoostScript.makeUserScript(boostConfig()))
         if SettingsStore.shared.nightMode != .off { scripts.append(NightScript.makeUserScript(nightConfig())) }
@@ -872,6 +881,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             readingBar.heightAnchor.constraint(equalToConstant: 2), barWidth,
         ])
         Tab.resumeReported = { [weak self] tab, json in self?.handleResume(tab: tab, json: json) }
+        Tab.mediaReported = { [weak self] tab, json in self?.handleMedia(tab: tab, json: json) }
+        audioRoute.onChange = { [weak self] in self?.refreshNowPlaying() }
+        audioRoute.start()
         NSLayoutConstraint.activate([
             noticePill.centerXAnchor.constraint(equalTo: contentContainer.centerXAnchor),
             noticePill.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor, constant: -24),
@@ -1079,7 +1091,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         footerTail = [spacer, sleepMetaLabel]
         applyChromeLayout()
 
-        [topStack, searchRow, newTabRow, scroll, sidePanel, panelBar].forEach(column.addSubview)
+        [topStack, searchRow, newTabRow, scroll, sidePanel, nowPlaying, panelBar].forEach(column.addSubview)
         let rowsInset: CGFloat = 8
         NSLayoutConstraint.activate([
             topStack.topAnchor.constraint(equalTo: column.topAnchor, constant: 8),
@@ -1096,7 +1108,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             scroll.topAnchor.constraint(equalTo: newTabRow.bottomAnchor, constant: 10),
             scroll.leadingAnchor.constraint(equalTo: column.leadingAnchor, constant: rowsInset),
             scroll.trailingAnchor.constraint(equalTo: column.trailingAnchor, constant: -rowsInset),
-            scroll.bottomAnchor.constraint(equalTo: panelBar.topAnchor, constant: -6),
+            scroll.bottomAnchor.constraint(equalTo: nowPlaying.topAnchor),
+            nowPlaying.leadingAnchor.constraint(equalTo: column.leadingAnchor, constant: rowsInset),
+            nowPlaying.trailingAnchor.constraint(equalTo: column.trailingAnchor, constant: -rowsInset),
+            nowPlaying.bottomAnchor.constraint(equalTo: panelBar.topAnchor, constant: -6),
 
             panelBar.leadingAnchor.constraint(equalTo: column.leadingAnchor, constant: rowsInset),
             panelBar.trailingAnchor.constraint(equalTo: column.trailingAnchor, constant: -rowsInset),
@@ -2295,6 +2310,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             config.userContentController.addUserScript(FingerprintProtection.makeUserScript(sessionSeed: fingerprintSeed))
         }
         config.userContentController.addUserScript(CredentialScript.makeUserScript())
+        config.userContentController.addUserScript(MediaScript.makeUserScript())
         if SettingsStore.shared.resumeEnabled { config.userContentController.addUserScript(ResumeScript.makeUserScript()) }
         config.userContentController.addUserScript(BoostScript.makeUserScript(boostConfig()))
         if SettingsStore.shared.lightLongPages {
@@ -2549,6 +2565,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Header of the tab column: "N onglets" (never mentions sleeping tabs: hibernation is invisible).
     private func updateTabCount() {
+        refreshNowPlaying()
         let mine = visibleTabs()
         let count = mine.count
         spaceMetaLabel.stringValue = "\(count) onglet\(count > 1 ? "s" : "")"
@@ -3068,6 +3085,72 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Puts a tab to sleep by hand. The active tab first hands over to a neighbour in its space.
+    // MARK: Now playing card
+
+    private func handleMedia(tab: Tab, json: String) {
+        guard !tab.isSuspended, tab.webView != nil else { return }
+        let info = MediaInfo.parse(json)
+        guard tab.media != info else { return }
+        tab.media = info
+        refreshNowPlaying()
+    }
+
+    /// The tab whose media the card shows: one that plays (the one already shown if it still does), else a paused one worth resuming.
+    private func mediaTab() -> Tab? {
+        let candidates = tabs.filter { tab in
+            guard !tab.isSuspended, tab.webView != nil, let info = tab.media else { return false }
+            return MediaPolicy.isWorthShowing(info, playing: !info.paused)
+        }
+        let playing = candidates.filter { $0.media?.paused == false }
+        if let current = playing.first(where: { $0.id == mediaTabID }) { return current }
+        if let first = playing.first { return first }
+        return candidates.first { $0.id == mediaTabID } ?? candidates.first
+    }
+
+    func refreshNowPlaying() {
+        guard let tab = mediaTab(), var info = tab.media else {
+            mediaTabID = nil
+            if nowPlaying.isShown { nowPlaying.isShown = false; nowPlaying.setArtwork(nil) }
+            return
+        }
+        mediaTabID = tab.id
+        let host = tab.badgeHost
+        info.pictureInPicture = info.pictureInPicture || tab.pictureInPictureActive
+        nowPlaying.update(info, host: host, deviceSymbol: audioRoute.output.symbol, deviceLine: audioRoute.line)
+        nowPlaying.onTogglePlay = { [weak self, weak tab] in if let tab { self?.mediaCommand(tab, "toggle") } }
+        nowPlaying.onSkip = { [weak self, weak tab] seconds in if let tab { self?.mediaCommand(tab, "skip", seconds) } }
+        nowPlaying.onSeek = { [weak self, weak tab] fraction in
+            if let tab, let duration = tab.media?.duration, duration > 0 { self?.mediaCommand(tab, "seek", fraction * duration) }
+        }
+        nowPlaying.onPictureInPicture = { [weak self, weak tab] in if let tab { self?.mediaCommand(tab, "pip") } }
+        nowPlaying.onShowTab = { [weak self, weak tab] in if let tab { self?.selectTab(tab) } }
+        nowPlaying.isShown = true
+        loadArtwork(info.artwork, private: tab.isPrivate)
+        audioRoute.watchBattery { [weak self] in self?.nowPlaying.isShown == true }
+    }
+
+    func mediaCommand(_ tab: Tab, _ name: String, _ value: Double = 0) {
+        guard let web = tab.webView else { return }
+        if name == "pip", tab.togglePictureInPicture() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.refreshNowPlaying() }
+            return
+        }
+        let call = MediaScript.commandCall(name, value: value)
+        Task { @MainActor in _ = await web.safeCall(call.body, arguments: call.arguments, world: MediaScript.world) }
+    }
+
+    /// The cover given by the page, fetched once per address. Never for a private tab (the request would leave the private session).
+    private func loadArtwork(_ address: String?, private isPrivate: Bool) {
+        guard let address, !isPrivate, let url = URL(string: address), url.scheme == "https" else { nowPlaying.setArtwork(nil); return }
+        if let image = artworkCache[address] { nowPlaying.setArtwork(image); return }
+        nowPlaying.setArtwork(nil)
+        Task { @MainActor [weak self] in
+            guard let (data, _) = try? await URLSession.shared.data(from: url), data.count < 3_000_000, let image = NSImage(data: data) else { return }
+            self?.artworkCache[address] = image
+            if self?.mediaTab()?.media?.artwork == address { self?.nowPlaying.setArtwork(image) }
+        }
+    }
+
     // MARK: Invisibility recorder (dev): samples what the user could notice, every 8 ms, until stopped
 
     private var invisTimer: Timer?
@@ -4354,6 +4437,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         noteNavigation("commit", webView)
         tab.interstitial.hide()
         tab.pageDidCommit()
+        refreshNowPlaying()        // a new page: whatever the old one played is over
         // A reload keeps the pop-up; another page takes it away.
         if tab.id == activeTabID, digestPanel.state != "closed", ResumePolicy.key(for: webView.url) != digestKey { digestPanel.close() }
         tab.revealWebView()

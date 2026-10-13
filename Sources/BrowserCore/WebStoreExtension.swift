@@ -35,8 +35,9 @@ public enum WebStoreExtension {
 
     /// The extension's name as the store writes it in the tab title ("uBlock Origin - Chrome Web Store").
     public static func name(fromTitle title: String?) -> String {
-        guard var name = title?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return "cette extension" }
-        for suffix in [" - Chrome Web Store", " – Chrome Web Store", " - Chrome Web Store "] where name.hasSuffix(suffix) { name = String(name.dropLast(suffix.count)) }
-        return name.isEmpty ? "cette extension" : name
+        guard let title else { return "cette extension" }
+        let name = title.replacingOccurrences(of: #"\s*[-–]\s*Chrome Web Store\s*$"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty || name == "Chrome Web Store" ? "cette extension" : name
     }
 }

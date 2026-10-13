@@ -166,6 +166,22 @@ final class Tab: NSObject {
     let interstitial = InterstitialView()
     /// Set by the window: the page's resume script reported a video position or a reading position (JSON).
     static var resumeReported: ((Tab, String) -> Void)?
+    /// A page's media script reported (see `MediaScript`); set by the window.
+    static var mediaReported: ((Tab, String) -> Void)?
+    /// What this tab is playing, if anything worth a "now playing" card.
+    var media: MediaInfo?
+
+    /// Picture in picture through WebKit's own (private, guarded) switch: it needs no user gesture, unlike the page's
+    /// `requestPictureInPicture()`, and it is what Safari's own menu calls. Both answer false/nil when this WebKit lacks them.
+    var pictureInPictureActive: Bool { (webView?.value(forKey: "_isPictureInPictureActive") as? Bool) == true }
+    @discardableResult
+    func togglePictureInPicture() -> Bool {
+        guard let webView, webView.responds(to: NSSelectorFromString("_togglePictureInPicture")) else { return false }
+        let can = (webView.value(forKey: "_canTogglePictureInPicture") as? Bool) == true
+        guard can || pictureInPictureActive else { return false }
+        webView.perform(NSSelectorFromString("_togglePictureInPicture"))
+        return true
+    }
     /// The page's own event or booking data, read after load; nil when it has none.
     var eventCandidate: CalendarEvent?
     /// The page's own recipe or how-to data, read after load (instant to show); nil when it has none.
@@ -276,6 +292,7 @@ final class Tab: NSObject {
         controller.add(CleanCopyMessageHandler(), contentWorld: CleanCopyScript.world, name: CleanCopyScript.handlerName)
         controller.add(NightMessageHandler(), contentWorld: NightScript.world, name: NightScript.handlerName)
         controller.add(ResumeMessageHandler(), contentWorld: ResumeScript.world, name: ResumeScript.handlerName)
+        controller.add(MediaMessageHandler(), contentWorld: MediaScript.world, name: MediaScript.handlerName)
         // Ghost hibernation: the page-side capture needs hooks installed before the page's own scripts run, so it is only
         // added to tabs created while the flag is on.
         if SettingsStore.shared.hibernationGhost {
@@ -305,6 +322,7 @@ final class Tab: NSObject {
         eventCandidate = nil
         isDirty = false
         hasCommittedSinceWake = true
+        media = nil
         if silentWakeLoad, webView?.url != wakeURL { silentWakeLoad = false }   // the user went elsewhere: a real load
     }
 
