@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <WebKit/WebKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -6,5 +7,14 @@ NS_ASSUME_NONNULL_BEGIN
 /// (un onglet qu'on ferme ou endort pendant qu'un script tourne), et l'application s'arrête net. Cette fonction exécute `block` et renvoie
 /// `NO` plutôt que de laisser l'exception remonter ; `reason` reçoit son texte (pour le journal).
 BOOL OreeTryObjC(NS_NOESCAPE void (^block)(void), NSString *_Nullable *_Nullable reason);
+
+/// Les deux appels qui plantaient : WebKit lève l'exception DEPUIS `evaluateJavaScript` / `callAsyncJavaScript`. Si l'appel est fait par une
+/// fermeture Swift passée à `OreeTryObjC`, l'exception traverse cette fermeture avant d'atteindre le `@catch`, et le runtime Swift abandonne
+/// (`_swift_exceptionPersonality`, rapports de plantage du 12 octobre). Ici l'appel est fait directement par le `@try`, sans cadre Swift entre les deux.
+typedef void (^OreeJSCompletion)(id _Nullable result, NSError *_Nullable error);
+BOOL OreeEvaluateJS(WKWebView *webView, NSString *script, WKFrameInfo *_Nullable frame, WKContentWorld *world,
+                    OreeJSCompletion completion, NSString *_Nullable *_Nullable reason);
+BOOL OreeCallAsyncJS(WKWebView *webView, NSString *body, NSDictionary<NSString *, id> *arguments, WKContentWorld *world,
+                     OreeJSCompletion completion, NSString *_Nullable *_Nullable reason);
 
 NS_ASSUME_NONNULL_END

@@ -47,10 +47,8 @@ extension WKWebView {
     @MainActor
     func safeRun(_ script: String, world: WKContentWorld = .page, completion: (@MainActor () -> Void)? = nil) {
         var reason: NSString?
-        let started = OreeTryObjC({
-            self.evaluateJavaScript(script, in: nil, in: world) { _ in
-                if let completion { MainActor.assumeIsolated { completion() } }
-            }
+        let started = OreeEvaluateJS(self, script, nil, world, { _, _ in
+            if let completion { MainActor.assumeIsolated { completion() } }
         }, &reason)
         if !started { Log.tabs.error("evaluateJavaScript a levé une exception, ignorée : \((reason as String?) ?? "?", privacy: .public)") }
     }
@@ -60,13 +58,8 @@ extension WKWebView {
         let boxed: JSResult = await withCheckedContinuation { (continuation: CheckedContinuation<JSResult, Never>) in
             var reason: NSString?
             let once = ResumeOnce()
-            let started = OreeTryObjC({
-                self.evaluateJavaScript(script, in: frame, in: world) { result in
-                    switch result {
-                    case .success(let value): once { continuation.resume(returning: JSResult(value: value)) }
-                    case .failure: once { continuation.resume(returning: JSResult(value: nil)) }
-                    }
-                }
+            let started = OreeEvaluateJS(self, script, frame, world, { value, error in
+                once { continuation.resume(returning: JSResult(value: error == nil ? value : nil)) }
             }, &reason)
             if !started {
                 Log.tabs.error("evaluateJavaScript a levé une exception, ignorée : \((reason as String?) ?? "?", privacy: .public)")
@@ -81,13 +74,8 @@ extension WKWebView {
         let boxed: JSResult = await withCheckedContinuation { (continuation: CheckedContinuation<JSResult, Never>) in
             var reason: NSString?
             let once = ResumeOnce()
-            let started = OreeTryObjC({
-                self.callAsyncJavaScript(body, arguments: arguments, in: nil, in: world) { result in
-                    switch result {
-                    case .success(let value): once { continuation.resume(returning: JSResult(value: value)) }
-                    case .failure: once { continuation.resume(returning: JSResult(value: nil)) }
-                    }
-                }
+            let started = OreeCallAsyncJS(self, body, arguments, world, { value, error in
+                once { continuation.resume(returning: JSResult(value: error == nil ? value : nil)) }
             }, &reason)
             if !started {
                 Log.tabs.error("callAsyncJavaScript a levé une exception, ignorée : \((reason as String?) ?? "?", privacy: .public)")

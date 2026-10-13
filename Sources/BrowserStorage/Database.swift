@@ -14,7 +14,11 @@ public final class AppDatabase: @unchecked Sendable {
         do {
             return try AppDatabase()
         } catch {
-            fatalError("Could not open the database: \(error)")
+            // A database that will not open (bad HB_DB_PATH, damaged file, full disk) must not make the app crash at launch
+            // (crash report of 12 Oct 19:41): start on a temporary one instead. History of this session is then not kept.
+            NSLog("Orée: could not open the database (\(error)); using a temporary one")
+            let temporary = NSTemporaryDirectory() + "oree-fallback-\(UUID().uuidString).sqlite"
+            do { return try AppDatabase(path: temporary) } catch { fatalError("Could not open any database: \(error)") }
         }
     }()
 
