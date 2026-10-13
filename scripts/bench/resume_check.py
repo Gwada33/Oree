@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end check of "reprendre où tu en étais" on local pages (no network): a long article and a long video. Starts its own Orée
+"""End-to-end check of "reprendre où tu en étais" on local pages (no network): a long article is remembered, while long lists and videos are not. Starts its own Orée
 instance (never touches yours). Positions are stored in the app's database under URLs made unique for each run, and forgotten
 at the end. Exit 1 on any failure.
 
@@ -11,6 +11,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 UI, APP = os.path.join(ROOT, "scripts", "ui.sh"), os.path.join(ROOT, "Oree.app")
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume_fixture")
 PORT, RUN = 8787, uuid.uuid4().hex[:8]
+import tempfile
+DB = tempfile.mkdtemp(prefix="resume-"); os.makedirs(DB + "/ext")
 
 def ui(*args):
     r = subprocess.run([UI, *args], capture_output=True, text=True); return (r.stdout + r.stderr).strip()
@@ -44,7 +46,7 @@ def wait_for(predicate, timeout):
 
 def main():
     server, before = serve(), pids()
-    subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", APP, "--args", "--automation"]); time.sleep(5)
+    subprocess.run(["open", "-g", "-n", "--env", "HB_FRESH_SESSION=1", "--env", f"HB_DB_PATH={DB}/db.sqlite", "--env", f"HB_EXT_DIR={DB}/ext", "--env", "HB_AI_NO_AGENT=1", APP, "--args", "--automation"]); time.sleep(5)
     mine = pids() - before
     results = []
     def check(name, ok): results.append(bool(ok)); print(("  ok     " if ok else "  ÉCHEC  ") + name)
@@ -65,24 +67,16 @@ def main():
         check("un rechargement ne propose rien (WebKit restaure déjà la position)", "notice=(none)" in report())
         ui("tab", "resumeforget", "0")
 
-        print("\nVidéo longue")
+        print("\nPages qui ne sont pas des articles")
+        load("list.html")
+        js("(window.scrollTo(0, 3000), 1)"); time.sleep(3)
+        check("une longue liste de produits n'enregistre aucune position", "read=-" in report() or "point=none" in report())
         load("video.html")
         js("(document.getElementById('v').play(), 1)"); time.sleep(1)
-        js("(document.getElementById('v').currentTime = 100, 1)")
-        # The test window is hidden, where WebKit holds back the periodic `timeupdate` events: a pause reports at once (as does
-        # leaving the page), which is what the check relies on. On screen the position is also saved every 5 s while playing.
-        time.sleep(2); js("(document.getElementById('v').pause(), 1)")
-        check("la position de la vidéo est enregistrée (entre 100 et 150 s)", wait_for(lambda: (stored_video() or 0) >= 100, 25) and (stored_video() or 0) <= 150)
-        print("  ", report())
-        check("la page vidéo ne reçoit pas la position de lecture de l'article (rapport tardif)", "read=-" in report() or "point=none" in report())
+        js("(document.getElementById('v').currentTime = 100, 1)"); time.sleep(1); js("(document.getElementById('v').pause(), 1)"); time.sleep(2)
+        check("une vidéo n'enregistre aucune position", "video=-" in report() or "point=none" in report())
         load("video.html")
-        check("2e visite : l'offre « Reprendre la vidéo à … » apparaît", wait_for(lambda: "Reprendre la vidéo à" in report(), 6))
-        ui("tab", "pressnotice", "0"); time.sleep(1.5)
-        t = js("document.getElementById('v').currentTime")
-        check(f"« Reprendre » replace la vidéo (position {t} s)", t is not None and 98 <= t <= 130)
-        js("(document.getElementById('v').currentTime = 235, 1)")
-        check("vidéo terminée : sa position est oubliée", wait_for(lambda: "video=-" in report() or "point=none" in report(), 10))
-        ui("tab", "resumeforget", "0")
+        check("et ne propose rien au retour", "notice=(none)" in report())
     finally:
         for p in mine: subprocess.run(["kill", p])
         server.shutdown()

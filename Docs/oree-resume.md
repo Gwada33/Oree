@@ -4,9 +4,13 @@ Orée retient où vous en étiez dans une page et le propose à votre retour. R�
 
 | Cas | Ce qui est gardé | Ce qui est proposé |
 |---|---|---|
-| Vidéo (tout site qui utilise un `<video>`) | position, si la vidéo dure ≥ 3 min et que vous êtes entre 30 s et 20 s de la fin | « Reprendre la vidéo à 12:34 ? » |
-| Article long (≥ 3 écrans) | fraction lue (5 à 97 %) et le début du paragraphe en haut de l'écran | « Reprendre la lecture (62 %) ? » : retour au paragraphe, sinon à la même fraction |
-| Terminé (vidéo à moins de 20 s de la fin, article lu à plus de 97 %) | position oubliée | rien |
+| Article (voir ci-dessous), ≥ 3 écrans | fraction lue (5 à 97 %) et le début du paragraphe en haut de l'écran | « Reprendre la lecture (62 %) ? » : retour au paragraphe, sinon à la même fraction |
+| Terminé (article lu à plus de 97 %) | position oubliée | rien |
+
+**Seulement sur les articles** (12 oct. 2026, la reprise était intempestive sur les listes, boutiques, forums et vidéos). Une page est un article si
+elle se déclare telle (`og:type` = article, JSON-LD `Article`/`NewsArticle`/`BlogPosting`) et que son contenu a ≥ 1 500 caractères de
+paragraphes, ou si elle a un `<article>` d'au moins 3 000 caractères de paragraphes. La page d'accueil d'un site n'en est jamais une.
+Les **vidéos ne sont plus suivies** : plus d'offre « Reprendre la vidéo ».
 
 - L'offre est une pastille en bas de la page (12 s), jamais un saut automatique. Seulement à une **visite neuve** (lien ou adresse
   saisie), pas au retour arrière, au rechargement ni au réveil d'un onglet : WebKit y restaure déjà la position.

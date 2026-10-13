@@ -2,9 +2,7 @@ import WebKit
 
 /// Page-side half of "reprendre où tu en étais": it only measures and reports, the app decides (see `ResumePolicy`).
 ///
-/// - Video: the video being watched (any site, any player that uses a `<video>`) reports its position at most every 5 s and when
-///   it pauses, ends or the page is left. The same `<video>` is used for ads, but those are short and ignored by the app.
-/// - Reading: on a page at least three screens long, the scroll position is reported (1.5 s after scrolling stops), with the start
+/// - Reading: on an article (see `isArticle`) at least three screens long, the scroll position is reported (1.5 s after scrolling stops), with the start
 ///   of the paragraph at the top of the screen, to find the place again if the page changed a little.
 /// - `go` jumps back: seeks the video, or scrolls to the paragraph (else to the same fraction of the page).
 ///
@@ -32,29 +30,25 @@ enum ResumeScript {
       const BLOCKS = 'p, h1, h2, h3, h4, li, blockquote';
       const norm = s => (s || '').replace(/\s+/g, ' ').trim().slice(0, 60);
 
-      // ---- video ----
-      let video = null, lastVideo = 0;
-      function reportVideo(force) {
-        const v = video;
-        if (!v || !isFinite(v.duration) || v.duration < 180) return;
-        const now = Date.now();
-        if (!force && now - lastVideo < 5000) return;
-        lastVideo = now;
-        if (v.ended || v.currentTime > v.duration - 20) post({ video: { done: true } });
-        else post({ video: { t: v.currentTime, d: v.duration } });
-      }
-      // Media events do not bubble: listen in the capture phase on the document.
-      document.addEventListener('timeupdate', e => {
-        const v = e.target;
-        if (!(v instanceof HTMLVideoElement)) return;
-        if (!video || (v !== video && !v.paused && v.duration >= 180)) video = v;
-        if (v === video) reportVideo(false);
-      }, true);
-      for (const type of ['pause', 'ended']) document.addEventListener(type, e => { if (e.target === video) reportVideo(true); }, true);
-
       // ---- reading ----
-      let timer = 0;
+      let timer = 0, article = false;
+      // Only real articles: a long page is not enough (feeds, shops, forums, search results are long too). An article
+      // declares itself (og:type, JSON-LD) or is a page whose <article>/<main> holds a lot of paragraph text.
+      function isArticle() {
+        if (article) return true;
+        if (location.pathname.length <= 1) return false;
+        const og = document.querySelector('meta[property="og:type"]');
+        let declared = !!og && /article/i.test(og.content);
+        if (!declared) declared = [...document.querySelectorAll('script[type="application/ld+json"]')].some(n => /"@type"\s*:\s*\[?\s*"(News|Blog|Tech|Scholarly)?Article"/.test(n.textContent));
+        const root = document.querySelector('article') || (declared ? document.querySelector('main') || document.body : null);
+        if (!root) return false;
+        let chars = 0;
+        for (const p of root.querySelectorAll('p')) chars += p.textContent.length;
+        article = chars >= (declared ? 1500 : 3000);
+        return article;
+      }
       function reportReading() {
+        if (!isArticle()) return;
         const de = document.documentElement, vh = innerHeight || 1;
         const total = Math.max(de.scrollHeight, document.body ? document.body.scrollHeight : 0);
         const screens = total / vh;
@@ -65,7 +59,7 @@ enum ResumeScript {
         post({ reading: { f: max > 0 ? scrollY / max : 0, screens, a: block ? norm(block.textContent) : '' } });
       }
       addEventListener('scroll', () => { clearTimeout(timer); timer = setTimeout(reportReading, 1500); }, { passive: true, capture: true });
-      addEventListener('pagehide', () => { reportVideo(true); clearTimeout(timer); reportReading(); });
+      addEventListener('pagehide', () => { clearTimeout(timer); reportReading(); });
 
       // ---- jump back ----
       window.__oreeResume = {
