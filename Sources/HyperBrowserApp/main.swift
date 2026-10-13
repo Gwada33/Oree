@@ -74,7 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        BrowserWindowController.purgeSnapshots()   // no page screenshot outlives the app
+        browserController?.persistSleepSnapshots()  // encrypted, only for tabs that are still open (see SnapshotVault)
+        BrowserWindowController.purgeSnapshots()   // the plain pictures never outlive the app
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

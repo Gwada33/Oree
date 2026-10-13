@@ -1,6 +1,7 @@
 import AppKit
 import WebKit
 import BrowserCore
+import BrowserStorage
 
 @MainActor
 final class Tab: NSObject {
@@ -41,6 +42,13 @@ final class Tab: NSObject {
     /// Deletes every saved snapshot (called when the app quits).
     static func purgeSnapshots() {
         try? FileManager.default.removeItem(at: snapshotDirectory)
+    }
+
+    /// The picture to keep for the next launch: the one of a sleeping tab, or the one taken when the user left the tab.
+    var pictureForNextLaunch: Data? {
+        if isSuspended { return snapshotData }
+        if let capturedAt, capturedAt >= lastActiveDate { return try? Data(contentsOf: snapshotFile) }
+        return nil
     }
 
     var isSuspended = false {
@@ -224,6 +232,7 @@ final class Tab: NSObject {
         installPageStateTracking()
 
         if let sleeping {
+            snapshotData = isPrivate ? nil : SnapshotVault.shared.get(for: sleeping.url.absoluteString)   // what it looked like before the last quit
             suspendedURL = sleeping.url
             suspendedInteractionState = sleeping.interactionState
             sleepingTitle = sleeping.title

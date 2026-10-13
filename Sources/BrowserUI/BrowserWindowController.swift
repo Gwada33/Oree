@@ -1398,6 +1398,19 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Daily, silent unless a newer version exists.
     public static func purgeSnapshots() { Tab.purgeSnapshots(); GhostStorage.purge() }
 
+    /// At quit: keeps (encrypted) what each open, non-private tab looks like, so that on the next launch a tab that wakes does not show a
+    /// blank page while it loads. Whatever belongs to a tab that is no longer open is deleted.
+    public func persistSleepSnapshots() {
+        guard !isFreshSession else { return }
+        var kept = Set<String>()
+        for tab in tabs where SessionPolicy.isSavable(url: tab.currentURL, isPrivate: tab.isPrivate) {
+            guard let address = tab.currentURL?.absoluteString else { continue }
+            kept.insert(address)
+            if let picture = tab.pictureForNextLaunch { try? SnapshotVault.shared.put(picture, for: address) }
+        }
+        SnapshotVault.shared.prune(keeping: kept)
+    }
+
     public func checkForUpdatesInBackground() { AppUpdater.shared.checkInBackgroundIfDue() }
 
     @objc func checkForUpdates() { AppUpdater.shared.checkNow() }
