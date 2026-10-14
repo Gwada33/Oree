@@ -85,3 +85,10 @@ extension WKWebView {
         return boxed.value
     }
 }
+
+/// Protections installed once at launch against exceptions raised inside AppKit/WebKit that Swift cannot catch.
+public enum AppGuards {
+    @MainActor public static func install() {
+        if ProcessInfo.processInfo.environment["HB_NO_SPELL_GUARD"] == nil { OreeInstallSpellCheckerGuard() }   // the variable lets a test show the crash it prevents
+    }
+}

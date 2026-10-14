@@ -190,7 +190,10 @@ final class Tab: NSObject {
     var readFraction: Double?
     /// How the current page was reached (set when the navigation starts): only a fresh visit gets a "resume" offer, not
     /// back/forward or reload, where WebKit already restores the position.
-    var lastNavigationType: WKNavigationType = .other
+    var lastNavigationType: WKNavigationType = .other {
+        // The user reloads, clicks a link or goes back: that load is theirs and shows (only the load that wakes a tab is silent).
+        didSet { if !isAwaitingWakeReveal, lastNavigationType != .other { silentWakeLoad = false } }
+    }
     /// Set by the window: a page's night-mode script found its site already dark (the host is passed).
     static var nativeDarkReported: ((String) -> Void)?
     /// Set by the window: called when the user copies something that is one postal address.
@@ -659,7 +662,7 @@ final class Tab: NSObject {
         // there. Waiting for "nothing moved for 150 ms" instead holds the ghost up to 2.5 s on pages that never stop moving
         // (carousels, clocks, trackers), during which the page looks frozen (no scripts in the ghost).
         let matchDeadline = Date().addingTimeInterval(6)
-        var lastMatch = "never complete", scrollFixes = 0, lastScroll: Date?, stablePolls = 0, previousReal: [GhostItem] = []
+        var lastMatch = "never complete", scrollFixes = 0, lastScroll: Date?, stablePolls = 0, firstMatch: Date?, previousReal: [GhostItem] = []
         while Date() < matchDeadline {
             guard ghostView === ghost, isAwaitingWakeReveal else { return }
             if ghost.isReady, await evaluateWithTimeout("document.readyState", in: webView, world: GhostScript.world, seconds: 1) == "complete" {
@@ -671,7 +674,10 @@ final class Tab: NSObject {
                 // swap. It must also have shown the same thing, at the same places, for two polls in a row (~200 ms).
                 stablePolls = r == previousReal ? stablePolls + 1 : 0
                 previousReal = r
-                if similarity.textMatch >= 0.95, similarity.positionMatch >= 0.9, stablePolls >= 2 { readiness = "matched"; break }
+                let matches = similarity.textMatch >= 0.95 && similarity.positionMatch >= 0.9
+                if !matches { firstMatch = nil } else if firstMatch == nil { firstMatch = Date() }
+                // A page whose blocks never stop moving (ticker, carousel) is never "stable": after 1.2 s of matching, that is as good as it gets.
+                if matches, stablePolls >= 2 || Date().timeIntervalSince(firstMatch ?? Date()) > 1.2 { readiness = "matched"; break }
                 // The same text, but somewhere else: the real page did not restore the scroll (or did, partly). Line it up now.
                 if scrollFixes < 3, let dy = GhostMatcher.scrollDelta(ghost: g, real: r), abs(dy) >= 1 {
                     scrollFixes += 1

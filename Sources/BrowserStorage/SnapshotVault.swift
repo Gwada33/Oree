@@ -9,6 +9,18 @@ import CryptoKit
 public struct SnapshotVault: Sendable {
     private let directory: URL
     private let keys: VaultKeyProvider
+    /// One Keychain read per launch, not one per tab (30 restored tabs would mean 30 reads on the main thread).
+    private let cache = KeyCache()
+
+    private final class KeyCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var key: SymmetricKey?
+        func get(_ provider: VaultKeyProvider) throws -> SymmetricKey {
+            lock.lock(); defer { lock.unlock() }
+            if let key { return key }
+            let fresh = try provider.masterKey(); key = fresh; return fresh
+        }
+    }
 
     public init(directory: URL, keys: VaultKeyProvider) {
         self.directory = directory
@@ -28,7 +40,7 @@ public struct SnapshotVault: Sendable {
 
     public func put(_ picture: Data, for address: String) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let sealed = try ChaChaPoly.seal(picture, using: keys.masterKey())
+        let sealed = try ChaChaPoly.seal(picture, using: cache.get(keys))
         try sealed.combined.write(to: file(for: address), options: [.atomic, .completeFileProtection])
     }
 
@@ -36,7 +48,7 @@ public struct SnapshotVault: Sendable {
     public func get(for address: String) -> Data? {
         guard let blob = try? Data(contentsOf: file(for: address)),
               let box = try? ChaChaPoly.SealedBox(combined: blob),
-              let key = try? keys.masterKey() else { return nil }
+              let key = try? cache.get(keys) else { return nil }
         return try? ChaChaPoly.open(box, using: key)
     }
 

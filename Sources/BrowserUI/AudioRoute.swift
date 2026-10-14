@@ -21,6 +21,7 @@ final class AudioRoute {
     var onChange: (() -> Void)?
     private var started = false
     private var batteryTask: Task<Void, Never>?
+    private var batteryGeneration = 0
 
     func start() {
         guard !started else { return }
@@ -43,13 +44,17 @@ final class AudioRoute {
     /// Reads the battery now and keeps reading while `isWanted()` stays true (the card is on screen with a Bluetooth output).
     func watchBattery(while isWanted: @escaping @MainActor () -> Bool) {
         guard output.bluetooth, batteryTask == nil else { return }
+        batteryGeneration += 1
+        let generation = batteryGeneration
         batteryTask = Task { @MainActor [weak self] in
             while let self, !Task.isCancelled, isWanted(), self.output.bluetooth {
                 let devices = await Self.readBluetooth()
+                guard !Task.isCancelled, generation == self.batteryGeneration else { return }   // another device since: these numbers are stale
                 if devices != self.batteries { self.batteries = devices; self.onChange?() }
                 try? await Task.sleep(for: .seconds(120))
             }
-            self?.batteryTask = nil
+            // Only the latest loop may clear the handle (an older one finishing late must not forget the new one).
+            if let self, generation == self.batteryGeneration { self.batteryTask = nil }
         }
     }
 
@@ -58,6 +63,7 @@ final class AudioRoute {
         guard fresh != output else { return }
         output = fresh
         batteries = []                // another device: what we knew is stale
+        batteryGeneration += 1
         batteryTask?.cancel(); batteryTask = nil
         onChange?()
     }

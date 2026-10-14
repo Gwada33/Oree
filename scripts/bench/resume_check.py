@@ -54,7 +54,8 @@ def main():
         print("\nArticle long")
         load("article.html")
         check("première visite : aucune offre", "notice=(none)" in report())
-        js("(document.getElementById('p20').scrollIntoView(), 1)")
+        # A hidden test window holds back the scroll events WebKit would fire itself: send one, as a visible window would.
+        js("(document.getElementById('p20').scrollIntoView(), window.dispatchEvent(new Event('scroll')), 1)")
         check("la position de lecture est enregistrée (~50 %)", wait_for(lambda: "read=0.5" in report() or "read=0.4" in report(), 8))
         print("  ", report())
         check("la barre de progression suit la lecture", "bar=0." in report())

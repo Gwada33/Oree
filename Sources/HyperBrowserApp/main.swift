@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // exception en l'affichant dans une fenêtre (rapport du 11 octobre, `NSRemoteView containingWindowWillOrderOnScreen:`). On le coupe par défaut ;
         // le soulignement des fautes reste, et un réglage explicite de l'utilisateur (Édition › Orthographe) l'emporte.
         UserDefaults.standard.register(defaults: ["WebAutomaticSpellingCorrectionEnabled": false, "NSAutomaticSpellingCorrectionEnabled": false])
+        AppGuards.install()   // exceptions of AppKit's correction panel must not stop the app
         DiagnosticsReporter.shared.start()
         ThemeBootstrap.start()
 

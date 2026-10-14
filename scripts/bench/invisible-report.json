@@ -721,5 +721,71 @@
     "fade_ms": 0
    }
   ]
+ },
+ {
+  "date": "2026-10-13 20:23",
+  "ghost": "1",
+  "rows": [
+   {
+    "site": "https://fr.wikipedia.org/wiki/Lisbonne",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 3281,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://www.bbc.com/news",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 1824,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://github.com/torvalds/linux",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 3911,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://react.dev",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 1447,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://developer.mozilla.org/fr/docs/Web/CSS",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 1447,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   }
+  ]
  }
 ]

@@ -17,4 +17,10 @@ BOOL OreeEvaluateJS(WKWebView *webView, NSString *script, WKFrameInfo *_Nullable
 BOOL OreeCallAsyncJS(WKWebView *webView, NSString *body, NSDictionary<NSString *, id> *arguments, WKContentWorld *world,
                      OreeJSCompletion completion, NSString *_Nullable *_Nullable reason);
 
+/// Le panneau de correction orthographique (« Voulez-vous dire… ? ») que WebKit affiche quand on tape dans un champ : AppKit peut y lever une exception
+/// qui, faute de gestionnaire, arrête l'application (rapport du 13 octobre, `NSCorrectionPanel showPanelAtRect:` sous `NSPerformVisuallyAtomicChange`).
+/// On entoure les deux variantes de `NSSpellChecker showCorrectionIndicator…` d'un `@try` : le panneau ne s'affiche pas, la saisie continue.
+/// À appeler une fois, au lancement.
+void OreeInstallSpellCheckerGuard(void);
+
 NS_ASSUME_NONNULL_END

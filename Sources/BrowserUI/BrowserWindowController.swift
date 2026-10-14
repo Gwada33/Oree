@@ -65,7 +65,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let audioRoute = AudioRoute()
     private var mediaTabID: UUID?                      // the tab the card is about
     private var artworkCache: [String: NSImage] = [:]
-    private var webStoreOffered: Set<String> = []   // extensions whose "add to Orée" offer was already shown
+    private var artworkRequested: Set<String> = []
+    private var shownArtwork: String?
+    private var webStoreOffered: [String: Date] = [:]   // when the "add to Orée" offer of each extension was last shown
     /// La barre IA, créée à la première ouverture (rien ne démarre avant : ni l'agent, ni la connexion au service).
     private var aiBarController: AIPanelController?
     /// Écart entre le bord droit de la page et celui de la fenêtre quand le panneau IA pousse la page.
@@ -367,18 +369,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             tabOperation: { [weak self] op, index in
                 guard let self, self.visibleTabs().indices.contains(index) else { return "no such tab" }
                 let tab = self.visibleTabs()[index]
+                if let answer = self.devOp(op, tab) { return answer }      // media, recorder, probes: kept out of this closure (the compiler gives up on a longer one)
                 if op == "pagemap" || op == "pagemapget" || op == "act" || op == "actget" || op == "groqkey" || op == "cloudkey" { return self.pageMapOp(op, tab) }      // hors du `switch` : il est déjà à la limite du compilateur
                 switch op {
                 case "select": self.selectTab(tab); return "selected \(index)"
                 case "sleep": self.sleepTab(tab); return "sleeping \(index)"
                 case "prewake": self.prewake(tab); return "prewoken \(index)"
-                case "media": return "\(self.nowPlaying.summary) | tab=\(self.mediaTabID == tab.id ? "this" : "other") | out=\(self.audioRoute.output.name) bt=\(self.audioRoute.output.bluetooth)"
-                case "mediatoggle": self.mediaCommand(tab, "toggle"); return "ok"
-                case "mediaskip": self.mediaCommand(tab, "skip", 10); return "ok"
-                case "mediaseek": self.mediaCommand(tab, "seek", (tab.media?.duration ?? 0) / 2); return "ok"
-                case "mediapip": self.mediaCommand(tab, "pip"); return "pip native can=\((tab.webView?.value(forKey: "_canTogglePictureInPicture") as? Bool).map(String.init) ?? "nil") active=\(tab.pictureInPictureActive)"
-                case "invisstart": self.startInvisibilityRecording(); return "recording"
-                case "invisstop": return self.stopInvisibilityRecording()
                 case "translate": tab.translator.translate(); return tab.translator.report
                 case "untranslate": tab.translator.restore(); return tab.translator.report
                 case "translation": return tab.translator.report
@@ -3085,6 +3081,30 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Puts a tab to sleep by hand. The active tab first hands over to a neighbour in its space.
+    // MARK: Development operations (automation channel)
+
+    private func devOp(_ op: String, _ tab: Tab) -> String? {
+        switch op {
+        case "media":
+            return "\(nowPlaying.summary) | tab=\(mediaTabID == tab.id ? "this" : "other") | out=\(audioRoute.output.name) bt=\(audioRoute.output.bluetooth)"
+        case "mediatoggle": mediaCommand(tab, "toggle"); return "ok"
+        case "mediaskip": mediaCommand(tab, "skip", 10); return "ok"
+        case "mediaseek": mediaCommand(tab, "seek", (tab.media?.duration ?? 0) / 2); return "ok"
+        case "mediapip":
+            mediaCommand(tab, "pip")
+            let can = (tab.webView?.value(forKey: "_canTogglePictureInPicture") as? Bool).map(String.init) ?? "nil"
+            return "pip native can=\(can) active=\(tab.pictureInPictureActive)"
+        case "spellprobe":
+            // A correction panel for a view that is not in any window: the kind of request that made AppKit raise.
+            NSSpellChecker.shared.showCorrectionIndicator(of: .default, primaryString: "bonjour", alternativeStrings: ["bonsoir"],
+                                                         forStringIn: NSRect(x: 10, y: 10, width: 40, height: 14), view: NSView(), completionHandler: nil)
+            return "probe survived"
+        case "invisstart": startInvisibilityRecording(); return "recording"
+        case "invisstop": return stopInvisibilityRecording()
+        default: return nil
+        }
+    }
+
     // MARK: Now playing card
 
     private func handleMedia(tab: Tab, json: String) {
@@ -3110,7 +3130,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     func refreshNowPlaying() {
         guard let tab = mediaTab(), var info = tab.media else {
             mediaTabID = nil
-            if nowPlaying.isShown { nowPlaying.isShown = false; nowPlaying.setArtwork(nil) }
+            if nowPlaying.isShown { nowPlaying.isShown = false; nowPlaying.setArtwork(nil); shownArtwork = nil }
             return
         }
         mediaTabID = tab.id
@@ -3141,13 +3161,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// The cover given by the page, fetched once per address. Never for a private tab (the request would leave the private session).
     private func loadArtwork(_ address: String?, private isPrivate: Bool) {
-        guard let address, !isPrivate, let url = URL(string: address), url.scheme == "https" else { nowPlaying.setArtwork(nil); return }
-        if let image = artworkCache[address] { nowPlaying.setArtwork(image); return }
+        let wanted = (isPrivate ? nil : address).flatMap { URL(string: $0)?.scheme == "https" ? $0 : nil }
+        guard wanted != shownArtwork else { return }                  // the card refreshes every second: touch the cover only when it changes
+        shownArtwork = wanted
+        guard let wanted, let url = URL(string: wanted) else { nowPlaying.setArtwork(nil); return }
+        if let image = artworkCache[wanted] { nowPlaying.setArtwork(image); return }
         nowPlaying.setArtwork(nil)
+        guard artworkRequested.insert(wanted).inserted else { return }
         Task { @MainActor [weak self] in
             guard let (data, _) = try? await URLSession.shared.data(from: url), data.count < 3_000_000, let image = NSImage(data: data) else { return }
-            self?.artworkCache[address] = image
-            if self?.mediaTab()?.media?.artwork == address { self?.nowPlaying.setArtwork(image) }
+            self?.artworkCache[wanted] = image
+            if self?.shownArtwork == wanted { self?.nowPlaying.setArtwork(image) }
         }
     }
 
@@ -3183,6 +3207,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 guard let self, let tab = self.activeTab else { return }
                 self.invisTicks += 1
                 if self.invisTicks % 12 == 0 { self.samplePage(of: tab) }
+                if self.invisSamples.count > 60_000 { self.invisTimer?.invalidate(); self.invisTimer = nil; return }   // forgotten recorder: ~8 min
                 self.invisSamples.append([
                     "t": Int(Date().timeIntervalSince(self.invisStart) * 1000), "tab": tab.id.uuidString.prefix(4).description,
                     "stack": tab.probeStack, "bar": Double(self.loadingBar.visibleOpacity), "spin": tab.tabButton.isLoading,
@@ -4617,8 +4642,9 @@ extension BrowserWindowController {
     /// On a Chrome Web Store page the "Add to Chrome" button does nothing in Orée: offer the same thing natively.
     private func offerWebStoreInstall(for tab: Tab) {
         guard tab.id == activeTabID, !tab.isPrivate, let id = WebStoreExtension.id(from: tab.webView?.url),
-              !webStoreOffered.contains(id), let package = WebStoreExtension.packageURL(id: id) else { return }
-        webStoreOffered.insert(id)
+              Date().timeIntervalSince(webStoreOffered[id] ?? .distantPast) > 60,      // not again at each navigation event of the same page
+              let package = WebStoreExtension.packageURL(id: id) else { return }
+        webStoreOffered[id] = Date()
         let name = WebStoreExtension.name(fromTitle: tab.webView?.title)
         noticePill.show(message: "Ajouter « \(name) » à Orée ?", button: "Ajouter", seconds: 20) { [weak self] in
             self?.noticePill.show(message: "Téléchargement de « \(name) »…", button: "Masquer", seconds: 60) { }
@@ -4631,7 +4657,7 @@ extension BrowserWindowController {
                     try FileManager.default.moveItem(at: temporary, to: file)
                     self?.installExtension(from: file)
                 } catch {
-                    self?.webStoreOffered.remove(id)
+                    self?.webStoreOffered[id] = nil
                     self?.noticePill.show(message: "Impossible de télécharger « \(name) ».", button: "OK", seconds: 8) { }
                 }
             }
