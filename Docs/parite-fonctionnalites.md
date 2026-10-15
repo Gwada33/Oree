@@ -1,11 +1,13 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
+**135 fonctions examinées : 66 absentes (rien trouvé), 69 avec du code présent.**
+
+Mis à jour le 14 octobre 2026 (soir) : impression (⌘P), enregistrement en PDF (⇧⌘S) et affichage du code source (⌥⌘U) ajoutés.
+
 
 - **Absent** : aucun code correspondant trouvé. Probablement absent, mais une fonction peut exister sous un autre nom que celui cherché.
 - **Code présent** : du code correspondant existe. Ça ne dit **rien** de sa qualité ni de sa complétude ; la ligne reste à tester.
-
-**135 fonctions examinées : 70 absentes (rien trouvé), 65 avec du code présent.**
 
 Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne par ligne), proposent la fonction : Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera.
 
@@ -43,12 +45,12 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 |---|---|---|
 | Recherche dans la page | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Zoom de la page (par site) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
-| Impression | ❌ absent | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
-| Enregistrer la page (PDF, archive web, HTML) | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
-| Afficher le code source | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
+| Impression | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
+| Enregistrer la page (PDF, archive web, HTML) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
+| Afficher le code source | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Mode lecture épuré | ❌ absent | Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Lecture à voix haute | ❌ absent | Edge, Safari, Firefox |
-| Visionneuse PDF avec annotations | ❌ absent | Chrome, Safari, Firefox, Edge, Vivaldi |
+| Visionneuse PDF avec annotations | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Vivaldi |
 | Traduction de page | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Liste de lecture | ◐ code présent (à tester) | Safari, Chrome, Firefox, Edge, Vivaldi |
 | Capture d’écran de la page (zone, page entière) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Vivaldi, Opera |

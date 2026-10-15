@@ -234,7 +234,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let findField = NSTextField()
     private var findBarContainer: NSView?
 
-    private var activeTab: Tab? {
+    var activeTab: Tab? {
         tabs.first { $0.id == activeTabID }
     }
 
@@ -3099,6 +3099,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             NSSpellChecker.shared.showCorrectionIndicator(of: .default, primaryString: "bonjour", alternativeStrings: ["bonsoir"],
                                                          forStringIn: NSRect(x: 10, y: 10, width: 40, height: 14), view: NSView(), completionHandler: nil)
             return "probe survived"
+        case "pdf":
+            guard let web = tab.webView else { return "no web view" }
+            let target = URL(fileURLWithPath: "/tmp/oree-page.pdf")
+            Task { @MainActor in
+                if let data = await self.makePDF(of: web) { try? data.write(to: target) }
+            }
+            return "pdf requested"
+        case "source": viewPageSource(); return "source requested"
+        case "printop":
+            // The print operation exists and lays the page out (it is not shown: no panel in an automated run).
+            guard let web = tab.webView else { return "no web view" }
+            let operation = web.printOperation(with: NSPrintInfo.shared)
+            operation.view?.frame = web.bounds
+            return "print operation view=\(operation.view != nil) frame=\(operation.view?.frame.size ?? .zero)"
         case "invisstart": startInvisibilityRecording(); return "recording"
         case "invisstop": return stopInvisibilityRecording()
         default: return nil
@@ -3486,6 +3500,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             reloadButton.setAccessibilityLabel("Recharger la page")
         }
     }
+
+    func presentNotice(_ message: String) { noticePill.show(message: message, button: "OK", seconds: 6) { } }
 
     @objc func findInPage() {
         findBarContainer?.isHidden = false

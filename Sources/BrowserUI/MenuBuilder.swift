@@ -46,6 +46,10 @@ public final class MenuBuilder {
             fileMenu.addItem(item)
         }
         fileMenu.addItem(.separator())
+        addCommand("savePDF", to: fileMenu, selector: #selector(BrowserWindowController.savePageAsPDF))
+        addCommand("print", to: fileMenu, selector: #selector(BrowserWindowController.printPage))
+        addCommand("viewSource", to: fileMenu, selector: #selector(BrowserWindowController.viewPageSource))
+        fileMenu.addItem(.separator())
         addCommand("moveTabUp", to: fileMenu, selector: #selector(BrowserWindowController.moveActiveTabUp))
         addCommand("moveTabDown", to: fileMenu, selector: #selector(BrowserWindowController.moveActiveTabDown))
         fileMenu.addItem(.separator())
