@@ -70,6 +70,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var newShortcutTemplate = ""
     @Published var shortcutMessage: String?
     @Published var downloadDirectory = ""
+    @Published var energyMode: EnergyMode = .automatic { didSet { settings.energyMode = energyMode } }
     @Published var sendGPC = true { didSet { settings.sendGlobalPrivacyControl = sendGPC } }
     @Published var minimumFontSize = 0 { didSet { settings.minimumFontSize = minimumFontSize } }
     @Published var clearHistoryOnQuit = false { didSet { settings.clearHistoryOnQuit = clearHistoryOnQuit } }
@@ -187,6 +188,7 @@ final class SettingsViewModel: ObservableObject {
         searchEngine = current.searchEngine
         customShortcuts = current.customSearchShortcuts
         downloadDirectory = current.downloadDirectoryPath
+        energyMode = current.energyMode
         sendGPC = current.sendGlobalPrivacyControl
         minimumFontSize = current.minimumFontSize
         clearHistoryOnQuit = current.clearHistoryOnQuit
@@ -596,6 +598,13 @@ public struct SettingsView: View {
                     }
                 }
                 Text("Safari convient presque partout. Certains sites refusent un navigateur qu’ils ne connaissent pas : présente-toi comme Chrome pour eux seulement (aussi dans la palette ⌘K, « Se présenter comme Chrome sur ce site »).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Énergie") {
+                Picker("Mode économie d’énergie", selection: $model.energyMode) {
+                    ForEach(EnergyMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                Text("Quand il est actif, les onglets que tu ne regardes pas sont figés et mis en veille deux fois plus tôt : moins de processeur, plus d’autonomie.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Confidentialité") {

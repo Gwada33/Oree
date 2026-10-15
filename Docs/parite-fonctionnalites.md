@@ -1,9 +1,9 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
-**140 fonctions examinées : 45 absentes (rien trouvé), 95 avec du code présent.**
+**140 fonctions examinées : 41 absentes (rien trouvé), 99 avec du code présent.**
 
-Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R), nouvelle fenêtre (⌘N) et déplacer un onglet vers une nouvelle fenêtre. Ajoutés (lot des fonctions simples) : vitesse de lecture et touches multimédia, signal Global Privacy Control, effacer l’historique et les données à la fermeture, code QR de la page, taille de texte minimale, calculatrice dans la barre, ⌃Tab entre onglets récents, gestionnaire de tâches (⌥⌘T). Réparé : un plantage au téléchargement d’un fichier créé par la page (blob), le message d’une fenêtre de connexion qui se ferme (perdu), zoom de la page (⌘+ ⌘− ⌘0, mémorisé par site) et pincer pour zoomer (ils manquaient), mot de passe demandé par un site, liens mailto:/tel:/applications externes, choisir un fichier à envoyer (il ne faisait rien) et les fenêtres alert / confirm / prompt des pages (confirm répondait toujours non). Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
+Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R), nouvelle fenêtre (⌘N) et déplacer un onglet vers une nouvelle fenêtre. Ajoutés (lot des fonctions simples) : vitesse de lecture et touches multimédia, signal Global Privacy Control, effacer l’historique et les données à la fermeture, code QR de la page, taille de texte minimale, calculatrice dans la barre, ⌃Tab entre onglets récents, gestionnaire de tâches (⌥⌘T), version mobile d’un site, partager la page, lire à voix haute, mode économie d’énergie. Réparé : un plantage au téléchargement d’un fichier créé par la page (blob), le message d’une fenêtre de connexion qui se ferme (perdu), zoom de la page (⌘+ ⌘− ⌘0, mémorisé par site) et pincer pour zoomer (ils manquaient), mot de passe demandé par un site, liens mailto:/tel:/applications externes, choisir un fichier à envoyer (il ne faisait rien) et les fenêtres alert / confirm / prompt des pages (confirm répondait toujours non). Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
 
 
 - **Absent** : aucun code correspondant trouvé. Probablement absent, mais une fonction peut exister sous un autre nom que celui cherché.
@@ -49,7 +49,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Enregistrer la page (PDF, archive web, HTML) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Afficher le code source | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Mode lecture épuré | ◐ code présent (à tester) | Safari, Firefox, Edge, Brave, Vivaldi, Opera |
-| Lecture à voix haute | ❌ absent | Edge, Safari, Firefox |
+| Lecture à voix haute | ◐ code présent (à tester) | Edge, Safari, Firefox |
 | Visionneuse PDF avec annotations | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Vivaldi |
 | Traduction de page | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Liste de lecture | ◐ code présent (à tester) | Safari, Chrome, Firefox, Edge, Vivaldi |
@@ -60,7 +60,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Résumé de page par IA | ◐ code présent (à tester) | Edge, Arc, Brave, Opera, Safari |
 | Informations sur le site (certificat, permissions, cookies) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Effacement automatique des bannières de cookies | ❌ absent | Brave, Firefox, Edge, Vivaldi, Opera |
-| Demande de site pour ordinateur / mobile | ❌ absent | Safari, Chrome, Firefox, Edge |
+| Demande de site pour ordinateur / mobile | ◐ code présent (à tester) | Safari, Chrome, Firefox, Edge |
 
 ## Barre d’adresse et recherche
 
@@ -74,7 +74,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Complétion en ligne de l’adresse | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Vivaldi, Opera |
 | Palette de commandes (⌘K) | ◐ code présent (à tester) | Arc, Vivaldi, Edge, Opera |
 | QR code pour partager la page | ◐ code présent (à tester) | Chrome, Edge, Brave |
-| Menu Partager (AirDrop, Messages…) | ❌ absent | Safari, Chrome, Arc, Edge |
+| Menu Partager (AirDrop, Messages…) | ◐ code présent (à tester) | Safari, Chrome, Arc, Edge |
 
 ## Vie privée et sécurité
 
@@ -194,7 +194,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Fonction | Orée | Qui l’a |
 |---|---|---|
 | Économiseur de mémoire | ◐ code présent (à tester) | Chrome, Edge, Firefox, Brave, Vivaldi, Opera, Safari |
-| Mode économie d’énergie | ❌ absent | Chrome, Edge, Brave, Opera |
+| Mode économie d’énergie | ◐ code présent (à tester) | Chrome, Edge, Brave, Opera |
 | Choisir un fichier à envoyer (champ « fichier » des formulaires) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Fenêtres alert / confirm / prompt des pages | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Mot de passe demandé par un site (HTTP basic, serveur mandataire) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |

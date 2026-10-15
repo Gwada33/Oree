@@ -8,9 +8,13 @@ public struct ReaderArticle: Equatable, Sendable {
     public var contentHTML: String
     public var textLength: Int
     public var originalURL: String
+    /// The article as plain text (to read aloud) and the page's declared language.
+    public var text: String
+    public var lang: String
 
-    public init(title: String, byline: String, site: String, contentHTML: String, textLength: Int, originalURL: String) {
+    public init(title: String, byline: String, site: String, contentHTML: String, textLength: Int, originalURL: String, text: String = "", lang: String = "") {
         self.title = title; self.byline = byline; self.site = site; self.contentHTML = contentHTML; self.textLength = textLength; self.originalURL = originalURL
+        self.text = text; self.lang = lang
     }
 
     /// Decodes the script's answer; nil if it is not one.
@@ -18,7 +22,8 @@ public struct ReaderArticle: Equatable, Sendable {
         guard let data = json.data(using: .utf8), let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let html = object["html"] as? String else { return nil }
         return ReaderArticle(title: (object["title"] as? String) ?? "", byline: (object["byline"] as? String) ?? "", site: (object["site"] as? String) ?? "",
-                             contentHTML: html, textLength: (object["length"] as? NSNumber)?.intValue ?? 0, originalURL: originalURL)
+                             contentHTML: html, textLength: (object["length"] as? NSNumber)?.intValue ?? 0, originalURL: originalURL,
+                             text: (object["text"] as? String) ?? "", lang: (object["lang"] as? String) ?? "")
     }
 
     /// Short pages (menus, login forms, search results) are not articles: below this, the reader mode says so instead of showing a page of crumbs.

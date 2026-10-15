@@ -42,3 +42,16 @@ import Testing
         #expect(!UserAgent.isAcceptableCustom(String(repeating: "x", count: 301)))
     }
 }
+
+@Suite struct MobileSiteTests {
+    @Test func aMobileSiteSeesAnIPhone() {
+        let agent = UserAgent.override(mode: .safari, custom: "", host: "m.exemple.fr", chromeHosts: [], mobileHosts: ["exemple.fr"])
+        #expect(agent == UserAgent.iphoneString && agent?.contains("iPhone") == true && agent?.contains("Mobile/") == true)
+    }
+
+    @Test func mobileWinsOverChromeAndOtherSitesAreUntouched() {
+        #expect(UserAgent.override(mode: .safari, custom: "", host: "exemple.fr", chromeHosts: ["exemple.fr"], mobileHosts: ["exemple.fr"]) == UserAgent.iphoneString)
+        #expect(UserAgent.override(mode: .safari, custom: "", host: "autre.fr", chromeHosts: [], mobileHosts: ["exemple.fr"]) == nil)
+        #expect(UserAgent.override(mode: .chrome, custom: "", host: "autre.fr", chromeHosts: [], mobileHosts: []) == UserAgent.chromeString)
+    }
+}

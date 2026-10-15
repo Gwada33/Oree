@@ -27,6 +27,7 @@ public enum UserAgent {
     // MARK: Presenting as another browser
 
     public static let chromeString = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+    public static let iphoneString = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
     public static let firefoxString = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0"
 
     /// A custom text is kept only if it looks like a user agent: printable ASCII, one line, at most 300 characters.
@@ -48,7 +49,8 @@ public enum UserAgent {
     }
 
     /// The full user agent to send to `host`, or nil to keep WebKit's own (Safari's). `safari` mode can still present as Chrome on the listed sites.
-    public static func override(mode: UserAgentMode, custom: String, host: String?, chromeHosts: [String]) -> String? {
+    public static func override(mode: UserAgentMode, custom: String, host: String?, chromeHosts: [String], mobileHosts: [String] = []) -> String? {
+        if mobileHosts.contains(where: { hostMatches(host, listed: $0) }) { return iphoneString }       // a site the user asked for in mobile version
         switch mode {
         case .safari: return chromeHosts.contains { hostMatches(host, listed: $0) } ? chromeString : nil
         case .chrome: return chromeString

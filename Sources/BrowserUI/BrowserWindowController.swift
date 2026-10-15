@@ -2245,6 +2245,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if activeTab?.webView?.url?.scheme?.hasPrefix("http") == true {
                 actions.append((activeTab?.readerOrigin == nil ? "Mode lecture" : "Quitter le mode lecture", "text.book.closed", { $0.toggleReaderMode() }))
             }
+            if let host = activeTab?.webView?.url?.host, activeTab?.webView?.url?.scheme?.hasPrefix("http") == true {
+                let mobile = SettingsStore.shared.mobileSiteHosts.contains { UserAgent.hostMatches(host, listed: $0) }
+                actions.append((mobile ? "Demander la version ordinateur de ce site" : "Demander la version mobile de ce site", "iphone", { $0.toggleMobileForCurrentSite() }))
+                actions.append(("Lire la page à voix haute", "speaker.wave.2", { $0.readPageAloud() }))
+                actions.append(("Partager la page…", "square.and.arrow.up", { $0.sharePage() }))
+            }
             if PageTranslator.isAvailable, TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
                 let showing = activeTab?.translator.state != .idle
                 actions.append((showing ? "Afficher la page d'origine" : "Traduire la page", "translate", { $0.translatePageAction() }))
@@ -2892,7 +2898,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         var sleepAfter = TimeInterval(SettingsStore.shared.autoSuspendMinutes * 60)
         // After a recent memory warning, be much less patient.
         if sleepAfter > 0, let last = lastMemoryPressure, Date().timeIntervalSince(last) < 600 { sleepAfter = min(sleepAfter, 180) }
-        return .init(freezeAfter: TimeInterval(SettingsStore.shared.freezeAfterSeconds), sleepAfter: sleepAfter)
+        let timing = TabLifecyclePolicy.Timing(freezeAfter: TimeInterval(SettingsStore.shared.freezeAfterSeconds), sleepAfter: sleepAfter)
+        return EnergyPolicy.adjusted(timing, active: EnergyPolicy.isActive(mode: SettingsStore.shared.energyMode, systemLowPower: ProcessInfo.processInfo.isLowPowerModeEnabled))
     }
 
     /// Why a tab may or may not be touched: on screen, playing sound, using camera/mic, a messaging
@@ -3174,6 +3181,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             view.cacheDisplay(in: view.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/oree-taskmanager.png"))
             return "window shown, picture written"
+        case "speak":
+            readPageAloud()
+            return "asked"
+        case "speaking": return "speaking=\(PageSpeech.shared.isSpeaking)"
+        case "speakstop": PageSpeech.shared.stop(); return "stopped"
+        case "share":
+            guard let url = tab.webView?.url else { return "no page" }
+            let services = NSSharingService.sharingServices(forItems: [url])
+            return "services=\(services.count) first=\(services.first?.title ?? "-")"
+        case "energy":
+            let mode = SettingsStore.shared.energyMode
+            let active = EnergyPolicy.isActive(mode: mode, systemLowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
+            let timing = lifecycleTiming()
+            return "mode=\(mode.rawValue) systemLowPower=\(ProcessInfo.processInfo.isLowPowerModeEnabled) active=\(active) freezeAfter=\(timing.freezeAfter) sleepAfter=\(timing.sleepAfter)"
         case "recent": return recentTabIDs.compactMap { id in tabs.firstIndex { $0.id == id } }.map(String.init).joined(separator: ",")
         case "recentgo": selectRecentTab(); return "active=\(tabs.firstIndex { $0.id == activeTabID } ?? -1)"
         case "calc":
@@ -3776,8 +3797,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// The user agent for the page about to load: WebKit's own (Safari's) unless the user chose another identity, globally or for this site.
     private func applyUserAgent(to webView: WKWebView, for url: URL?) {
         let settings = SettingsStore.shared
-        let agent = UserAgent.override(mode: settings.userAgentMode, custom: settings.customUserAgent, host: url?.host, chromeHosts: settings.chromeUserAgentHosts)
+        let agent = UserAgent.override(mode: settings.userAgentMode, custom: settings.customUserAgent, host: url?.host, chromeHosts: settings.chromeUserAgentHosts,
+                                       mobileHosts: settings.mobileSiteHosts)
         if webView.customUserAgent != agent { webView.customUserAgent = agent }
+    }
+
+    /// Palette action: ask this site for its mobile version (or the desktop one again), then reload.
+    private func toggleMobileForCurrentSite() {
+        guard let tab = activeTab, let host = tab.webView?.url?.host else { return }
+        let settings = SettingsStore.shared
+        var hosts = settings.mobileSiteHosts
+        if let index = hosts.firstIndex(where: { UserAgent.hostMatches(host, listed: $0) }) { hosts.remove(at: index) } else { hosts.append(host) }
+        settings.mobileSiteHosts = hosts
+        tab.webView?.reload()
+        presentNotice(hosts.contains(where: { UserAgent.hostMatches(host, listed: $0) }) ? "\(host) s’affiche en version mobile." : "\(host) s’affiche en version ordinateur.")
     }
 
     /// Palette action: present as Chrome on this site (or stop doing so), then reload.
@@ -3826,6 +3859,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let popover = NSPopover(); popover.behavior = .transient; popover.contentViewController = controller
         guard showPopoverSafely(popover, relativeTo: addressPill) else { return }
         qrPopover = popover
+    }
+
+    func dismissNotice() { noticePill.dismiss() }
+    func presentStoppableNotice(_ message: String, button: String, perform: @escaping () -> Void) {
+        noticePill.show(message: message, button: button, seconds: 3600, perform: perform)
     }
 
     func presentNotice(_ message: String) { noticePill.show(message: message, button: "OK", seconds: 6) { } }
@@ -4685,6 +4723,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if navigationAction.targetFrame?.isMainFrame == true {
             tab(for: webView)?.lastNavigationType = navigationAction.navigationType
             applyUserAgent(to: webView, for: navigationAction.request.url)
+            let mobile = SettingsStore.shared.mobileSiteHosts.contains { UserAgent.hostMatches(navigationAction.request.url?.host, listed: $0) }
+            preferences.preferredContentMode = mobile ? .mobile : .recommended
         }
         let policy = await decideNavigation(webView, navigationAction, preferences)
         return (policy, preferences)

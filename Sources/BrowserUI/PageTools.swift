@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import PDFKit
 import WebKit
 import BrowserCore
@@ -119,5 +120,39 @@ extension BrowserWindowController {
     func applySiteZoom(to web: WKWebView) {
         let zoom = CGFloat(ZoomPolicy.zoom(for: web.url, memory: SettingsStore.shared.siteZoom))
         if web.pageZoom != zoom { web.pageZoom = zoom }
+    }
+
+    // MARK: Share
+
+    /// The system share menu (AirDrop, Messages, Mail, Notes…) for the page's address, under the address bar.
+    @objc func sharePage() {
+        guard let tab = activeTab, let url = tab.webView?.url, url.scheme == "http" || url.scheme == "https" else { presentNotice("Cette page n’a pas d’adresse à partager."); return }
+        let picker = NSSharingServicePicker(items: [url])
+        picker.show(relativeTo: addressPill.bounds, of: addressPill, preferredEdge: .maxY)
+    }
+
+    // MARK: Read aloud
+
+    /// Reads the selected text, or else the page's article, aloud; again to stop.
+    @objc func readPageAloud() {
+        let speech = PageSpeech.shared
+        if speech.isSpeaking { speech.stop(); dismissNotice(); return }
+        guard let web = activeTab?.webView, let url = web.url, url.scheme == "http" || url.scheme == "https" else { presentNotice("Rien à lire sur cette page."); return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let selection = (await web.safeEvaluate("window.getSelection().toString()", world: .page) as? String) ?? ""
+            var script = SpeechText.script(title: "", body: selection)
+            var pageLang = await web.safeEvaluate("document.documentElement.lang", world: .page) as? String
+            if script.isEmpty {
+                guard let json = await web.safeEvaluate(ReaderScript.extract, world: ReaderScript.world) as? String,
+                      let article = ReaderArticle.parse(json, originalURL: url.absoluteString), article.textLength >= 200 else { self.presentNotice("Rien à lire sur cette page."); return }
+                script = SpeechText.script(title: article.title, body: article.text)
+                pageLang = article.lang
+            }
+            let language = SpeechText.language(pageLang: pageLang, fallback: AVSpeechSynthesisVoice.currentLanguageCode())
+            speech.onFinish = { [weak self] in self?.dismissNotice() }
+            speech.speak(script, language: language)
+            self.presentStoppableNotice("Lecture à voix haute…", button: "Arrêter") { speech.stop() }
+        }
     }
 }

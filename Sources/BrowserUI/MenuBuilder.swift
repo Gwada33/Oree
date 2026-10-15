@@ -52,6 +52,8 @@ public final class MenuBuilder {
         addCommand("print", to: fileMenu, selector: #selector(BrowserWindowController.printPage))
         addCommand("viewSource", to: fileMenu, selector: #selector(BrowserWindowController.viewPageSource))
         addCommand("qrCode", to: fileMenu, selector: #selector(BrowserWindowController.showPageQRCode))
+        addCommand("share", to: fileMenu, selector: #selector(BrowserWindowController.sharePage))
+        addCommand("readAloud", to: fileMenu, selector: #selector(BrowserWindowController.readPageAloud))
         addCommand("reader", to: fileMenu, selector: #selector(BrowserWindowController.toggleReaderMode))
         fileMenu.addItem(.separator())
         addCommand("moveTabUp", to: fileMenu, selector: #selector(BrowserWindowController.moveActiveTabUp))

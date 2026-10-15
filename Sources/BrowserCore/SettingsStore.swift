@@ -346,6 +346,23 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Key.sendGPC) }
     }
 
+    public var energyMode: EnergyMode {
+        get {
+            if let forced = ProcessInfo.processInfo.environment["HB_ENERGY_MODE"], let mode = EnergyMode(rawValue: forced) { return mode }      // tests
+            return EnergyMode(rawValue: defaults.string(forKey: "settings.energyMode") ?? "") ?? .automatic
+        }
+        set { defaults.set(newValue.rawValue, forKey: "settings.energyMode") }
+    }
+
+    /// Sites shown their mobile version (an iPhone identity and mobile content). `HB_UA_MOBILE_HOSTS` (comma separated) overrides it for tests.
+    public var mobileSiteHosts: [String] {
+        get {
+            if let forced = ProcessInfo.processInfo.environment["HB_UA_MOBILE_HOSTS"] { return forced.split(separator: ",").map(String.init) }
+            return defaults.stringArray(forKey: "settings.mobileSiteHosts") ?? []
+        }
+        set { defaults.set(newValue, forKey: "settings.mobileSiteHosts") }
+    }
+
     /// Smallest text size a page may show, in points (0 = the page decides).
     public var minimumFontSize: Int {
         get { max(0, min(defaults.integer(forKey: Key.minimumFontSize), 36)) }

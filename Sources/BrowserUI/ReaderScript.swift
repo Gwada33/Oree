@@ -74,7 +74,7 @@ enum ReaderScript {
       // The title is shown above the text: do not repeat it as the first heading.
       const first = root.querySelector('h1'); if (first && first.textContent.trim() === title) first.remove();
       const byline = meta('author') || ((document.querySelector('[rel=author], .byline, [itemprop=author]') || {}).textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80);
-      return JSON.stringify({ title: title.slice(0, 300), byline: byline.slice(0, 100), site: meta('og:site_name') || location.hostname.replace(/^www\./, ''), html: root.innerHTML, length: text });
+      return JSON.stringify({ title: title.slice(0, 300), byline: byline.slice(0, 100), site: meta('og:site_name') || location.hostname.replace(/^www\./, ''), html: root.innerHTML, length: text, text: root.textContent.replace(/\s+/g, ' ').trim().slice(0, 200000), lang: document.documentElement.lang || '' });
     })()
     """#
 }
