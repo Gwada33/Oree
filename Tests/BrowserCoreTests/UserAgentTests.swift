@@ -19,3 +19,26 @@ import Testing
         #expect(!v.isEmpty && v.first?.isNumber == true)
     }
 }
+
+@Suite struct UserAgentOverrideTests {
+    @Test func safariModeKeepsWebKitsOwnExceptOnListedSites() {
+        #expect(UserAgent.override(mode: .safari, custom: "", host: "example.com", chromeHosts: []) == nil)
+        #expect(UserAgent.override(mode: .safari, custom: "", host: "www.exemple.fr", chromeHosts: ["exemple.fr"]) == UserAgent.chromeString)
+        #expect(UserAgent.override(mode: .safari, custom: "", host: "sub.exemple.fr", chromeHosts: ["exemple.fr"]) == UserAgent.chromeString)
+        #expect(UserAgent.override(mode: .safari, custom: "", host: "notexemple.fr", chromeHosts: ["exemple.fr"]) == nil)   // not a subdomain
+    }
+
+    @Test func otherModesApplyEverywhere() {
+        #expect(UserAgent.override(mode: .chrome, custom: "", host: nil, chromeHosts: []) == UserAgent.chromeString)
+        #expect(UserAgent.override(mode: .firefox, custom: "", host: "a.b", chromeHosts: []) == UserAgent.firefoxString)
+        #expect(UserAgent.chromeString.contains("Chrome/") && !UserAgent.firefoxString.contains("Chrome"))
+    }
+
+    @Test func customTextMustLookLikeAUserAgent() {
+        #expect(UserAgent.override(mode: .custom, custom: "  MonNavigateur/1.0  ", host: "a.b", chromeHosts: []) == "MonNavigateur/1.0")
+        #expect(UserAgent.override(mode: .custom, custom: "", host: "a.b", chromeHosts: []) == nil)
+        #expect(!UserAgent.isAcceptableCustom("ligne\nsuivante"))                 // a header cannot hold a line break
+        #expect(!UserAgent.isAcceptableCustom("accentué é"))
+        #expect(!UserAgent.isAcceptableCustom(String(repeating: "x", count: 301)))
+    }
+}

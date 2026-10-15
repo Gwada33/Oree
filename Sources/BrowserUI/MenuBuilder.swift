@@ -96,6 +96,8 @@ public final class MenuBuilder {
         let bookmarksMenuItem = NSMenuItem()
         let bookmarksMenu = NSMenu(title: "Favoris")
         addCommand("bookmark", to: bookmarksMenu, selector: #selector(BrowserWindowController.addBookmark))
+        addControllerItem(to: bookmarksMenu, title: "Ajouter tous les onglets aux favoris", selector: #selector(BrowserWindowController.bookmarkAllTabs), key: "", modifiers: [])
+        addControllerItem(to: bookmarksMenu, title: "Exporter les favoris…", selector: #selector(BrowserWindowController.exportBookmarks), key: "", modifiers: [])
         bookmarksMenu.addItem(.separator())
         self.bookmarksMenu = bookmarksMenu
         bookmarksMenuItem.submenu = bookmarksMenu
@@ -170,7 +172,7 @@ public final class MenuBuilder {
 
     func refreshBookmarksMenu() {
         guard let bookmarksMenu else { return }
-        while bookmarksMenu.items.count > 2 {
+        while bookmarksMenu.items.count > 4 {
             bookmarksMenu.removeItem(at: bookmarksMenu.items.count - 1)
         }
         for bookmark in target?.allBookmarksForMenu() ?? [] {

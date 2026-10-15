@@ -1,9 +1,9 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
-**135 fonctions examinées : 64 absentes (rien trouvé), 71 avec du code présent.**
+**135 fonctions examinées : 61 absentes (rien trouvé), 74 avec du code présent.**
 
-Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix.
+Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous.
 
 
 - **Absent** : aucun code correspondant trouvé. Probablement absent, mais une fonction peut exister sous un autre nom que celui cherché.
@@ -31,7 +31,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Aperçu de l’onglet au survol | ❌ absent | Chrome, Safari, Edge, Arc, Vivaldi, Brave |
 | Vue d’ensemble en grille de tous les onglets | ◐ code présent (à tester) | Safari, Chrome, Firefox, Vivaldi |
 | Ctrl+Tab dans l’ordre d’utilisation récente | ❌ absent | Chrome, Firefox, Vivaldi, Opera, Arc |
-| Ajouter tous les onglets aux favoris | ❌ absent | Chrome, Safari, Firefox, Edge, Vivaldi, Opera |
+| Ajouter tous les onglets aux favoris | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Vivaldi, Opera |
 | Archivage automatique des onglets inutilisés | ❌ absent | Arc |
 | Aperçu d’un lien sans quitter la page (Peek) | ❌ absent | Arc, Safari |
 | Mini-fenêtre rapide (Little Arc) | ❌ absent | Arc |
@@ -122,7 +122,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Fonction | Orée | Qui l’a |
 |---|---|---|
 | Importer depuis Chrome / Safari / Firefox | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
-| Exporter les favoris (HTML) | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
+| Exporter les favoris (HTML) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Exporter les mots de passe (CSV) | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Gestionnaire de téléchargements | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Reprise de téléchargement interrompu | ◐ code présent (à tester) | Chrome, Firefox, Edge, Brave, Vivaldi, Opera |
@@ -170,7 +170,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 |---|---|---|
 | Outils de développement (inspecteur, console, réseau) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Mode responsive / émulation d’appareil | ❌ absent | Chrome, Safari, Firefox, Edge |
-| Changer le user-agent | ❌ absent | Chrome, Firefox, Edge, Safari |
+| Changer le user-agent | ◐ code présent (à tester) | Chrome, Firefox, Edge, Safari |
 | Débogage à distance de l’iPhone / Android | ❌ absent | Chrome, Safari, Firefox, Edge |
 | Page d’état interne (chrome://, about:) | ◐ code présent (à tester) | Chrome, Firefox, Edge, Brave, Vivaldi, Opera |
 

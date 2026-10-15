@@ -184,6 +184,24 @@ public final class SettingsStore: @unchecked Sendable {
         ])
     }
 
+    /// How Orée presents itself to sites (`HB_UA_MODE` overrides it for tests, without touching the saved setting).
+    public var userAgentMode: UserAgentMode {
+        get {
+            if let forced = ProcessInfo.processInfo.environment["HB_UA_MODE"], let mode = UserAgentMode(rawValue: forced) { return mode }
+            return UserAgentMode(rawValue: defaults.string(forKey: "settings.userAgentMode") ?? "") ?? .safari
+        }
+        set { defaults.set(newValue.rawValue, forKey: "settings.userAgentMode") }
+    }
+    public var customUserAgent: String {
+        get { defaults.string(forKey: "settings.customUserAgent") ?? "" }
+        set { defaults.set(newValue, forKey: "settings.customUserAgent") }
+    }
+    /// Sites that get a Chrome user agent while the mode is Safari (some sites turn Safari-like browsers away).
+    public var chromeUserAgentHosts: [String] {
+        get { defaults.stringArray(forKey: "settings.chromeUserAgentHosts") ?? [] }
+        set { defaults.set(newValue, forKey: "settings.chromeUserAgentHosts") }
+    }
+
     /// Search shortcuts added by the user ("wk" + space + words).
     public var customSearchShortcuts: [SearchShortcut] {
         get { defaults.data(forKey: "settings.customSearchShortcuts").flatMap { try? JSONDecoder().decode([SearchShortcut].self, from: $0) } ?? [] }

@@ -70,6 +70,24 @@ final class SettingsViewModel: ObservableObject {
     @Published var newShortcutTemplate = ""
     @Published var shortcutMessage: String?
     @Published var downloadDirectory = ""
+    @Published var userAgentMode: UserAgentMode = .safari { didSet { settings.userAgentMode = userAgentMode } }
+    @Published var customUserAgent = "" { didSet { settings.customUserAgent = customUserAgent } }
+    @Published var chromeAgentHosts: [String] = []
+    @Published var newChromeAgentHost = ""
+
+    func addChromeAgentHost() {
+        let host = newChromeAgentHost.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            .replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "http://", with: "").components(separatedBy: "/").first ?? ""
+        guard !host.isEmpty, host.contains("."), !chromeAgentHosts.contains(host) else { return }
+        chromeAgentHosts.append(host)
+        settings.chromeUserAgentHosts = chromeAgentHosts
+        newChromeAgentHost = ""
+    }
+
+    func removeChromeAgentHost(_ host: String) {
+        chromeAgentHosts.removeAll { $0 == host }
+        settings.chromeUserAgentHosts = chromeAgentHosts
+    }
 
     var newShortcut: SearchShortcut { SearchShortcut(name: newShortcutName, keyword: newShortcutKeyword.lowercased(), template: newShortcutTemplate) }
 
@@ -165,6 +183,9 @@ final class SettingsViewModel: ObservableObject {
         searchEngine = current.searchEngine
         customShortcuts = current.customSearchShortcuts
         downloadDirectory = current.downloadDirectoryPath
+        userAgentMode = current.userAgentMode
+        customUserAgent = current.customUserAgent
+        chromeAgentHosts = current.chromeUserAgentHosts
         homepageURL = current.customHomepageURL
         adBlockEnabled = current.adBlockEnabled
         privateByDefault = current.privateByDefault
@@ -541,6 +562,33 @@ public struct SettingsView: View {
                     Button("Ajouter") { model.addShortcut() }
                 }
                 if let message = model.shortcutMessage { Text(message).font(.caption).foregroundStyle(.red) }
+            }
+            Section("Identité du navigateur") {
+                Picker("Se présenter aux sites comme", selection: $model.userAgentMode) {
+                    ForEach(UserAgentMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                if model.userAgentMode == .custom {
+                    TextField("Texte du user-agent", text: $model.customUserAgent)
+                    if !model.customUserAgent.isEmpty && !UserAgent.isAcceptableCustom(model.customUserAgent) {
+                        Text("Une seule ligne, en caractères ASCII, 300 au plus : sinon Safari est utilisé.").font(.caption).foregroundStyle(.red)
+                    }
+                }
+                if model.userAgentMode == .safari {
+                    ForEach(model.chromeAgentHosts, id: \.self) { host in
+                        HStack {
+                            Text(host)
+                            Spacer()
+                            Text("vu comme Chrome").font(.caption).foregroundStyle(.secondary)
+                            Button(role: .destructive) { model.removeChromeAgentHost(host) } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
+                        }
+                    }
+                    HStack {
+                        TextField("site.exemple (vu comme Chrome)", text: $model.newChromeAgentHost)
+                        Button("Ajouter") { model.addChromeAgentHost() }
+                    }
+                }
+                Text("Safari convient presque partout. Certains sites refusent un navigateur qu’ils ne connaissent pas : présente-toi comme Chrome pour eux seulement (aussi dans la palette ⌘K, « Se présenter comme Chrome sur ce site »).")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Téléchargements") {
                 HStack {

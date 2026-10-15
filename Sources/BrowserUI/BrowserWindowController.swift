@@ -2212,6 +2212,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 ("Fermer l'onglet", "xmark", { $0.closeActiveTabAction() }),
                 ("Réglages", "gearshape", { $0.openSettings() }),
             ]
+            if let host = activeTab?.webView?.url?.host, activeTab?.webView?.url?.scheme?.hasPrefix("http") == true {
+                let asChrome = SettingsStore.shared.chromeUserAgentHosts.contains { UserAgent.hostMatches(host, listed: $0) }
+                actions.append((asChrome ? "Se présenter comme Safari sur ce site" : "Se présenter comme Chrome sur ce site", "person.crop.circle.badge.questionmark", { $0.toggleChromeAgentForCurrentSite() }))
+            }
             if PageTranslator.isAvailable, TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
                 let showing = activeTab?.translator.state != .idle
                 actions.append((showing ? "Afficher la page d'origine" : "Traduire la page", "translate", { $0.translatePageAction() }))
@@ -3069,6 +3073,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         moveItem.submenu = moveMenu
         menu.addItem(moveItem)
         menu.addItem(.separator())
+        let following = tabs.filter { $0.spaceIndex == tab.spaceIndex }.drop(while: { $0.id != tab.id }).dropFirst()
+        add(SettingsStore.shared.tabLayout == .horizontal ? "Fermer les onglets à droite" : "Fermer les onglets en dessous", enabled: !following.isEmpty) { [weak self] in
+            for other in following { self?.closeTab(other) }
+        }
         add("Fermer les autres onglets", enabled: tabs.filter({ $0.spaceIndex == tab.spaceIndex }).count > 1) { [weak self] in
             guard let self else { return }
             for other in self.tabs where other.id != tab.id && other.spaceIndex == tab.spaceIndex { self.closeTab(other) }
@@ -3077,7 +3085,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return menu
     }
 
-    /// Puts a tab to sleep by hand. The active tab first hands over to a neighbour in its space.
     // MARK: Development operations (automation channel)
 
     private func devOp(_ op: String, _ tab: Tab) -> String? {
@@ -3108,6 +3115,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no file" }
             load(urlString: text, in: tab)
             return "loaded"
+        case "bookmarkall": bookmarkAllTabs(); return "done"
+        case "exportbm":
+            let items = ((try? bookmarkRepo.all()) ?? []).map { BookmarkExport.Item(title: $0.title, url: $0.url, folder: $0.spaceIndex.flatMap { spaces.indices.contains($0) ? spaces[$0].name : nil } ?? "Tous les espaces", added: $0.createdAt) }
+            try? BookmarkExport.html(items).write(toFile: "/tmp/oree-bookmarks.html", atomically: true, encoding: .utf8)
+            return "exported \(items.count)"
         case "source": viewPageSource(); return "source requested"
         case "printop":
             // The print operation exists and lays the page out (it is not shown: no panel in an automated run).
@@ -3240,6 +3252,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return "samples=\(invisSamples.count)"
     }
 
+    /// Puts a tab to sleep by hand. The active tab first hands over to a neighbour in its space.
     func sleepTab(_ tab: Tab) {
         guard !tab.isSuspended, tab.webView != nil else { return }
         if splitContains(tab.id) { endSplit(keeping: nil) }
@@ -3493,6 +3506,24 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
+    /// The user agent for the page about to load: WebKit's own (Safari's) unless the user chose another identity, globally or for this site.
+    private func applyUserAgent(to webView: WKWebView, for url: URL?) {
+        let settings = SettingsStore.shared
+        let agent = UserAgent.override(mode: settings.userAgentMode, custom: settings.customUserAgent, host: url?.host, chromeHosts: settings.chromeUserAgentHosts)
+        if webView.customUserAgent != agent { webView.customUserAgent = agent }
+    }
+
+    /// Palette action: present as Chrome on this site (or stop doing so), then reload.
+    private func toggleChromeAgentForCurrentSite() {
+        guard let tab = activeTab, let host = tab.webView?.url?.host else { return }
+        let settings = SettingsStore.shared
+        var hosts = settings.chromeUserAgentHosts
+        if let index = hosts.firstIndex(where: { UserAgent.hostMatches(host, listed: $0) }) { hosts.remove(at: index) } else { hosts.append(host) }
+        settings.chromeUserAgentHosts = hosts
+        tab.webView?.reload()
+        presentNotice(hosts.contains(where: { UserAgent.hostMatches(host, listed: $0) }) ? "\(host) voit Orée comme Chrome." : "\(host) voit Orée comme Safari.")
+    }
+
     func presentNotice(_ message: String) { noticePill.show(message: message, button: "OK", seconds: 6) { } }
 
     @objc func findInPage() {
@@ -3530,6 +3561,38 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         menuBuilder?.refreshBookmarksMenu()
         refreshPinnedIcons()
+    }
+
+    /// Favoris › Ajouter tous les onglets aux favoris: every open web page of the current space (private tabs excluded), without duplicates.
+    @objc func bookmarkAllTabs() {
+        var added = 0
+        for tab in visibleTabs() where !tab.isPrivate {
+            guard let url = tab.currentURL, url.scheme == "http" || url.scheme == "https", (try? bookmarkRepo.contains(url: url.absoluteString)) == false else { continue }
+            if (try? bookmarkRepo.add(url: url.absoluteString, title: tab.displayTitle)) != nil { added += 1 }
+        }
+        menuBuilder?.refreshBookmarksMenu()
+        refreshPinnedIcons()
+        presentNotice(added == 0 ? "Tous les onglets sont déjà dans les favoris." : "\(added) onglet\(added > 1 ? "s" : "") ajouté\(added > 1 ? "s" : "") aux favoris.")
+    }
+
+    /// Favoris › Exporter les favoris…: a standard bookmarks file (HTML) that Chrome, Safari and Firefox can import.
+    @objc func exportBookmarks() {
+        guard let window else { return }
+        let all = (try? bookmarkRepo.all()) ?? []
+        let items = all.map { bookmark -> BookmarkExport.Item in
+            let space = bookmark.spaceIndex.flatMap { spaces.indices.contains($0) ? spaces[$0].name : nil } ?? "Tous les espaces"
+            return BookmarkExport.Item(title: bookmark.title, url: bookmark.url, folder: space, added: bookmark.createdAt)
+        }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.html]
+        panel.nameFieldStringValue = "Favoris Orée.html"
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try BookmarkExport.html(items).write(to: url, atomically: true, encoding: .utf8)
+                self?.presentNotice("\(items.count) favori\(items.count > 1 ? "s" : "") exporté\(items.count > 1 ? "s" : "").")
+            } catch { self?.presentNotice("Impossible d’écrire le fichier : \(error.localizedDescription)") }
+        }
     }
 
     @objc func historyItemClicked(_ sender: NSMenuItem) {
@@ -4315,7 +4378,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Main-frame gatekeeper: URL cleaning, HTTPS-only upgrade, Safe Browsing,
     /// then per-page scripts. Sub-frames and non-web schemes pass straight through.
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, preferences: WKWebpagePreferences) async -> (WKNavigationActionPolicy, WKWebpagePreferences) {
-        if navigationAction.targetFrame?.isMainFrame == true { tab(for: webView)?.lastNavigationType = navigationAction.navigationType }
+        if navigationAction.targetFrame?.isMainFrame == true {
+            tab(for: webView)?.lastNavigationType = navigationAction.navigationType
+            applyUserAgent(to: webView, for: navigationAction.request.url)
+        }
         let policy = await decideNavigation(webView, navigationAction, preferences)
         return (policy, preferences)
     }

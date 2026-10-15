@@ -23,4 +23,49 @@ public enum UserAgent {
     }
 
     public static var applicationName: String { applicationName(safariVersion: installedSafariVersion()) }
+
+    // MARK: Presenting as another browser
+
+    public static let chromeString = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+    public static let firefoxString = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0"
+
+    /// A custom text is kept only if it looks like a user agent: printable ASCII, one line, at most 300 characters.
+    public static func isAcceptableCustom(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        return !trimmed.isEmpty && trimmed.count <= 300 && trimmed.unicodeScalars.allSatisfy { $0.value >= 0x20 && $0.value < 0x7F }
+    }
+
+    /// Whether `host` is `listed` or one of its subdomains, ignoring case and a leading "www.".
+    public static func hostMatches(_ host: String?, listed: String) -> Bool {
+        func clean(_ text: String) -> String {
+            var value = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if value.hasPrefix("www.") { value.removeFirst(4) }
+            return value
+        }
+        guard let host else { return false }
+        let h = clean(host), l = clean(listed)
+        return !l.isEmpty && (h == l || h.hasSuffix("." + l))
+    }
+
+    /// The full user agent to send to `host`, or nil to keep WebKit's own (Safari's). `safari` mode can still present as Chrome on the listed sites.
+    public static func override(mode: UserAgentMode, custom: String, host: String?, chromeHosts: [String]) -> String? {
+        switch mode {
+        case .safari: return chromeHosts.contains { hostMatches(host, listed: $0) } ? chromeString : nil
+        case .chrome: return chromeString
+        case .firefox: return firefoxString
+        case .custom: return isAcceptableCustom(custom) ? custom.trimmingCharacters(in: .whitespaces) : nil
+        }
+    }
+}
+
+public enum UserAgentMode: String, CaseIterable, Sendable {
+    case safari, chrome, firefox, custom
+    public var label: String {
+        switch self {
+        case .safari: return "Safari (recommandé)"
+        case .chrome: return "Chrome"
+        case .firefox: return "Firefox"
+        case .custom: return "Personnalisé"
+        }
+    }
 }
