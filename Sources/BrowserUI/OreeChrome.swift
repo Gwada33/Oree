@@ -440,6 +440,8 @@ final class SpaceRailView: NSView {
 @MainActor
 final class AddressPillView: SurfaceView, NSTextFieldDelegate {
     var onClick: (() -> Void)?
+    /// A click on the lock / warning icon of a web page: the window shows what it knows about the site.
+    var onIconClick: (() -> Void)?
     /// Inline editing callbacks.
     var onTextChange: ((String) -> Void)?
     var onCommit: ((String, _ newTab: Bool) -> Void)?
@@ -597,7 +599,12 @@ final class AddressPillView: SurfaceView, NSTextFieldDelegate {
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) { if !isEditing { onClick?() } }
+    override func mouseDown(with event: NSEvent) {
+        guard !isEditing else { return }
+        let onIcon = icon.frame.insetBy(dx: -6, dy: -8).contains(convert(event.locationInWindow, from: nil))
+        let isWebPage = shownURL?.scheme == "http" || shownURL?.scheme == "https"
+        if onIcon, isWebPage, let onIconClick { onIconClick() } else { onClick?() }
+    }
     override func accessibilityPerformPress() -> Bool { onClick?(); return true }
 }
 

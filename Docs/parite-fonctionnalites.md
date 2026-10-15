@@ -1,9 +1,9 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
-**135 fonctions examinées : 61 absentes (rien trouvé), 74 avec du code présent.**
+**135 fonctions examinées : 59 absentes (rien trouvé), 76 avec du code présent.**
 
-Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous.
+Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations).
 
 
 - **Absent** : aucun code correspondant trouvé. Probablement absent, mais une fonction peut exister sous un autre nom que celui cherché.
@@ -58,7 +58,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Taille de police minimale / police par défaut réglables | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Navigation au clavier dans la page (caret browsing) | ❌ absent | Chrome, Firefox, Edge |
 | Résumé de page par IA | ◐ code présent (à tester) | Edge, Arc, Brave, Opera, Safari |
-| Informations sur le site (certificat, permissions, cookies) | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
+| Informations sur le site (certificat, permissions, cookies) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Effacement automatique des bannières de cookies | ❌ absent | Brave, Firefox, Edge, Vivaldi, Opera |
 | Demande de site pour ordinateur / mobile | ❌ absent | Safari, Chrome, Firefox, Edge |
 
@@ -103,7 +103,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Effacer les données à la fermeture | ❌ absent | Firefox, Chrome, Brave, Vivaldi |
 | Notifications web (push) | ❌ absent | Chrome, Firefox, Edge, Brave, Vivaldi, Opera, Safari |
 | Bloqueur de fenêtres intempestives | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
-| Visionneuse de certificats | ❌ absent | Chrome, Safari, Firefox, Edge |
+| Visionneuse de certificats | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge |
 
 ## Synchronisation et appareils
 

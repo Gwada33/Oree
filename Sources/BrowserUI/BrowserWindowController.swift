@@ -31,7 +31,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let oreeSchemeHandler = OreeSchemeHandler()
     /// Tab groups of every space, in display order.
     private lazy var groups: [TabGroup] = (try? groupRepo.load()) ?? []
-    private let permissionRepo = SitePermissionRepository()
+    let permissionRepo = SitePermissionRepository()
     private let vault = CredentialVault()
     private let credentialHandler = CredentialMessageHandler()
     /// (origin, username) pairs the user said "not now" to, until quit.
@@ -64,6 +64,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let nowPlaying = NowPlayingView()
     private let audioRoute = AudioRoute()
     private var mediaTabID: UUID?                      // the tab the card is about
+    var siteInfoPopover: NSPopover?
     private var artworkCache: [String: NSImage] = [:]
     private var artworkRequested: Set<String> = []
     private var shownArtwork: String?
@@ -89,7 +90,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var readingBarWidth: NSLayoutConstraint?
     private let resumeRepo = ResumeRepository()
     private var aiResult = "none"
-    private let addressPill = AddressPillView()
+    let addressPill = AddressPillView()
     private let spaceRail = SpaceRailView()
     private let spaceNameLabel = NSTextField(labelWithString: "")
     private let spaceMetaLabel = NSTextField(labelWithString: "")
@@ -815,6 +816,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         customizeButton.onClick = { [weak self] in self?.openCustomize() }
         moreButton.onClick = { [weak self] in self?.openPalette(initialText: "", selectAll: false, opensInNewTab: true) }
         addressPill.onClick = { [weak self] in self?.focusAddressBar() }
+        addressPill.onIconClick = { [weak self] in self?.showSiteInfo() }
         let bar = ToolbarView(pill: addressPill)
         toolbar = bar
         splitButton.onClick = { [weak self] in self?.toggleSplit() }
@@ -3120,6 +3122,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             let items = ((try? bookmarkRepo.all()) ?? []).map { BookmarkExport.Item(title: $0.title, url: $0.url, folder: $0.spaceIndex.flatMap { spaces.indices.contains($0) ? spaces[$0].name : nil } ?? "Tous les espaces", added: $0.createdAt) }
             try? BookmarkExport.html(items).write(toFile: "/tmp/oree-bookmarks.html", atomically: true, encoding: .utf8)
             return "exported \(items.count)"
+        case "siteinfo": showSiteInfo(); return "shown"
+        case "siteinfotext":
+            func texts(_ view: NSView) -> [String] { ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts) }
+            guard let root = siteInfoPopover?.contentViewController?.view else { return "no popover" }
+            return texts(root).filter { !$0.isEmpty }.joined(separator: " | ")
         case "source": viewPageSource(); return "source requested"
         case "printop":
             // The print operation exists and lays the page out (it is not shown: no panel in an automated run).
