@@ -183,6 +183,15 @@ extension BrowserWindowController {
         case "webpanelremove":
             if let entry = SettingsStore.shared.webPanels.first { removeWebPanel(entry) }
             return "panels=\(SettingsStore.shared.webPanels.count)"
+        case "savebench":
+            // Cost of one session save with the tabs open now (10 runs, average), then what a burst of 10 requests costs.
+            var t0 = CFAbsoluteTimeGetCurrent()
+            for _ in 0..<10 { saveSessionNow() }
+            let one = (CFAbsoluteTimeGetCurrent() - t0) * 100
+            t0 = CFAbsoluteTimeGetCurrent()
+            for _ in 0..<10 { saveSession() }
+            let burst = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+            return String(format: "tabs=%d save=%.1f ms burst10=%.1f ms", tabs.count, one, burst)
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"

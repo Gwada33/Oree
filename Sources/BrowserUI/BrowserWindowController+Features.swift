@@ -258,7 +258,7 @@ extension BrowserWindowController {
             newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault)
         }
         restoreSplit()
-        saveSession()   // rewrites the saved session at once: rows left by older versions (private tabs) disappear
+        saveSessionNow()   // rewrites the saved session at once: rows left by older versions (private tabs) disappear
     }
 
     /// Brings back the split screen of the previous session (same two tabs, same ratio).
@@ -275,13 +275,29 @@ extension BrowserWindowController {
     static let splitRatioKey = splitKey + ".ratio"
     static let activeIndexKey = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "session.activeIndex" : "session.activeIndex.bench"
 
+    /// Asks for a save: bursts of changes (a page loading, several tabs opening, a drag) cost one write, half a second after the last one.
+    /// The state of every page is serialised on the main thread, so doing it at each change was the price of every navigation.
+    func saveSession() {
+        sessionSaveWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.saveSessionNow() } }
+        sessionSaveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    /// Writes a pending save now (quitting must not lose the last half second).
+    public func flushSession() {
+        guard let work = sessionSaveWork, !work.isCancelled else { return }
+        work.cancel(); sessionSaveWork = nil
+        saveSessionNow()
+    }
+
     /// Captures every open (non-private) tab's URL/interaction state and
     /// persists the whole set. Called after every structural change (tab
     /// opened/closed/reordered/navigated) rather than only at quit, so a
     /// crash loses only the last few seconds, not the whole window. Works
     /// for suspended tabs too — `currentURL`/`currentInteractionState` fall
     /// back to what was captured right before suspension.
-    func saveSession() {
+    func saveSessionNow() {
         // A window opened with ⌘N saves with the others, in its own table; the first window keeps the main session.
         if isSecondary {
             if ProcessInfo.processInfo.environment["HB_FRESH_SESSION"] != "1" { Self.saveExtraWindows() }

@@ -123,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var forgetAtQuit = false
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         isQuitting = true
+        browserController?.flushSession()
         BrowserWindowController.saveExtraWindows()       // one last time, with every window still open
         let settings = SettingsStore.shared
         guard settings.clearHistoryOnQuit || settings.clearSiteDataOnQuit else { return .terminateNow }
@@ -136,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        browserController?.flushSession()
         if !forgetAtQuit { browserController?.persistSleepSnapshots() }  // encrypted, only for tabs that are still open (see SnapshotVault)
         BrowserWindowController.purgeSnapshots()   // the plain pictures never outlive the app
     }
