@@ -11,108 +11,108 @@ import MediaPlayer
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
 
     public weak var menuBuilder: MenuBuilder?
-    private var settingsWindow: NSWindow?
+    var settingsWindow: NSWindow?
 
-    private let contentBlocker: ContentBlockerManager
-    private nonisolated(unsafe) var settingsObserver: NSObjectProtocol?
-    private let processPool = ProcessPoolFactory.launchPool
-    private let privateProcessPool = ProcessPoolFactory.makeLeanProcessPool()
+    let contentBlocker: ContentBlockerManager
+    nonisolated(unsafe) var settingsObserver: NSObjectProtocol?
+    let processPool = ProcessPoolFactory.launchPool
+    let privateProcessPool = ProcessPoolFactory.makeLeanProcessPool()
     var tabs: [Tab] = []
     var activeTabID: UUID?
     // `nonisolated(unsafe)`: only touched from `deinit`, which (unlike the
     // rest of this @MainActor-inferred class) is never actor-isolated in
     // Swift 6 — invalidating a Timer / canceling a dispatch source is
     // documented thread-safe, so there's no real data race here.
-    private nonisolated(unsafe) var suspensionTimer: Timer?
-    private nonisolated(unsafe) var memoryPressureSource: DispatchSourceMemoryPressure?
+    nonisolated(unsafe) var suspensionTimer: Timer?
+    nonisolated(unsafe) var memoryPressureSource: DispatchSourceMemoryPressure?
 
-    private let historyRepo = HistoryRepository()
-    private let bookmarkRepo = BookmarkRepository()
-    private let sessionRepo = SessionRepository()
-    private let groupRepo = TabGroupRepository()
-    private let oreeSchemeHandler = OreeSchemeHandler()
+    let historyRepo = HistoryRepository()
+    let bookmarkRepo = BookmarkRepository()
+    let sessionRepo = SessionRepository()
+    let groupRepo = TabGroupRepository()
+    let oreeSchemeHandler = OreeSchemeHandler()
     /// Tab groups of every space, in display order.
-    private lazy var groups: [TabGroup] = (try? groupRepo.load()) ?? []
+    lazy var groups: [TabGroup] = (try? groupRepo.load()) ?? []
     let permissionRepo = SitePermissionRepository()
-    private let vault = CredentialVault()
-    private let credentialHandler = CredentialMessageHandler()
+    let vault = CredentialVault()
+    let credentialHandler = CredentialMessageHandler()
     /// (origin, username) pairs the user said "not now" to, until quit.
-    private var declinedSaves: Set<String> = []
-    private var credentialPromptInFlight = false
+    var declinedSaves: Set<String> = []
+    var credentialPromptInFlight = false
 
     // Security / privacy state (Phase 3)
-    private let fingerprintSeed = UInt32.random(in: .min ... .max)
-    private lazy var urlCleaner = URLCleaner.bundled   // compiling its regexes cost ~10 ms of every start
+    let fingerprintSeed = UInt32.random(in: .min ... .max)
+    lazy var urlCleaner = URLCleaner.bundled   // compiling its regexes cost ~10 ms of every start
     /// Hosts the user chose to open over plain HTTP, until the app quits.
-    private var httpExemptHosts: Set<String> = []
+    var httpExemptHosts: Set<String> = []
     /// Hosts whose Safe Browsing warning the user chose to ignore, until quit.
-    private var safeBrowsingBypass: Set<String> = []
-    private var safeBrowsing: SafeBrowsingClient?
-    private var safeBrowsingKey = ""
-    private var safeBrowsingUpdateTask: Task<Void, Never>?
-    private var lastFingerprintSetting: Bool?
-    private var lastLongPagesSetting: Bool?
+    var safeBrowsingBypass: Set<String> = []
+    var safeBrowsing: SafeBrowsingClient?
+    var safeBrowsingKey = ""
+    var safeBrowsingUpdateTask: Task<Void, Never>?
+    var lastFingerprintSetting: Bool?
+    var lastLongPagesSetting: Bool?
 
-    private let tabBarStack = NSStackView()
-    private let pinnedStack = NSStackView()
-    private let newTabButton = NSButton()
-    private let contentContainer = SurfaceView(fill: Theme.page)
+    let tabBarStack = NSStackView()
+    let pinnedStack = NSStackView()
+    let newTabButton = NSButton()
+    let contentContainer = SurfaceView(fill: Theme.page)
 
-    private let extensionManager = ExtensionManager()
-    private let extensionBar = NSStackView()
-    private var extensionButtons: [String: ExtensionButton] = [:]
-    private let loadingBar = LoadingBarView()
-    private let noticePill = NoticePill()
-    private let nowPlaying = NowPlayingView()
-    private let audioRoute = AudioRoute()
-    private var mediaTabID: UUID?                      // the tab the card is about
+    let extensionManager = ExtensionManager()
+    let extensionBar = NSStackView()
+    var extensionButtons: [String: ExtensionButton] = [:]
+    let loadingBar = LoadingBarView()
+    let noticePill = NoticePill()
+    let nowPlaying = NowPlayingView()
+    let audioRoute = AudioRoute()
+    var mediaTabID: UUID?                      // the tab the card is about
     var siteInfoPopover: NSPopover?
     /// The window of a page's alert / confirm / prompt while it is open (kept so that a test can see and answer it).
     var activeWebDialog: NSAlert?
     /// Tabs in the order they were last in front (most recent first): ⌃Tab goes back to the previous one, like Alt-Tab does for apps.
     var recentTabIDs: [UUID] = []
-    private var qrPopover: NSPopover?
-    private var tabPreviewPopover: NSPopover?
-    private var tabPreviewTask: Task<Void, Never>?
-    private var taskManager: TaskManagerWindowController?
-    private var artworkCache: [String: NSImage] = [:]
-    private var artworkRequested: Set<String> = []
-    private var shownArtwork: String?
-    private var webStoreOffered: [String: Date] = [:]   // when the "add to Orée" offer of each extension was last shown
+    var qrPopover: NSPopover?
+    var tabPreviewPopover: NSPopover?
+    var tabPreviewTask: Task<Void, Never>?
+    var taskManager: TaskManagerWindowController?
+    var artworkCache: [String: NSImage] = [:]
+    var artworkRequested: Set<String> = []
+    var shownArtwork: String?
+    var webStoreOffered: [String: Date] = [:]   // when the "add to Orée" offer of each extension was last shown
     /// La barre IA, créée à la première ouverture (rien ne démarre avant : ni l'agent, ni la connexion au service).
-    private var aiBarController: AIPanelController?
+    var aiBarController: AIPanelController?
     /// Écart entre le bord droit de la page et celui de la fenêtre quand le panneau IA pousse la page.
-    private var pageTrailing: NSLayoutConstraint?
-    private var pageMapResult = "(none)"
-    private let digestPanel = DigestPanelView()
-    private let peekPanel = PeekPanelView()
-    private lazy var webPanel = WebPanelView { [unowned self] _ in self.makeConfiguration(isPrivate: false) }
-    private let digestButton = ChromeIconButton(symbol: "list.bullet.clipboard", label: "Afficher l'essentiel")
-    private let calendarButton = ChromeIconButton(symbol: "calendar.badge.plus", label: "Ajouter au Calendrier")
-    private var eventTask: Task<Void, Never>?
-    private var digestTask: Task<Void, Never>?
-    private var digestCache: [String: PageDigest] = [:]
+    var pageTrailing: NSLayoutConstraint?
+    var pageMapResult = "(none)"
+    let digestPanel = DigestPanelView()
+    let peekPanel = PeekPanelView()
+    lazy var webPanel = WebPanelView { [unowned self] _ in self.makeConfiguration(isPrivate: false) }
+    let digestButton = ChromeIconButton(symbol: "list.bullet.clipboard", label: "Afficher l'essentiel")
+    let calendarButton = ChromeIconButton(symbol: "calendar.badge.plus", label: "Ajouter au Calendrier")
+    var eventTask: Task<Void, Never>?
+    var digestTask: Task<Void, Never>?
+    var digestCache: [String: PageDigest] = [:]
     /// The page the pop-up is about, and the pages whose pop-up the user closed (so a recipe does not keep reopening it).
-    private let boostRepo = BoostRepository()
-    private var boostTask: Task<Void, Never>?
-    private var lastBoostSignature = ""
-    private var digestKey: String?
-    private var digestDismissed: Set<String> = []
-    private let readingBar = SurfaceView()
-    private var readingBarWidth: NSLayoutConstraint?
-    private let resumeRepo = ResumeRepository()
-    private var aiResult = "none"
+    let boostRepo = BoostRepository()
+    var boostTask: Task<Void, Never>?
+    var lastBoostSignature = ""
+    var digestKey: String?
+    var digestDismissed: Set<String> = []
+    let readingBar = SurfaceView()
+    var readingBarWidth: NSLayoutConstraint?
+    let resumeRepo = ResumeRepository()
+    var aiResult = "none"
     let addressPill = AddressPillView()
-    private let spaceRail = SpaceRailView()
-    private let spaceNameLabel = NSTextField(labelWithString: "")
-    private let spaceMetaLabel = NSTextField(labelWithString: "")
-    private var toolbar: ToolbarView!
-    private var tabColumn: NSView?
-    private var railWidth: NSLayoutConstraint?
+    let spaceRail = SpaceRailView()
+    let spaceNameLabel = NSTextField(labelWithString: "")
+    let spaceMetaLabel = NSTextField(labelWithString: "")
+    var toolbar: ToolbarView!
+    var tabColumn: NSView?
+    var railWidth: NSLayoutConstraint?
     /// Full-window panels (customize, welcome, spaces overview, palette) are built the first time they are needed,
     /// not at launch: they are invisible until then, and building them cost ~50 ms of every start.
-    private var drawerLoaded = false
-    private lazy var drawer: CustomizeDrawerView = {
+    var drawerLoaded = false
+    lazy var drawer: CustomizeDrawerView = {
         drawerLoaded = true
         let view = CustomizeDrawerView()
         installOverlay(view)
@@ -121,36 +121,36 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         view.onPickPhoto = { [weak self] in self?.pickHomePhoto() }
         return view
     }()
-    private let sidePanel = SidePanelView()
-    private let readingRepo = ReadingListRepository()
-    private let noteRepo = NoteRepository()
-    private var notesPopover: NSPopover?
-    private var notesView: NotesPanelView?
-    private var panelButtons: [(kind: PanelKind, button: ChromeIconButton)] = []
-    private var activePanel: PanelKind?
-    private var panelScroll: NSScrollView?
-    private let sleepMetaLabel = NSTextField(labelWithString: "")
+    let sidePanel = SidePanelView()
+    let readingRepo = ReadingListRepository()
+    let noteRepo = NoteRepository()
+    var notesPopover: NSPopover?
+    var notesView: NotesPanelView?
+    var panelButtons: [(kind: PanelKind, button: ChromeIconButton)] = []
+    var activePanel: PanelKind?
+    var panelScroll: NSScrollView?
+    let sleepMetaLabel = NSTextField(labelWithString: "")
     enum PanelKind { case favorites, history, downloads, reading }
-    private let tabStrip = TabStripView()
-    private var stripHeight: NSLayoutConstraint?
-    private let addressDropdown = AddressDropdownView()
-    private let downloads = DownloadsController()
-    private var downloadsPanel: DownloadsPanelView?
-    private let downloadsButton = ChromeIconButton(symbol: "arrow.down.to.line", label: "Téléchargements")
-    private var downloadsPopover: NSPopover?
+    let tabStrip = TabStripView()
+    var stripHeight: NSLayoutConstraint?
+    let addressDropdown = AddressDropdownView()
+    let downloads = DownloadsController()
+    var downloadsPanel: DownloadsPanelView?
+    let downloadsButton = ChromeIconButton(symbol: "arrow.down.to.line", label: "Téléchargements")
+    var downloadsPopover: NSPopover?
     // Split screen: two tabs side by side (not restored at launch).
-    private var splitPair: (left: UUID, right: UUID)?
-    private var splitRatio: CGFloat = 0.5
-    private var splitHeaders: [UUID: SplitPaneHeader] = [:]
-    private var splitHinge: SplitHingeView?
-    private var splitConstraints: [NSLayoutConstraint] = []
-    private var splitLeftWidth: NSLayoutConstraint?
-    private var splitMonitor: Any?
-    private let splitButton = ChromeIconButton(symbol: "rectangle.split.2x1", label: "Écran partagé  ⌘\\")
-    private let translateButton = ChromeIconButton(symbol: "translate", label: "Traduire la page")
-    private let nightButton = ChromeIconButton(symbol: "moon", label: "Mode nuit")
-    private var appearanceObservation: NSKeyValueObservation?
-    private lazy var overview: SpacesOverviewView = {
+    var splitPair: (left: UUID, right: UUID)?
+    var splitRatio: CGFloat = 0.5
+    var splitHeaders: [UUID: SplitPaneHeader] = [:]
+    var splitHinge: SplitHingeView?
+    var splitConstraints: [NSLayoutConstraint] = []
+    var splitLeftWidth: NSLayoutConstraint?
+    var splitMonitor: Any?
+    let splitButton = ChromeIconButton(symbol: "rectangle.split.2x1", label: "Écran partagé  ⌘\\")
+    let translateButton = ChromeIconButton(symbol: "translate", label: "Traduire la page")
+    let nightButton = ChromeIconButton(symbol: "moon", label: "Mode nuit")
+    var appearanceObservation: NSKeyValueObservation?
+    lazy var overview: SpacesOverviewView = {
         let view = SpacesOverviewView()
         installOverlay(view)
         view.provider = { [weak self] in self?.overviewCards() ?? [] }
@@ -165,7 +165,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         view.onAdd = { [weak self] in self?.addSpace(select: false) }
         return view
     }()
-    private lazy var onboarding: OnboardingView = {
+    lazy var onboarding: OnboardingView = {
         let view = OnboardingView()
         installOverlay(view)
         view.onChange = { [weak self] in self?.applyLookChanges() }
@@ -183,11 +183,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         return view
     }()
-    private var searchRow: SidebarRowView?
-    private var newTabRow: SidebarRowView?
-    private let collapseButton = ChromeIconButton(symbol: "sidebar.left", label: "Réduire la barre latérale")
-    private var paletteLoaded = false
-    private lazy var palette: CommandPaletteView = {
+    var searchRow: SidebarRowView?
+    var newTabRow: SidebarRowView?
+    let collapseButton = ChromeIconButton(symbol: "sidebar.left", label: "Réduire la barre latérale")
+    var paletteLoaded = false
+    lazy var palette: CommandPaletteView = {
         paletteLoaded = true
         let view = CommandPaletteView()
         installOverlay(view)
@@ -197,7 +197,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }()
 
     /// Pins a full-window panel over everything else.
-    private func installOverlay(_ view: NSView) {
+    func installOverlay(_ view: NSView) {
         guard let content = window?.contentView else { return }
         content.addSubview(view)
         NSLayoutConstraint.activate([
@@ -205,50 +205,50 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             view.leadingAnchor.constraint(equalTo: content.leadingAnchor), view.trailingAnchor.constraint(equalTo: content.trailingAnchor),
         ])
     }
-    private let favoritesStack = NSStackView()
-    private let backButton = ChromeIconButton(symbol: "chevron.left", label: "Page précédente  ⌘[")
-    private let forwardButton = ChromeIconButton(symbol: "chevron.right", label: "Page suivante  ⌘]")
-    private let reloadButton = ChromeIconButton(symbol: "arrow.clockwise", label: "Recharger  ⌘R")
-    private let toggleSidebarButton = ChromeIconButton(symbol: "sidebar.left", label: "Afficher la barre latérale  ⌥⌘S")
-    private let customizeButton = ChromeIconButton(symbol: "paintbrush", label: "Personnaliser  ⌘,")
-    private let moreButton = ChromeIconButton(symbol: "ellipsis", label: "Palette de commandes  ⌘K")
-    private let assistantButton = ChromeIconButton(symbol: "sparkles", label: "Assistant (Luciole)  ⌘J")
+    let favoritesStack = NSStackView()
+    let backButton = ChromeIconButton(symbol: "chevron.left", label: "Page précédente  ⌘[")
+    let forwardButton = ChromeIconButton(symbol: "chevron.right", label: "Page suivante  ⌘]")
+    let reloadButton = ChromeIconButton(symbol: "arrow.clockwise", label: "Recharger  ⌘R")
+    let toggleSidebarButton = ChromeIconButton(symbol: "sidebar.left", label: "Afficher la barre latérale  ⌥⌘S")
+    let customizeButton = ChromeIconButton(symbol: "paintbrush", label: "Personnaliser  ⌘,")
+    let moreButton = ChromeIconButton(symbol: "ellipsis", label: "Palette de commandes  ⌘K")
+    let assistantButton = ChromeIconButton(symbol: "sparkles", label: "Assistant (Luciole)  ⌘J")
     /// La rangée de boutons du bas de la barre latérale, et ce qui la complète à droite (espace libre, « N en veille »).
-    private var footerStack: NSStackView?
-    private var footerTail: [NSView] = []
+    var footerStack: NSStackView?
+    var footerTail: [NSView] = []
     /// Les boutons « selon la page » qui servent en ce moment ; la disposition (`ChromeLayout`) décide où ils vont et s'ils restent à leur place.
-    private var chromeRelevant: Set<ChromeItem> = []
-    private var appliedChromeLayout: ChromeLayout?
-    private var sidebarView: NSView?
-    private var sidebarWidth: NSLayoutConstraint?
-    private var sidebarLeading: NSLayoutConstraint?
+    var chromeRelevant: Set<ChromeItem> = []
+    var appliedChromeLayout: ChromeLayout?
+    var sidebarView: NSView?
+    var sidebarWidth: NSLayoutConstraint?
+    var sidebarLeading: NSLayoutConstraint?
     /// Height of the title row (traffic lights + toolbar) at the top of the sidebar.
-    private var topRow: CGFloat { isFullScreen ? 44 : CGFloat(OreeTokens.Metrics.toolbarHeight) }
-    private var resizeHandleTop: NSLayoutConstraint?
-    private var columnTop: NSLayoutConstraint?
-    private var isFullScreen = false
-    private let titleToolbar: NSToolbar = { let t = NSToolbar(identifier: "oree.titlebar"); t.showsBaselineSeparator = false; return t }()
-    private var sidebarTop: NSLayoutConstraint?
-    private var sidebarBottom: NSLayoutConstraint?
-    private let sidebarGlassView: NSView = SidebarGlass.makeBackground()
-    private let resizeHandle = SidebarResizeHandle()
-    private let hoverSpaceRow = NSStackView()
-    private var mainLeading: NSLayoutConstraint?
-    private let mainGuide = NSLayoutGuide()
-    private let edgeTrigger = EdgeTriggerView()
-    private var floatingShown = false
+    var topRow: CGFloat { isFullScreen ? 44 : CGFloat(OreeTokens.Metrics.toolbarHeight) }
+    var resizeHandleTop: NSLayoutConstraint?
+    var columnTop: NSLayoutConstraint?
+    var isFullScreen = false
+    let titleToolbar: NSToolbar = { let t = NSToolbar(identifier: "oree.titlebar"); t.showsBaselineSeparator = false; return t }()
+    var sidebarTop: NSLayoutConstraint?
+    var sidebarBottom: NSLayoutConstraint?
+    let sidebarGlassView: NSView = SidebarGlass.makeBackground()
+    let resizeHandle = SidebarResizeHandle()
+    let hoverSpaceRow = NSStackView()
+    var mainLeading: NSLayoutConstraint?
+    let mainGuide = NSLayoutGuide()
+    let edgeTrigger = EdgeTriggerView()
+    var floatingShown = false
     // Hover-sidebar behavior: show after a short intent delay, hide shortly after the pointer leaves it —
     // unless a menu is open, the edge is being dragged, or the pointer came back.
-    private var floatingShowWork: DispatchWorkItem?
-    private var floatingHideWork: DispatchWorkItem?
-    private var floatingClickMonitor: Any?
-    private var floatingMenuTracking = false
-    private var isResizingSidebar = false
-    private static let sidebarExpandedWidth = CGFloat(OreeTokens.Metrics.sidebarWidth)
+    var floatingShowWork: DispatchWorkItem?
+    var floatingHideWork: DispatchWorkItem?
+    var floatingClickMonitor: Any?
+    var floatingMenuTracking = false
+    var isResizingSidebar = false
+    static let sidebarExpandedWidth = CGFloat(OreeTokens.Metrics.sidebarWidth)
 
-    private let findBar = NSStackView()
-    private let findField = NSTextField()
-    private var findBarContainer: NSView?
+    let findBar = NSStackView()
+    let findField = NSTextField()
+    var findBarContainer: NSView?
 
     var activeTab: Tab? {
         tabs.first { $0.id == activeTabID }
@@ -326,28 +326,28 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if tabs.isEmpty { newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault) }
     }
 
-    private var automation: AutomationServer?
-    private var lastMemoryPressure: Date?
-    private var firstCommitTraced = false
+    var automation: AutomationServer?
+    var lastMemoryPressure: Date?
+    var firstCommitTraced = false
     /// Recently closed tabs, newest last (⌘⇧T reopens the last one).
-    private var closedTabs: [(url: URL, state: Data?, title: String?, space: Int)] = []
+    var closedTabs: [(url: URL, state: Data?, title: String?, space: Int)] = []
 
     // Spaces: Perso / Travail / Lecture. Same cookies and logins everywhere (they only
     // group tabs); each tab belongs to exactly one, and only one space is visible.
-    private var currentSpace = 0
-    private var lastActiveTabInSpace: [Int: UUID] = [:]
-    private nonisolated(unsafe) var audioTimer: Timer?
-    private nonisolated(unsafe) var memoryBudgetTimer: Timer?
-    private var lastGarbageCollection = Date.distantPast
-    private let siteMemoryRepo = SiteMemoryRepository()
-    private var siteProfileCache: [String: SiteProfile?] = [:]
-    private static let benchSuffix = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "" : ".bench"
-    private static let spaceNamesKey = "spaces.names" + benchSuffix
-    private static let spaceStylesKey = "spaces.styles" + benchSuffix
-    private static let activeSpaceKey = "session.activeSpace" + benchSuffix
+    var currentSpace = 0
+    var lastActiveTabInSpace: [Int: UUID] = [:]
+    nonisolated(unsafe) var audioTimer: Timer?
+    nonisolated(unsafe) var memoryBudgetTimer: Timer?
+    var lastGarbageCollection = Date.distantPast
+    let siteMemoryRepo = SiteMemoryRepository()
+    var siteProfileCache: [String: SiteProfile?] = [:]
+    static let benchSuffix = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "" : ".bench"
+    static let spaceNamesKey = "spaces.names" + benchSuffix
+    static let spaceStylesKey = "spaces.styles" + benchSuffix
+    static let activeSpaceKey = "session.activeSpace" + benchSuffix
 
     /// The user's spaces (name, hue, icon). Migrates the older names-only list on first read.
-    private lazy var spaces: [SpaceStyle] = {
+    lazy var spaces: [SpaceStyle] = {
         let defaults = UserDefaults.standard
         if let data = defaults.data(forKey: Self.spaceStylesKey),
            let saved = try? JSONDecoder().decode([SpaceStyle].self, from: data), !saved.isEmpty {
@@ -360,7 +360,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }() {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(spaces), forKey: Self.spaceStylesKey) }
     }
-    private var currentSpaceStyle: SpaceStyle { spaces[min(currentSpace, spaces.count - 1)] }
+    var currentSpaceStyle: SpaceStyle { spaces[min(currentSpace, spaces.count - 1)] }
 
     /// Debug UI-testing channel; the app only calls this for `--automation`.
     public func enableAutomation() {
@@ -387,7 +387,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             tabOperation: { [weak self] op, index in
                 guard let self, self.visibleTabs().indices.contains(index) else { return "no such tab" }
                 let tab = self.visibleTabs()[index]
-                if let answer = self.devOp(op, tab) { return answer }      // media, recorder, probes: kept out of this closure (the compiler gives up on a longer one)
+                #if DEBUG
+                if let answer = self.devOp(op, tab) { return answer }
+                #endif      // media, recorder, probes: kept out of this closure (the compiler gives up on a longer one)
                 if op == "pagemap" || op == "pagemapget" || op == "act" || op == "actget" || op == "groqkey" || op == "cloudkey" { return self.pageMapOp(op, tab) }      // hors du `switch` : il est déjà à la limite du compilateur
                 switch op {
                 case "select": self.selectTab(tab); return "selected \(index)"
@@ -549,16 +551,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Pushes the current rule lists (or none, if ad blocking is switched off)
     /// to every tab. Safe to call repeatedly — it just replaces what's there.
     /// Ad / tracker rule lists for a page: none when blocking is off or the site is on the exemption list.
-    private func ruleLists(for url: URL?) -> [WKContentRuleList] {
+    func ruleLists(for url: URL?) -> [WKContentRuleList] {
         let settings = SettingsStore.shared
         guard settings.adBlockEnabled, !ProtectionPolicy.isExempt(host: url?.host, list: settings.protectionExemptHosts) else { return [] }
         return contentBlocker.ruleLists
     }
 
-    private var settingsReactionWork: DispatchWorkItem?
+    var settingsReactionWork: DispatchWorkItem?
 
     /// Many defaults are written in a burst (saving the session writes several): react once, shortly after.
-    private func scheduleSettingsReaction() {
+    func scheduleSettingsReaction() {
         settingsReactionWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
@@ -572,15 +574,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 
-    private func applyRuleLists() {
+    func applyRuleLists() {
         for tab in tabs { tab.applyContentRuleLists(ruleLists(for: tab.currentURL)) }
     }
 
-    private var lastBlockingSettings: [String] = []
+    var lastBlockingSettings: [String] = []
 
     /// Re-applies the rule lists only when what decides them changed (the toggle, the exemption list) —
     /// not on every write to UserDefaults, which would also undo the per-site exemptions.
-    private func applyRuleListsIfSettingsChanged() {
+    func applyRuleListsIfSettingsChanged() {
         let current = ["\(SettingsStore.shared.adBlockEnabled)"] + SettingsStore.shared.protectionExemptHosts
         guard current != lastBlockingSettings else { return }
         lastBlockingSettings = current
@@ -591,7 +593,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Scripts injected into a page: fingerprint protection (all pages) and,
     /// when ad blocking is on, the cosmetic CSS matching this URL.
-    private func userScripts(for url: URL?) -> [WKUserScript] {
+    func userScripts(for url: URL?) -> [WKUserScript] {
         var scripts: [WKUserScript] = [CredentialScript.makeUserScript(), MediaScript.makeUserScript()]
         if SettingsStore.shared.sendGlobalPrivacyControl { scripts.append(PrivacyTools.gpcUserScript()) }
         if SettingsStore.shared.resumeEnabled { scripts.append(ResumeScript.makeUserScript()) }
@@ -612,13 +614,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Reacts to settings that need more than a re-read: the fingerprint
     /// toggle (scripts are baked into each tab) and Safe Browsing on/off/key.
-    private var lastNight = [] as [String]
-    private var lastCopySettings = [SettingsStore.shared.cleanCopy, SettingsStore.shared.copyAddsSource, SettingsStore.shared.resumeEnabled]
-    private var lastShortcutOverrides = SettingsStore.shared.shortcutOverrides
-    private var lastLook = LookProfile.capture(named: "", from: SettingsStore.shared)
-    private var lastSidebarPrefs = [SettingsStore.shared.sidebarWidth, SettingsStore.shared.sidebarGlass ? 1 : 0]
+    var lastNight = [] as [String]
+    var lastCopySettings = [SettingsStore.shared.cleanCopy, SettingsStore.shared.copyAddsSource, SettingsStore.shared.resumeEnabled]
+    var lastShortcutOverrides = SettingsStore.shared.shortcutOverrides
+    var lastLook = LookProfile.capture(named: "", from: SettingsStore.shared)
+    var lastSidebarPrefs = [SettingsStore.shared.sidebarWidth, SettingsStore.shared.sidebarGlass ? 1 : 0]
 
-    private func settingsChanged() {
+    func settingsChanged() {
         if SettingsStore.shared.chromeLayout != appliedChromeLayout { applyChromeLayout() }
         // Look settings edited elsewhere (Réglages, a configuration) apply live.
         let look = LookProfile.capture(named: "", from: SettingsStore.shared)
@@ -648,7 +650,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Creates (or drops) the Safe Browsing client to match the settings.
     /// Opt-in: with the setting off, no list is downloaded and no URL data leaves the machine.
-    private func refreshSafeBrowsing() {
+    func refreshSafeBrowsing() {
         let settings = SettingsStore.shared
         let key = settings.safeBrowsingAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard settings.safeBrowsingEnabled, !key.isEmpty else {
@@ -673,13 +675,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func permissionOrigin(_ origin: WKSecurityOrigin) -> String {
+    func permissionOrigin(_ origin: WKSecurityOrigin) -> String {
         origin.port > 0 ? "\(origin.protocol)://\(origin.host):\(origin.port)" : "\(origin.protocol)://\(origin.host)"
     }
 
     /// Decides camera/mic/location access: a remembered choice wins, otherwise
     /// ask. Private tabs neither read nor write the permission store.
-    private func decidePermission(_ kinds: [SitePermission], origin: WKSecurityOrigin, webView: WKWebView) async -> WKPermissionDecision {
+    func decidePermission(_ kinds: [SitePermission], origin: WKSecurityOrigin, webView: WKWebView) async -> WKPermissionDecision {
         let isPrivate = tab(for: webView)?.isPrivate ?? false
         let key = permissionOrigin(origin)
         if !isPrivate {
@@ -720,7 +722,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return allow ? .grant : .deny
     }
 
-    private func showUnsafeSiteWarning(_ threat: ThreatKind, url: URL, in tab: Tab) {
+    func showUnsafeSiteWarning(_ threat: ThreatKind, url: URL, in tab: Tab) {
         let host = url.host ?? url.absoluteString
         tab.interstitial.show(.unsafeSite(
             host: host,
@@ -745,7 +747,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// "floating panel" look used throughout this UI. Two layers are needed
     /// because a single layer can't both clip its content to rounded corners
     /// (`masksToBounds`) and cast a shadow outside those same bounds.
-    private func makeFloatingCard(_ inner: NSView, cornerRadius: CGFloat) -> NSView {
+    func makeFloatingCard(_ inner: NSView, cornerRadius: CGFloat) -> NSView {
         inner.translatesAutoresizingMaskIntoConstraints = false
 
         let clip = NSView()
@@ -783,7 +785,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     // MARK: - UI construction
 
     /// Window → [sidebar: rail + tab column] | [toolbar over (lisière + page sheet)].
-    private func buildUI() {
+    func buildUI() {
         guard let window else { return }
 
         window.styleMask.insert(.fullSizeContentView)
@@ -999,7 +1001,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Left dock: a 44 pt row for the traffic lights, then the space rail and the tab column
     /// (space name, search, new tab, favorites, tabs — one scroll so long lists scroll in place).
-    private func buildSidebar() -> NSView {
+    func buildSidebar() -> NSView {
         let sidebar = SurfaceView()
         sidebar.setAccessibilityElement(true)
         sidebar.setAccessibilityRole(.group)
@@ -1175,13 +1177,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Side panels
 
-    private func togglePanel(_ kind: PanelKind?) {
+    func togglePanel(_ kind: PanelKind?) {
         activePanel = (kind == activePanel) ? nil : kind
         refreshPanel()
     }
 
     /// Shows the chosen panel in place of the tab list (or brings the tabs back).
-    private func refreshPanel() {
+    func refreshPanel() {
         for (kind, button) in panelButtons { button.isActive = kind == activePanel }
         guard let kind = activePanel else {
             sidePanel.isHidden = true
@@ -1240,7 +1242,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Downloads
 
-    private func downloadsChanged() {
+    func downloadsChanged() {
         if activePanel == .downloads { refreshPanel() }
         let summary = downloads.summary
         setRelevant(.downloads, downloads.hasItems)
@@ -1253,7 +1255,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if let popover = downloadsPopover, popover.isShown, let panel = downloadsPanel { popover.contentSize = panel.frame.size }
     }
 
-    private func toggleDownloads() {
+    func toggleDownloads() {
         if let popover = downloadsPopover, popover.isShown { popover.close(); return }
         let popover = NSPopover()
         popover.behavior = .transient
@@ -1269,12 +1271,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Split screen
 
-    private func splitContains(_ id: UUID) -> Bool { splitPair.map { $0.left == id || $0.right == id } ?? false }
+    func splitContains(_ id: UUID) -> Bool { splitPair.map { $0.left == id || $0.right == id } ?? false }
 
     /// A tab shown in the split screen but not focused is still on screen: never put it to sleep.
-    private func isOnScreen(_ tab: Tab) -> Bool { tab.id == activeTabID || splitContains(tab.id) }
+    func isOnScreen(_ tab: Tab) -> Bool { tab.id == activeTabID || splitContains(tab.id) }
 
-    private func ensureAwake(_ tab: Tab) {
+    func ensureAwake(_ tab: Tab) {
         if tab.isFrozen { tab.thaw() }   // instant: the page was only paused
         guard tab.isSuspended else { return }
         let webView = tab.wake()
@@ -1293,7 +1295,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         beginSplit(left: active, right: partner)
     }
 
-    private func beginSplit(left: Tab, right: Tab) {
+    func beginSplit(left: Tab, right: Tab) {
         guard left.id != right.id, left.spaceIndex == right.spaceIndex else { return }
         if splitPair != nil { endSplit(keeping: left.id) }
         for tab in [left, right] { ensureAwake(tab); tab.contentSlot.isHidden = false }
@@ -1310,7 +1312,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Re-pins the two slots side by side, with a header over each and the hinge between them.
-    private func installSplitLayout() {
+    func installSplitLayout() {
         guard let pair = splitPair,
               let left = tabs.first(where: { $0.id == pair.left }), let right = tabs.first(where: { $0.id == pair.right }) else { return }
         NSLayoutConstraint.deactivate(splitConstraints); splitConstraints = []
@@ -1363,7 +1365,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         contentContainer.layoutSubtreeIfNeeded()
     }
 
-    private func refreshSplitHeaders() {
+    func refreshSplitHeaders() {
         guard splitPair != nil else { return }
         for (id, header) in splitHeaders {
             guard let tab = tabs.first(where: { $0.id == id }) else { continue }
@@ -1373,7 +1375,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         splitHinge?.ratio = splitRatio
     }
 
-    private func setSplitRatio(_ ratio: CGFloat, animated: Bool) {
+    func setSplitRatio(_ ratio: CGFloat, animated: Bool) {
         splitRatio = ratio
         guard let old = splitLeftWidth, let pair = splitPair, let left = tabs.first(where: { $0.id == pair.left }) else { return }
         let new = left.contentSlot.widthAnchor.constraint(equalTo: contentContainer.widthAnchor, multiplier: ratio, constant: -6)
@@ -1388,7 +1390,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if animated { saveSession() }
     }
 
-    private func swapSplit() {
+    func swapSplit() {
         guard let pair = splitPair else { return }
         splitPair = (pair.right, pair.left)
         installSplitLayout()
@@ -1396,7 +1398,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Back to a single page. `keeping` is the tab that stays visible (nil = the focused one).
-    private func endSplit(keeping id: UUID?) {
+    func endSplit(keeping id: UUID?) {
         guard let pair = splitPair else { return }
         if let splitMonitor { NSEvent.removeMonitor(splitMonitor) }
         splitMonitor = nil
@@ -1419,7 +1421,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// A click inside one of the two sides focuses it (web views swallow the click, so we peek at it).
-    private func focusPane(at event: NSEvent) {
+    func focusPane(at event: NSEvent) {
         guard let pair = splitPair, event.window === window else { return }
         let point = contentContainer.convert(event.locationInWindow, from: nil)
         guard contentContainer.bounds.contains(point) else { return }
@@ -1468,12 +1470,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         overview.present()
     }
 
-    private func closeOverview() {
+    func closeOverview() {
         overview.dismiss()
         if let webView = activeTab?.webView { window?.makeFirstResponder(webView) }
     }
 
-    private func overviewCards() -> [SpaceCardData] {
+    func overviewCards() -> [SpaceCardData] {
         spaces.enumerated().map { index, style in
             let mine = tabs.filter { $0.spaceIndex == index }
             let groupNames = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.name) })
@@ -1490,7 +1492,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Removes a space; its tabs move to the neighbouring one (nothing the user opened is lost).
-    private func deleteSpace(_ index: Int) {
+    func deleteSpace(_ index: Int) {
         guard spaces.count > 1, spaces.indices.contains(index) else { return }
         for tab in tabs { tab.spaceIndex = SpaceReindex.newIndex(tab.spaceIndex, afterDeleting: index) }
         let removedGroups = Set(groups.filter { $0.spaceIndex == index }.map(\.id))
@@ -1518,12 +1520,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window?.makeFirstResponder(drawer)
     }
 
-    private func closeCustomize() {
+    func closeCustomize() {
         drawer.dismiss()
         if let webView = activeTab?.webView { window?.makeFirstResponder(webView) }
     }
 
-    private func pickHomePhoto() {
+    func pickHomePhoto() {
         guard let window else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.jpeg, .png, .heic, .webP]
@@ -1541,7 +1543,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Pushes the look settings (theme, accent, density, radius, text size, sidebar, home) into the live window.
-    private func applyLookChanges() {
+    func applyLookChanges() {
         let store = SettingsStore.shared
         lastLook = LookProfile.capture(named: "", from: store)
         lastSidebarPrefs = [store.sidebarWidth, store.sidebarGlass ? 1 : 0]
@@ -1565,7 +1567,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Re-renders open home pages so they pick up background, toggles, accent and radius.
-    private func reloadHomePages() {
+    func reloadHomePages() {
         for tab in tabs where tab.webView?.url?.scheme == "oree" {
             tab.webView?.loadHTMLString(StartPage.render(homeInput(for: tab)), baseURL: StartPage.baseURL)
         }
@@ -1574,14 +1576,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     // MARK: - Sidebar modes
 
     /// What is actually shown: the chosen mode, except that narrow windows fall back to compact.
-    private var effectiveSidebarMode: SidebarMode {
+    var effectiveSidebarMode: SidebarMode {
         isMini ? .hidden : BrowserCore.effectiveSidebarMode(SettingsStore.shared.sidebarMode, windowWidth: Double(window?.frame.width ?? 1280))
     }
 
     /// Width of the expanded sidebar (user-resizable by dragging its right edge).
-    private var expandedSidebarWidth: CGFloat { CGFloat(SettingsStore.shared.sidebarWidth) }
+    var expandedSidebarWidth: CGFloat { CGFloat(SettingsStore.shared.sidebarWidth) }
 
-    private func applySidebarMode(animated: Bool) {
+    func applySidebarMode(animated: Bool) {
         let store = SettingsStore.shared
         let horizontal = store.tabLayout == .horizontal && !isMini
         let mode: SidebarMode = horizontal ? .hidden : effectiveSidebarMode
@@ -1651,7 +1653,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Compact row of space icons (+ overview) shown at the top of the hover panel instead of the rail.
-    private func refreshHoverSpaceRow() {
+    func refreshHoverSpaceRow() {
         hoverSpaceRow.arrangedSubviews.forEach { hoverSpaceRow.removeArrangedSubview($0); $0.removeFromSuperview() }
         for (index, space) in spaces.enumerated() {
             let spine = SpineButton(space: space, shortcut: "⌃\(index + 1)")
@@ -1674,7 +1676,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Live resize while the handle is dragged; the width is saved when released.
-    private func resizeSidebar(toRight x: CGFloat, final: Bool) {
+    func resizeSidebar(toRight x: CGFloat, final: Bool) {
         guard let sidebar = sidebarView else { return }
         let left = sidebar.frame.minX
         let width = CGFloat(SidebarWidth.clamp(Double(x - left)))
@@ -1686,20 +1688,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: Hover sidebar
 
-    private var pointerInSidebar: Bool {
+    var pointerInSidebar: Bool {
         guard let window, let sidebar = sidebarView, let content = window.contentView else { return false }
         let point = content.convert(window.mouseLocationOutsideOfEventStream, from: nil)
         return sidebar.frame.insetBy(dx: -4, dy: -4).contains(point)
     }
 
-    private var pointerInEdgeZone: Bool {
+    var pointerInEdgeZone: Bool {
         guard let window, let content = window.contentView else { return false }
         let point = content.convert(window.mouseLocationOutsideOfEventStream, from: nil)
         return edgeTrigger.frame.insetBy(dx: -2, dy: 0).contains(point)
     }
 
     /// The pointer touched the left edge: show the panel if it is still there after a short moment (not when merely passing by).
-    private func scheduleFloatingShow() {
+    func scheduleFloatingShow() {
         guard effectiveSidebarMode == .floating, !floatingShown else { return }
         floatingShowWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -1714,7 +1716,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Hides the panel after `delay`, unless the pointer is back on it, a menu is open or its edge is being dragged.
-    private func scheduleFloatingHide(after delay: TimeInterval) {
+    func scheduleFloatingHide(after delay: TimeInterval) {
         guard floatingShown else { return }
         floatingHideWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -1729,7 +1731,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Slides the panel in or out. Only the position moves — nothing is rebuilt, so there is no flicker.
-    private func setFloatingShown(_ shown: Bool) {
+    func setFloatingShown(_ shown: Bool) {
         guard effectiveSidebarMode == .floating, floatingShown != shown else { return }
         floatingShown = shown
         floatingShowWork?.cancel(); floatingHideWork?.cancel()
@@ -1773,7 +1775,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The button in the sidebar header: icons-only ↔ full width.
-    private func toggleCompactSidebar() {
+    func toggleCompactSidebar() {
         let store = SettingsStore.shared
         if store.sidebarMode == .floating { store.sidebarMode = .fixed; applySidebarMode(animated: true); return }
         store.sidebarMode = (store.sidebarMode == .compact) ? .fixed : .compact
@@ -1806,7 +1808,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Automation only: shows the downloads panel inside the window so a snapshot can capture it (popovers are separate windows).
-    private var demoPanel: DownloadsPanelView?
+    var demoPanel: DownloadsPanelView?
     @objc func automationDownloadsPanelDemo() {
         guard let content = window?.contentView else { return }
         demoPanel?.removeFromSuperview()
@@ -1871,14 +1873,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// AppKit finit d'attacher la barre de titre et de rendre ses dimensions à la fenêtre un peu après `windowDidExitFullScreen` : le mode compact
     /// (rail, décalage des boutons) et la page doivent être recalculés une fois la transition vraiment terminée, pas seulement à son annonce.
-    private func settleLayout() {
+    func settleLayout() {
         relayoutWindow()
         for delay in [0.12, 0.5] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.relayoutWindow() }
         }
     }
 
-    private func relayoutWindow() {
+    func relayoutWindow() {
         clampWindowToScreen()
         applySidebarMode(animated: false)
         contentContainer.needsLayout = true
@@ -1886,14 +1888,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         activeTab?.webView?.needsLayout = true
     }
 
-    private func windowExceedsScreen() -> Bool {
+    func windowExceedsScreen() -> Bool {
         guard let window, !window.styleMask.contains(.fullScreen), !isFullScreen, let visible = window.screen?.visibleFrame else { return false }
         return window.frame.width > visible.width + 1 || window.frame.height > visible.height + 1
     }
 
     /// Une fenêtre ne doit jamais être plus grande que l'écran qui la porte (une page qui impose une largeur, un retour du plein écran mal
     /// terminé, un écran débranché…) : sinon la page déborde et on ne peut plus attraper les bords.
-    private func clampWindowToScreen() {
+    func clampWindowToScreen() {
         guard windowExceedsScreen(), let window, let visible = window.screen?.visibleFrame else { return }
         var frame = window.frame
         frame.size.width = min(frame.width, visible.width)
@@ -1951,7 +1953,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func makeFavoriteMenu(for bookmark: Bookmark) -> NSMenu {
+    func makeFavoriteMenu(for bookmark: Bookmark) -> NSMenu {
         let menu = NSMenu()
         func add(_ title: String, _ action: @escaping @MainActor () -> Void) {
             menu.addItem(ClosureMenuItem(title: title, action: action))
@@ -1992,13 +1994,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     // MARK: - Password manager
 
     /// Saved logins only ever apply to a secure origin (or a local dev server).
-    private func isEligibleForCredentials(_ origin: String) -> Bool {
+    func isEligibleForCredentials(_ origin: String) -> Bool {
         guard let url = URL(string: origin), let host = url.host else { return false }
         if url.scheme == "https" { return true }
         return url.scheme == "http" && (host == "localhost" || host == "127.0.0.1")
     }
 
-    private func handleCredentialMessage(webView: WKWebView, origin: String, body: [String: Any]) {
+    func handleCredentialMessage(webView: WKWebView, origin: String, body: [String: Any]) {
         guard isEligibleForCredentials(origin), let tab = tab(for: webView),
               let type = body["type"] as? String else { return }
         switch type {
@@ -2014,7 +2016,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func offerAutofill(in tab: Tab, webView: WKWebView, origin: String) async {
+    func offerAutofill(in tab: Tab, webView: WKWebView, origin: String) async {
         guard !credentialPromptInFlight else { return }
         let logins = (try? vault.logins(forOrigin: origin)) ?? []
         guard !logins.isEmpty else { return }
@@ -2032,7 +2034,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func chooseLogin(_ logins: [SavedLogin], host: String) async -> SavedLogin? {
+    func chooseLogin(_ logins: [SavedLogin], host: String) async -> SavedLogin? {
         guard let window else { return nil }
         let alert = NSAlert()
         alert.messageText = "Quel compte utiliser pour « \(host) » ?"
@@ -2048,7 +2050,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return logins[popup.indexOfSelectedItem]
     }
 
-    private func offerToSave(origin: String, username: String, password: String) async {
+    func offerToSave(origin: String, username: String, password: String) async {
         let key = "\(origin)\u{0}\(username)"
         guard !credentialPromptInFlight, !declinedSaves.contains(key), let window else { return }
         let existing = try? vault.password(origin: origin, username: username)
@@ -2106,7 +2108,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         addressPill.beginEditing(text: text)
     }
 
-    private func refreshAddressSuggestions(_ query: String) {
+    func refreshAddressSuggestions(_ query: String) {
         let sections = paletteSections(query: query.trimmingCharacters(in: .whitespacesAndNewlines), filter: .all)
             .filter { $0.title != "Actions" && $0.title != "Espaces" && $0.title != "Favoris" }
         addressDropdown.show(sections)
@@ -2121,13 +2123,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return InlineCompletion.completion(for: typed, candidates: favorites + visited)
     }
 
-    private func endAddressEditing() {
+    func endAddressEditing() {
         addressPill.endEditing()
         addressDropdown.hide()
         if let webView = activeTab?.webView, window?.firstResponder is NSText || window?.firstResponder === window { window?.makeFirstResponder(webView) }
     }
 
-    private func commitAddress(_ text: String, newTab: Bool) {
+    func commitAddress(_ text: String, newTab: Bool) {
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // Like the palette: Return runs the highlighted suggestion (the first one unless arrowed).
         if let item = addressDropdown.selectedItem, addressDropdown.hasSelection, !raw.isEmpty {
@@ -2138,15 +2140,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         openFromPalette(raw, inNewTab: newTab)
     }
 
-    private func openPalette(initialText: String, selectAll: Bool, opensInNewTab: Bool) {
+    func openPalette(initialText: String, selectAll: Bool, opensInNewTab: Bool) {
         palette.present(initialText: initialText, selectAll: selectAll, opensInNewTab: opensInNewTab, in: window)
     }
 
-    private func closePalette() {
+    func closePalette() {
         palette.dismiss(restoringFocusTo: activeTab?.webView)
     }
 
-    private func openFromPalette(_ raw: String, inNewTab: Bool) {
+    func openFromPalette(_ raw: String, inNewTab: Bool) {
         if inNewTab || activeTab == nil {
             newTab(urlString: raw, isPrivate: SettingsStore.shared.privateByDefault)
         } else if let tab = activeTab {
@@ -2154,7 +2156,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func paletteSections(query: String, filter: PaletteFilter) -> [PaletteSection] {
+    func paletteSections(query: String, filter: PaletteFilter) -> [PaletteSection] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         func matches(_ values: String...) -> Bool {
             q.isEmpty || values.contains { $0.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
@@ -2314,7 +2316,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Whether typed text should be opened as an address rather than searched.
     static func looksLikeAddress(_ text: String) -> Bool { AddressResolver.looksLikeAddress(text) }
 
-    private func buildFindBar(in contentView: NSView) {
+    func buildFindBar(in contentView: NSView) {
         findField.translatesAutoresizingMaskIntoConstraints = false
         findField.placeholderString = "Rechercher dans la page"
         findField.setAccessibilityLabel("Rechercher dans la page")
@@ -2350,7 +2352,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Tab lifecycle
 
-    private func makeConfiguration(isPrivate: Bool) -> WKWebViewConfiguration {
+    func makeConfiguration(isPrivate: Bool) -> WKWebViewConfiguration {
         let config = WKWebViewConfiguration()
         config.processPool = isPrivate ? privateProcessPool : processPool
         config.websiteDataStore = isPrivate ? .nonPersistent() : .default()
@@ -2383,7 +2385,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return config
     }
 
-    private func attachTab(_ tab: Tab) {
+    func attachTab(_ tab: Tab) {
         tab.owner = self
         tab.webView?.navigationDelegate = self
         tab.webView?.uiDelegate = self
@@ -2459,7 +2461,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Reloading after `webViewWebContentProcessDidTerminate` respawns a
     /// fresh WebContent process for the same `WKWebView` instance — the tab,
     /// its back-forward history and the rest of the app are untouched.
-    private func recoverFromCrash(_ tab: Tab) {
+    func recoverFromCrash(_ tab: Tab) {
         tab.interstitial.hide()
         if let url = tab.webView?.url {
             tab.webView?.load(URLRequest(url: url))
@@ -2496,7 +2498,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Everything the home page shows, for a tab in the current space.
-    private func homeInput(for tab: Tab) -> HomeInput {
+    func homeInput(for tab: Tab) -> HomeInput {
         let recent = (tab.isPrivate || !SettingsStore.shared.startPageShowsRecent) ? [] : ((try? historyRepo.recent(limit: 6)) ?? [])
         let style = spaces[min(tab.spaceIndex, spaces.count - 1)]
         let chips = spaces.enumerated().map { index, space in
@@ -2509,7 +2511,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Links of the home page that ask the app to do something (oree-action://…).
-    private func handleHomeAction(_ url: URL) {
+    func handleHomeAction(_ url: URL) {
         switch url.host {
         case "space": if let index = Int(url.lastPathComponent) { selectSpace(index) }
         case "customize": openSettings()
@@ -2649,7 +2651,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// sidebar's stack view — the "réordonner" requirement. Drag-and-drop in
     /// the sidebar is a natural follow-up; this keyboard path is the simplest
     /// thing that actually lets you reorder tabs today.
-    private func moveActiveTab(by offset: Int) {
+    func moveActiveTab(by offset: Int) {
         guard let tab = activeTab else { return }
         moveTab(tab, by: offset)
     }
@@ -2673,10 +2675,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Spaces
 
-    private func visibleTabs() -> [Tab] { tabs.filter { $0.spaceIndex == currentSpace } }
+    func visibleTabs() -> [Tab] { tabs.filter { $0.spaceIndex == currentSpace } }
 
     /// Header of the tab column: "N onglets" (never mentions sleeping tabs: hibernation is invisible).
-    private func updateTabCount() {
+    func updateTabCount() {
         refreshNowPlaying()
         let mine = visibleTabs()
         let count = mine.count
@@ -2689,7 +2691,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Brings the sidebar in line with `currentSpace`: rail, header, lisière, which tab rows are shown.
-    private func refreshSpaceUI(animated: Bool) {
+    func refreshSpaceUI(animated: Bool) {
         let style = currentSpaceStyle
         spaceRail.configure(spaces: spaces, selected: currentSpace, compact: effectiveSidebarMode == .compact)
         if effectiveSidebarMode == .floating { refreshHoverSpaceRow() }          // keep the icon row's selection in sync
@@ -2704,7 +2706,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     // MARK: - Tab list and groups
 
     /// Lays out the tab column for the current space: groups (collapsible), then "Pages libres".
-    private func rebuildTabList() {
+    func rebuildTabList() {
         let horizontal = SettingsStore.shared.tabLayout == .horizontal
         let items = tabs.map { TabListLayout.Item(id: $0.id, spaceIndex: $0.spaceIndex, groupID: $0.groupID) }
         let rows = TabListLayout.rows(tabs: items, groups: groups, space: currentSpace)
@@ -2750,7 +2752,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The ▾ button of a full tab strip: every tab of this space, the one in front ticked; a pick brings it to the front.
-    private func showAllTabsMenu() {
+    func showAllTabsMenu() {
         let menu = NSMenu()
         for tab in tabs where tab.spaceIndex == currentSpace {
             let item = ClosureMenuItem(title: tab.displayTitle.isEmpty ? (tab.badgeHost.isEmpty ? "Nouvel onglet" : tab.badgeHost) : tab.displayTitle) { [weak self, weak tab] in if let tab { self?.selectTab(tab) } }
@@ -2760,8 +2762,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: tabStrip.overflowButton.bounds.height + 4), in: tabStrip.overflowButton)
     }
 
-    private var inlineNewTabRow: SidebarRowView?
-    private func makeInlineNewTabRow() -> SidebarRowView {
+    var inlineNewTabRow: SidebarRowView?
+    func makeInlineNewTabRow() -> SidebarRowView {
         let row = SidebarRowView(symbol: "plus", title: "Nouvel onglet", shortcut: nil)
         row.onClick = { [weak self] in self?.newTabAction() }
         row.setAccessibilityLabel("Nouvel onglet")
@@ -2769,14 +2771,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return row
     }
 
-    private func toggleGroup(_ id: UUID) {
+    func toggleGroup(_ id: UUID) {
         guard let index = groups.firstIndex(where: { $0.id == id }) else { return }
         groups[index].collapsed.toggle()
         Motion.animate(Motion.standard) { rebuildTabList(); tabBarStack.superview?.layoutSubtreeIfNeeded() }
         saveSession()
     }
 
-    private func makeGroupMenu(for id: UUID) -> NSMenu {
+    func makeGroupMenu(for id: UUID) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem(title: "Renommer le groupe…") { [weak self] in self?.renameGroup(id) })
         menu.addItem(ClosureMenuItem(title: "Dissoudre le groupe") { [weak self] in self?.dissolveGroup(id) })
@@ -2789,7 +2791,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return menu
     }
 
-    private func promptForText(title: String, button: String, initial: String, completion: @escaping @MainActor (String) -> Void) {
+    func promptForText(title: String, button: String, initial: String, completion: @escaping @MainActor (String) -> Void) {
         guard let window else { return }
         let alert = NSAlert()
         alert.messageText = title
@@ -2807,7 +2809,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func renameGroup(_ id: UUID) {
+    func renameGroup(_ id: UUID) {
         guard let index = groups.firstIndex(where: { $0.id == id }) else { return }
         promptForText(title: "Renommer le groupe", button: "Renommer", initial: groups[index].name) { [weak self] name in
             guard let self, let i = self.groups.firstIndex(where: { $0.id == id }) else { return }
@@ -2817,7 +2819,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func dissolveGroup(_ id: UUID) {
+    func dissolveGroup(_ id: UUID) {
         for tab in tabs where tab.groupID == id { tab.groupID = nil }
         groups.removeAll { $0.id == id }
         rebuildTabList()
@@ -2843,7 +2845,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         saveSession()
     }
 
-    private func setCurrentSpace(_ index: Int, animated: Bool) {
+    func setCurrentSpace(_ index: Int, animated: Bool) {
         guard index != currentSpace, spaces.indices.contains(index) else { return }
         let forward = index > currentSpace
         currentSpace = index
@@ -2925,16 +2927,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Memory budget
 
-    private func startMemoryBudgetTimer() {
+    func startMemoryBudgetTimer() {
         memoryBudgetTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.enforceMemoryBudget() }
         }
     }
 
     /// Fraction of the budget the last pass found in use; pre-waking is skipped while over budget.
-    private var isOverBudget = false
+    var isOverBudget = false
 
-    private func memoryBudgetBytes() -> UInt64? {
+    func memoryBudgetBytes() -> UInt64? {
         let setting = SettingsStore.shared.memoryBudgetMB
         guard setting >= 0 else { return nil }
         return setting == 0 ? MemoryBudget.automaticBudgetBytes() : UInt64(setting) * 1_048_576
@@ -2945,9 +2947,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     ///  2. over budget: first clean (cheap, nothing is lost), and only if that isn't enough, apply the plan;
     ///  3. the plan freezes tabs hidden for a while and sleeps the ones hidden very long or, when over
     ///     budget, the best-scoring ones down to 80 % of the budget.
-    private var isLifecyclePassRunning = false
+    var isLifecyclePassRunning = false
 
-    private func enforceMemoryBudget() async {
+    func enforceMemoryBudget() async {
         // Two timers call this and a pass awaits (media checks, a 4 s pause): never run two at once.
         guard !isLifecyclePassRunning else { return }
         isLifecyclePassRunning = true
@@ -2974,7 +2976,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func lifecycleTiming() -> TabLifecyclePolicy.Timing {
+    func lifecycleTiming() -> TabLifecyclePolicy.Timing {
         var sleepAfter = TimeInterval(SettingsStore.shared.autoSuspendMinutes * 60)
         // After a recent memory warning, be much less patient.
         if sleepAfter > 0, let last = lastMemoryPressure, Date().timeIntervalSince(last) < 600 { sleepAfter = min(sleepAfter, 180) }
@@ -2984,14 +2986,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Why a tab may or may not be touched: on screen, playing sound, using camera/mic, a messaging
     /// or "never sleep" site → left alone; unsaved input → frozen but never torn down.
-    private func lifecycleExemption(of tab: Tab) async -> TabLifecyclePolicy.Exemption {
+    func lifecycleExemption(of tab: Tab) async -> TabLifecyclePolicy.Exemption {
         if isOnScreen(tab) || tab.isCapturingMedia || tab.isInFullscreen || tab.audioState == .playing { return .full }
         if SleepExemptions.isExempt(host: tab.currentURL?.host, userHosts: SettingsStore.shared.neverSleepHosts) { return .full }
         if await tab.isPlayingMedia() { return .full }
         return tab.isDirty ? .noSleep : .none
     }
 
-    private func lifecyclePlan(reading: MemoryReading, budget: UInt64, timing: TabLifecyclePolicy.Timing) async -> TabLifecyclePolicy.Plan {
+    func lifecyclePlan(reading: MemoryReading, budget: UInt64, timing: TabLifecyclePolicy.Timing) async -> TabLifecyclePolicy.Plan {
         let tabsPerProcess = Dictionary(grouping: reading.processOfTab.values, by: { $0 }).mapValues(\.count)
         let now = Date()
         var entries: [TabLifecyclePolicy.Entry] = []
@@ -3015,7 +3017,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Carries out a plan; returns how many tabs were put to sleep.
     @discardableResult
-    private func apply(_ plan: TabLifecyclePolicy.Plan, captureGhost: Bool = true) async -> Int {
+    func apply(_ plan: TabLifecyclePolicy.Plan, captureGhost: Bool = true) async -> Int {
         for id in plan.freeze { tabs.first { $0.id == id }?.freeze() }
         var slept = 0
         for id in plan.sleep {
@@ -3028,7 +3030,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Puts the best-scoring hidden tabs to sleep until the total should fit `target` (the active tab,
     /// sound/camera tabs and tabs with unsaved input are never torn down). Returns how many slept.
-    private func sleepTabs(toReach target: UInt64, reading: MemoryReading, minimumIdle: Double) async -> Int {
+    func sleepTabs(toReach target: UInt64, reading: MemoryReading, minimumIdle: Double) async -> Int {
         let timing = TabLifecyclePolicy.Timing(freezeAfter: 0, sleepAfter: 0, minimumIdle: minimumIdle, hysteresis: 1)
         var plan = await lifecyclePlan(reading: reading, budget: target, timing: timing)
         plan.freeze = []
@@ -3037,7 +3039,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: Learned site profiles
 
-    private func siteProfile(forHost host: String?) -> SiteProfile? {
+    func siteProfile(forHost host: String?) -> SiteProfile? {
         guard SettingsStore.shared.learnSiteMemory, let host else { return nil }
         if let cached = siteProfileCache[host] { return cached }
         let profile = try? siteMemoryRepo.profile(host: host)
@@ -3046,7 +3048,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Every pass, remember how much each open (non-private, settled) site is using.
-    private func recordSiteSamples(_ reading: MemoryReading) {
+    func recordSiteSamples(_ reading: MemoryReading) {
         guard SettingsStore.shared.learnSiteMemory else { return }
         let tabsPerProcess = Dictionary(grouping: reading.processOfTab.values, by: { $0 }).mapValues(\.count)
         for tab in tabs where !tab.isPrivate && tab.webView?.isLoading == false {
@@ -3062,7 +3064,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Opening a site known to be heavy: free up room *before* it loads, so the Mac doesn't start swapping.
-    private func makeRoom(forNavigationTo url: URL, in tab: Tab) async {
+    func makeRoom(forNavigationTo url: URL, in tab: Tab) async {
         guard SettingsStore.shared.learnSiteMemory, SettingsStore.shared.memoryBudgetMB >= 0,
               let host = SiteMemoryPolicy.normalizedHost(url),
               case let predicted = SiteMemoryPolicy.predictedBytes(for: siteProfile(forHost: host)), predicted > 0 else { return }
@@ -3079,13 +3081,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private struct MemoryReading {
+    struct MemoryReading {
         var total: UInt64
         var bytesByProcess: [Int32: UInt64]
         var processOfTab: [UUID: Int32]
     }
 
-    private func measureTabMemory() -> MemoryReading {
+    func measureTabMemory() -> MemoryReading {
         var bytesByProcess: [Int32: UInt64] = [:]
         var processOfTab: [UUID: Int32] = [:]
         for tab in tabs where tab.webView != nil {
@@ -3122,7 +3124,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// JavaScript garbage collection plus WebKit's in-memory caches. At most once a minute:
     /// the collection runs in every web process, so it must not become a constant background cost.
     @discardableResult
-    private func releaseJavaScriptMemory(reason: String) -> Bool {
+    func releaseJavaScriptMemory(reason: String) -> Bool {
         guard Date().timeIntervalSince(lastGarbageCollection) > 60,
               let pool = tabs.compactMap({ $0.webView?.configuration.processPool }).first,
               WebKitTuning.collectJavaScriptGarbage(in: pool) else { return false }
@@ -3133,7 +3135,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// A tab that has been out of sight for a minute gets its JavaScript memory cleaned, once per absence.
-    private func cleanHiddenTabsIfDue() async {
+    func cleanHiddenTabsIfDue() async {
         guard SettingsStore.shared.backgroundCleanup else { return }
         let now = Date()
         let due = tabs.filter { tab in
@@ -3146,19 +3148,19 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Audio indicators
 
-    private func startAudioTimer() {
+    func startAudioTimer() {
         audioTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshAudioIndicators() }
         }
     }
 
-    private func refreshAudioIndicators() {
+    func refreshAudioIndicators() {
         for tab in tabs where tab.webView != nil { tab.tabButton.setAudio(tab.audioState) }
     }
 
     // MARK: - Tab menu, reopen, shortcuts
 
-    private func makeTabMenu(for tab: Tab) -> NSMenu {
+    func makeTabMenu(for tab: Tab) -> NSMenu {
         let menu = NSMenu()
         func add(_ title: String, enabled: Bool = true, _ action: @escaping @MainActor () -> Void) {
             let item = ClosureMenuItem(title: title, action: action)
@@ -3237,250 +3239,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return menu
     }
 
-    // MARK: Development operations (automation channel)
-
-    private func devOp(_ op: String, _ tab: Tab) -> String? {
-        switch op {
-        case "media":
-            return "\(nowPlaying.summary) | tab=\(mediaTabID == tab.id ? "this" : "other") | out=\(audioRoute.output.name) bt=\(audioRoute.output.bluetooth)"
-        case "mediatoggle": mediaCommand(tab, "toggle"); return "ok"
-        case "qr":
-            guard let url = tab.webView?.url, let image = PrivacyTools.qrImage(for: url.absoluteString) else { return "no qr" }
-            return "qr decodes to: \(PrivacyTools.decodeQR(image) ?? "(unreadable)") | size=\(Int(image.size.width))"
-        case "minfont":
-            // Sets the minimum text size on this tab only (not in the saved settings) and reports the height of the page's #t element.
-            let size = Int((try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
-            tab.webView?.configuration.preferences.minimumFontSize = CGFloat(size)
-            return "minimumFontSize=\(tab.webView?.configuration.preferences.minimumFontSize ?? -1)"
-        case "tasks":
-            let (snapshot, app) = taskManagerSnapshot()
-            let lines = snapshot.rows.map { "\($0.title.prefix(24))|\(TaskManagerRows.memory($0.bytes))|\($0.state.rawValue)|shared=\($0.processTabs)" }
-            return "total=\(TaskManagerRows.memory(snapshot.totalBytes)) app=\(app.map(TaskManagerRows.memory) ?? "-") saved=\(snapshot.savedBytes.map(TaskManagerRows.memory) ?? "-") :: " + lines.joined(separator: " ; ")
-        case "taskwindow":
-            showTaskManager()
-            guard let view = taskManager?.window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return "no window" }
-            view.cacheDisplay(in: view.bounds, to: rep)
-            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/oree-taskmanager.png"))
-            return "window shown, picture written"
-        case "speak":
-            readPageAloud()
-            return "asked"
-        case "speaking": return "speaking=\(PageSpeech.shared.isSpeaking)"
-        case "speakstop": PageSpeech.shared.stop(); return "stopped"
-        case "share":
-            guard let url = tab.webView?.url else { return "no page" }
-            let services = NSSharingService.sharingServices(forItems: [url])
-            return "services=\(services.count) first=\(services.first?.title ?? "-")"
-        case "energy":
-            let mode = SettingsStore.shared.energyMode
-            let active = EnergyPolicy.isActive(mode: mode, systemLowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
-            let timing = lifecycleTiming()
-            return "mode=\(mode.rawValue) systemLowPower=\(ProcessInfo.processInfo.isLowPowerModeEnabled) active=\(active) freezeAfter=\(timing.freezeAfter) sleepAfter=\(timing.sleepAfter)"
-        case "tabpreview":
-            // Builds the card for the first tab that is not the one in front and writes its picture (the card is not shown: no pointer in a test).
-            guard let other = tabs.first(where: { $0.id != activeTabID }) else { return "no other tab" }
-            Task { @MainActor in
-                let image = await other.previewImage()
-                let row = self.taskManagerSnapshot().snapshot.rows.first { $0.id == other.id }
-                let card = TabPreviewCard(image: image, title: other.displayTitle, host: other.badgeHost, status: row.map { "\($0.state.rawValue) · \(TaskManagerRows.memory($0.bytes))" } ?? "")
-                card.frame = NSRect(origin: .zero, size: card.fittingSize)
-                card.layoutSubtreeIfNeeded()
-                if let rep = card.bitmapImageRepForCachingDisplay(in: card.bounds) {
-                    card.cacheDisplay(in: card.bounds, to: rep)
-                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/oree-tabpreview.png"))
-                }
-                try? "image=\(image != nil) size=\(image.map { "\(Int($0.size.width))x\(Int($0.size.height))" } ?? "-")".write(toFile: "/tmp/oree-tabpreview.txt", atomically: true, encoding: .utf8)
-            }
-            return "asked"
-        case "recent": return recentTabIDs.compactMap { id in tabs.firstIndex { $0.id == id } }.map(String.init).joined(separator: ",")
-        case "recentgo": selectRecentTab(); return "active=\(tabs.firstIndex { $0.id == activeTabID } ?? -1)"
-        case "calc":
-            let text = (try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8)) ?? ""
-            return Calculator.evaluate(text).map(Calculator.format) ?? "(not a calculation)"
-        case "clearcheck":
-            // Clears a throw-away store (never the real one) to prove that the function empties cookies and storage.
-            Task { @MainActor in
-                let store = WKWebsiteDataStore.nonPersistent()
-                let cookie = HTTPCookie(properties: [.domain: "exemple.test", .path: "/", .name: "k", .value: "v", .expires: Date().addingTimeInterval(3600)])!
-                await store.httpCookieStore.setCookie(cookie)
-                let before = await store.httpCookieStore.allCookies().count
-                await PrivacyTools.clearSiteData(in: store)
-                let after = await store.httpCookieStore.allCookies().count
-                try? "before=\(before) after=\(after)".write(toFile: "/tmp/oree-clearcheck.txt", atomically: true, encoding: .utf8)
-            }
-            return "started"
-        case "mediakey":
-            // Presses a media key's action (toggle by default), and reports what Control Center would show.
-            MediaKeys.shared.perform(.toggle)
-            let info = MPNowPlayingInfoCenter.default().nowPlayingInfo
-            return "title=\(info?[MPMediaItemPropertyTitle] as? String ?? "-") rate=\(info?[MPNowPlayingInfoPropertyPlaybackRate] ?? "-") state=\(MPNowPlayingInfoCenter.default().playbackState.rawValue)"
-        case "mediarate": mediaCommand(tab, "rate", MediaPolicy.nextRate(after: tab.media?.rate ?? 1)); return "ok"
-        case "mediaskip": mediaCommand(tab, "skip", 10); return "ok"
-        case "mediaseek": mediaCommand(tab, "seek", (tab.media?.duration ?? 0) / 2); return "ok"
-        case "mediapip":
-            mediaCommand(tab, "pip")
-            let can = (tab.webView?.value(forKey: "_canTogglePictureInPicture") as? Bool).map(String.init) ?? "nil"
-            return "pip native can=\(can) active=\(tab.pictureInPictureActive)"
-        case "spellprobe":
-            // A correction panel for a view that is not in any window: the kind of request that made AppKit raise.
-            NSSpellChecker.shared.showCorrectionIndicator(of: .default, primaryString: "bonjour", alternativeStrings: ["bonsoir"],
-                                                         forStringIn: NSRect(x: 10, y: 10, width: 40, height: 14), view: NSView(), completionHandler: nil)
-            return "probe survived"
-        case "pdf":
-            guard let web = tab.webView else { return "no web view" }
-            let target = URL(fileURLWithPath: "/tmp/oree-page.pdf")
-            Task { @MainActor in
-                if let data = await self.makePDF(of: web) { try? data.write(to: target) }
-            }
-            return "pdf requested"
-        case "addr":
-            // Types the text of /tmp/oree-address.txt in the address bar, as if the user pressed return on it.
-            guard let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no file" }
-            load(urlString: text, in: tab)
-            return "loaded"
-        case "bookmarkall": bookmarkAllTabs(); return "done"
-        case "exportbm":
-            let items = ((try? bookmarkRepo.all()) ?? []).map { BookmarkExport.Item(title: $0.title, url: $0.url, folder: $0.spaceIndex.flatMap { spaces.indices.contains($0) ? spaces[$0].name : nil } ?? "Tous les espaces", added: $0.createdAt) }
-            try? BookmarkExport.html(items).write(toFile: "/tmp/oree-bookmarks.html", atomically: true, encoding: .utf8)
-            return "exported \(items.count)"
-        case "complete":
-            guard let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no file" }
-            return inlineCompletion(for: text) ?? "(nothing)"
-        case "dialog":
-            guard let alert = activeWebDialog else { return "(none)" }
-            return "\(alert.messageText) | \(alert.informativeText.replacingOccurrences(of: "\n", with: " / ")) | buttons=\(alert.buttons.map(\.title)) | field=\(alert.accessoryView is NSTextField) fields=\((alert.accessoryView as? NSStackView)?.arrangedSubviews.count ?? 0)"
-        case "dialogok", "dialogcancel":
-            // Answers the open dialog like a click would: first button = OK, second = Annuler. A prompt gets /tmp/oree-address.txt as its text.
-            guard let alert = activeWebDialog else { return "(none)" }
-            let supplied = (try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8)) ?? ""
-            if let field = alert.accessoryView as? NSTextField { field.stringValue = supplied }
-            if let stack = alert.accessoryView as? NSStackView {           // a username and password request: "user" then "password", one per line
-                let parts = supplied.components(separatedBy: "\n")
-                for (view, text) in zip(stack.arrangedSubviews, parts) { (view as? NSTextField)?.stringValue = text }
-            }
-            let index = op == "dialogok" ? 0 : 1
-            guard alert.buttons.indices.contains(index) else { return "no such button" }
-            alert.buttons[index].performClick(nil)
-            return "pressed \(alert.buttons[index].title)"
-        case "downloads": return downloads.items.map { "\($0.name)|\($0.phase)|\($0.error ?? "-")" }.joined(separator: " ; ")
-        case "quit": DispatchQueue.main.async { NSApp.terminate(nil) }; return "quitting"
-        case "closeextra":
-            // Closes the last extra window the way the user does (its red button).
-            guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }) else { return "no extra window" }
-            other.window?.close()
-            return "closed"
-        case "newwindow": _ = Self.newWindowHandler?(true); return "requested"
-        case "detach": detachToNewWindow(tab); return "detached"
-        case "setsize":
-            guard var frame = window?.frame else { return "no window" }
-            frame.size = NSSize(width: 420, height: 640); window?.setFrame(frame, display: true)
-            return "set"
-        case "constraints":
-            var out = ""
-            func walk(_ v: NSView) { for c in v.constraints where c.isActive && c.priority.rawValue >= 750 && (c.constant == 808 || c.constant == 800 || c.constant == 480) { out += "owner=\(type(of: v)) first=\(String(describing: c.firstItem).prefix(40)) attr=\(c.firstAttribute.rawValue) second=\(String(describing: c.secondItem).prefix(40)) k=\(c.constant) rel=\(c.relation.rawValue) p=\(c.priority.rawValue) id=\(c.identifier ?? "-")\n" }; v.subviews.forEach(walk) }
-            if let content = window?.contentView { walk(content) }
-            return out
-        case "size": return "\(window?.frame.size ?? .zero) isMini=\(isMini)"
-        case "taborder": return tabs.map { $0.currentURL?.query ?? "-" }.joined(separator: ",") + " frames=" + tabs.map { "\(Int($0.tabButton.frame.minY))" }.joined(separator: ",") + " transforms=" + tabs.map { ($0.tabButton.layer?.transform.m42 ?? 0) == 0 ? "0" : "x" }.joined()
-        case "fewtabs":
-            for i in 1..<5 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
-            return "tabs=\(tabs.count)"
-        case "closeat": closeTab(tab); return "closed"
-        case "archive":
-            // Archives every tab but the active one as if it had been idle for 40 days, then reports the archive (needs the setting on: HB_ARCHIVE_DAYS).
-            for t in tabs where t.id != activeTabID { t.lastActiveDate = Date().addingTimeInterval(-40 * 86_400) }
-            archiveStaleTabs()
-            return "tabs=\(tabs.count) archive=\(Self.archiveStore.load().count)"
-        case "notes":
-            // Opens the pad, types a first line, appends a selection, saves, and reports what the database holds.
-            openNotes(append: nil)
-            notesView?.append("Première ligne de test")
-            notesView?.append("Texte copié")
-            notesView?.saveNow()
-            if let v = notesView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) { v.cacheDisplay(in: v.bounds, to: rep); try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/oree-notes.png")) }
-            return "notes=\((try? noteRepo.all().count) ?? -1) title=\(notesView?.note.title ?? "-") body=\(notesView?.note.body.replacingOccurrences(of: "\n", with: "|") ?? "-")"
-        case "webpanel":
-            // Adds a panel for HB_PANEL_URL, shows it, reports what the list holds.
-            guard let url = WebPanels.normalize(ProcessInfo.processInfo.environment["HB_PANEL_URL"] ?? "example.com") else { return "bad url" }
-            let entry = WebPanelEntry(name: WebPanels.defaultName(for: url), url: url.absoluteString)
-            SettingsStore.shared.webPanels = WebPanels.adding(entry, to: SettingsStore.shared.webPanels)
-            webPanel.show(entry)
-            return "panels=\(SettingsStore.shared.webPanels.count) shown=\(webPanel.isShown) actions=\(webPanelActions().map(\.0).joined(separator: " | "))"
-        case "webpanelreport": return "shown=\(webPanel.isShown) current=\(webPanel.current?.name ?? "-") frame=\(webPanel.frame)"
-        case "webpanelremove":
-            if let entry = SettingsStore.shared.webPanels.first { removeWebPanel(entry) }
-            return "panels=\(SettingsStore.shared.webPanels.count)"
-        case "manytabs":
-            for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
-            return "tabs=\(tabs.count)"
-        case "stripreport":
-            tabStrip.layoutSubtreeIfNeeded()
-            let buttons = tabStrip.tabsStack.arrangedSubviews.compactMap { $0 as? TabButtonView }
-            let shown = buttons.filter { !$0.isHidden }
-            return "tabs=\(buttons.count) shown=\(shown.count) overflow=\(!tabStrip.overflowButton.isHidden) activeShown=\(activeTab.map { !$0.tabButton.isHidden } ?? false) stripW=\(Int(tabStrip.tabsStack.frame.width)) hostW=\(Int(tabStrip.frame.width)) plusX=\(Int(tabStrip.newTabButton.frame.maxX))"
-        case "overflowmenu": showAllTabsMenu(); return "menu"
-        case "railreport":
-            return "rail=\(spaceRail.frame) compactMode=\(SettingsStore.shared.sidebarMode)"
-        case "peek":
-            guard let url = URL(string: ProcessInfo.processInfo.environment["HB_PEEK_URL"] ?? "https://example.com") else { return "bad url" }
-            peek(url, from: tab); return "peek"
-        case "peekreport": return "shown=\(peekPanel.isShown) url=\(peekPanel.currentURL?.absoluteString ?? "-")"
-        case "peekshot": Task { @MainActor in await self.peekPanel.snapshot(to: "/tmp/oree-peek.png") }; return "asked"
-        case "peekclose": peekPanel.close(); return "closed"
-        case "peektab": if let url = peekPanel.currentURL { newTab(urlString: url.absoluteString, isPrivate: false); peekPanel.close() }; return "tabs=\(tabs.count)"
-        case "mini":
-            guard let url = tab.currentURL else { return "no url" }
-            openMiniWindow(url: url); return "mini"
-        case "minireport":
-            let minis = NSApp.windows.compactMap { $0.windowController as? BrowserWindowController }.filter { $0.isMini && $0.window?.isVisible == true }
-            return "n=\(minis.count) " + minis.map { "level=\($0.window?.level.rawValue ?? -1) size=\(Int($0.window?.frame.width ?? 0))x\(Int($0.window?.frame.height ?? 0)) sidebarHidden=\($0.tabColumn?.isHidden ?? false) url=\($0.activeTab?.currentURL?.absoluteString ?? "-")" }.joined(separator: " ; ")
-        case "minitomain":
-            guard let mini = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: \.isMini) else { return "no mini" }
-            mini.moveMiniToMainWindow(); return "moved"
-        case "windows":
-            let all = NSApp.windows.compactMap { $0.windowController as? BrowserWindowController }
-            return all.map { "\($0.isSecondary ? "secondary" : "primary") tabs=\($0.tabs.count) active=\($0.activeTab?.currentURL?.absoluteString ?? "-")" }.joined(separator: " ; ")
-        case "wload":
-            // Loads the address of /tmp/oree-address.txt in the active tab of the last secondary window.
-            guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }),
-                  let tab = other.activeTab, let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no secondary window" }
-            other.load(urlString: text, in: tab)
-            return "loaded"
-        case "wmarker":
-            guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }), let web = other.activeTab?.webView else { return "no secondary window" }
-            Task { @MainActor in
-                let value = await web.safeEvaluate("String(window.__marker) + ' / ' + document.title", world: .page)
-                try? "\(String(describing: value))".write(toFile: "/tmp/oree-marker.txt", atomically: true, encoding: .utf8)
-            }
-            return "asked"
-        case "wchain":
-            // The ⌘T of a window in front must open its own tab: follow the responder chain from inside the last secondary window.
-            guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }),
-                  let responder = other.window?.firstResponder else { return "no secondary window" }
-            return "handled=\(responder.tryToPerform(#selector(BrowserWindowController.newTabAction), with: nil))"
-        case "zoomin": zoomInAction(); return "zoom=\(tab.webView?.pageZoom ?? 0)"
-        case "zoomout": zoomOutAction(); return "zoom=\(tab.webView?.pageZoom ?? 0)"
-        case "zoomreset": zoomResetAction(); return "zoom=\(tab.webView?.pageZoom ?? 0)"
-        case "zoomget": return "zoom=\(tab.webView?.pageZoom ?? 0) magnification=\(tab.webView?.allowsMagnification ?? false) memory=\(SettingsStore.shared.siteZoom)"
-        case "reader": toggleReaderMode(); return "toggled"
-        case "siteinfo": showSiteInfo(); return "shown"
-        case "siteinfotext":
-            func texts(_ view: NSView) -> [String] { ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts) }
-            guard let root = siteInfoPopover?.contentViewController?.view else { return "no popover" }
-            return texts(root).filter { !$0.isEmpty }.joined(separator: " | ")
-        case "source": viewPageSource(); return "source requested"
-        case "printop":
-            // The print operation exists and lays the page out (it is not shown: no panel in an automated run).
-            guard let web = tab.webView else { return "no web view" }
-            let operation = web.printOperation(with: NSPrintInfo.shared)
-            operation.view?.frame = web.bounds
-            return "print operation view=\(operation.view != nil) frame=\(operation.view?.frame.size ?? .zero)"
-        case "invisstart": startInvisibilityRecording(); return "recording"
-        case "invisstop": return stopInvisibilityRecording()
-        default: return nil
-        }
-    }
-
     // MARK: Now playing card
 
     /// A page's script found the site already dark: remember it, so night mode leaves it alone.
@@ -3502,7 +3260,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The tab whose media the card shows: one that plays (the one already shown if it still does), else a paused one worth resuming.
-    private func mediaTab() -> Tab? {
+    func mediaTab() -> Tab? {
         let candidates = tabs.filter { tab in
             guard !tab.isSuspended, tab.webView != nil, let info = tab.media else { return false }
             return MediaPolicy.isWorthShowing(info, playing: !info.paused)
@@ -3559,7 +3317,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The cover given by the page, fetched once per address. Never for a private tab (the request would leave the private session).
-    private func loadArtwork(_ address: String?, private isPrivate: Bool) {
+    func loadArtwork(_ address: String?, private isPrivate: Bool) {
         let wanted = (isPrivate ? nil : address).flatMap { URL(string: $0)?.scheme == "https" ? $0 : nil }
         guard wanted != shownArtwork else { return }                  // the card refreshes every second: touch the cover only when it changes
         shownArtwork = wanted
@@ -3576,19 +3334,19 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: Invisibility recorder (dev): samples what the user could notice, every 8 ms, until stopped
 
-    private var invisTimer: Timer?
-    private var invisSamples: [[String: Any]] = []
-    private var invisStart = Date()
-    private var invisTicks = 0
+    var invisTimer: Timer?
+    var invisSamples: [[String: Any]] = []
+    var invisStart = Date()
+    var invisTicks = 0
 
     /// Called by the navigation delegate while recording: a navigation after the swap is a real reload.
-    private func noteNavigation(_ kind: String, _ webView: WKWebView) {
+    func noteNavigation(_ kind: String, _ webView: WKWebView) {
         guard invisTimer != nil, let tab = tab(for: webView) else { return }
         invisSamples.append(["t": Int(Date().timeIntervalSince(invisStart) * 1000), "tab": tab.id.uuidString.prefix(4).description, "nav": kind])
     }
 
     /// Every ~100 ms: where the real page is scrolled, its readyState and a hash of what it shows, to see it move after the swap.
-    private func samplePage(of tab: Tab) {
+    func samplePage(of tab: Tab) {
         guard let web = tab.webView else { return }
         let tag = tab.id.uuidString.prefix(4).description
         let js = "(function(){var h=5381,s=JSON.stringify((function(){var o=[],a=document.body?document.body.querySelectorAll('p,h1,h2,h3,li,img'):[];for(var i=0;i<a.length&&o.length<80;i++){var r=a[i].getBoundingClientRect();if(r.bottom>0&&r.top<innerHeight)o.push([a[i].tagName,Math.round(r.top),Math.round(r.height)])}return o})());for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return Math.round(scrollY)+'|'+document.readyState+'|'+h})()"
@@ -3598,7 +3356,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func startInvisibilityRecording() {
+    func startInvisibilityRecording() {
         invisTimer?.invalidate()
         invisSamples = []; invisStart = Date(); invisTicks = 0
         invisTimer = Timer.scheduledTimer(withTimeInterval: 0.008, repeats: true) { [weak self] _ in
@@ -3617,7 +3375,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Writes the samples to /tmp/oree-invis.json and returns how many were taken.
-    private func stopInvisibilityRecording() -> String {
+    func stopInvisibilityRecording() -> String {
         invisTimer?.invalidate(); invisTimer = nil
         if let data = try? JSONSerialization.data(withJSONObject: invisSamples) { try? data.write(to: URL(fileURLWithPath: "/tmp/oree-invis.json")) }
         return "samples=\(invisSamples.count)"
@@ -3658,13 +3416,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     @objc func moveActiveTabUp() { moveActiveTab(by: -1) }
     @objc func moveActiveTabDown() { moveActiveTab(by: 1) }
 
-    private func tab(for webView: WKWebView) -> Tab? {
+    func tab(for webView: WKWebView) -> Tab? {
         tabs.first { $0.webView === webView }
     }
 
     /// The pointer rests on a sleeping tab: wake it in the background so the click finds it ready.
     /// Skipped when the Mac is already over the memory budget.
-    private func prewake(_ tab: Tab) {
+    func prewake(_ tab: Tab) {
         guard tab.isSuspended, !isOverBudget else { return }
         tab.lastActiveDate = Date()   // counts as touched: it must not be put straight back to sleep
         ensureAwake(tab)
@@ -3680,7 +3438,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// The first time a freshly-woken tab's page reports anything (even a
     /// provisional navigation start), its stale snapshot can come down.
-    private func clearWakeRevealIfNeeded(for tab: Tab) {
+    func clearWakeRevealIfNeeded(for tab: Tab) {
         guard tab.isAwaitingWakeReveal else { return }
         tab.finishWakeReveal()
     }
@@ -3689,7 +3447,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Benchmarks and tests launch with `HB_FRESH_SESSION=1`: start empty and
     /// never touch the saved session.
-    private let isFreshSession: Bool
+    let isFreshSession: Bool
     /// A window opened with ⌘N after the first one: its tabs are not saved nor restored (the saved session is the first window's).
     let isSecondary: Bool
     /// A small floating window for a quick look (a link, a video): no sidebar, always on top, one click to bring the page back to the main window.
@@ -3822,19 +3580,19 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// WebKit pins the page view to the size it was born with; in a small window that would stretch the window back. Let the window decide.
-    private func shrinkMiniWindow() {
+    func shrinkMiniWindow() {
         guard let web = activeTab?.webView else { return }
         for constraint in web.constraints where constraint.isActive && constraint.secondItem == nil && constraint.constant > 300 { constraint.isActive = false }
         window?.setFrame(miniFrame, display: true)
     }
 
-    private var miniFrame: NSRect {
+    var miniFrame: NSRect {
         let area = (NSApp.mainWindow ?? window)?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let size = NSSize(width: 420, height: min(640, area.height - 80))
         return NSRect(x: area.maxX - size.width - 24, y: area.minY + 24, width: size.width, height: size.height)
     }
 
-    private func becomeMini() {
+    func becomeMini() {
         isMini = true
         guard let window else { return }
         window.level = .floating
@@ -3867,7 +3625,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         saveSession()
     }
 
-    private func restoreSessionOrOpenFreshTab(openFreshTab: Bool = true) {
+    func restoreSessionOrOpenFreshTab(openFreshTab: Bool = true) {
         let snapshots = isFreshSession ? [] : ((try? sessionRepo.load()) ?? [])
         guard snapshots.contains(where: { !$0.url.isEmpty && !$0.isPrivate }) else {
             if openFreshTab { newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault) }
@@ -3916,7 +3674,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Brings back the split screen of the previous session (same two tabs, same ratio).
-    private func restoreSplit() {
+    func restoreSplit() {
         let saved = UserDefaults.standard.array(forKey: Self.splitKey) as? [Int] ?? []
         guard saved.count == 2, tabs.indices.contains(saved[0]), tabs.indices.contains(saved[1]) else { return }
         let ratio = UserDefaults.standard.double(forKey: Self.splitRatioKey)
@@ -3925,9 +3683,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Benchmarks (`HB_DB_PATH` set) use their own key so they never overwrite the real one.
-    private static let splitKey = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "session.split" : "session.split.bench"
-    private static let splitRatioKey = splitKey + ".ratio"
-    private static let activeIndexKey = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "session.activeIndex" : "session.activeIndex.bench"
+    static let splitKey = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "session.split" : "session.split.bench"
+    static let splitRatioKey = splitKey + ".ratio"
+    static let activeIndexKey = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "session.activeIndex" : "session.activeIndex.bench"
 
     /// Captures every open (non-private) tab's URL/interaction state and
     /// persists the whole set. Called after every structural change (tab
@@ -3935,7 +3693,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// crash loses only the last few seconds, not the whole window. Works
     /// for suspended tabs too — `currentURL`/`currentInteractionState` fall
     /// back to what was captured right before suspension.
-    private func saveSession() {
+    func saveSession() {
         // A window opened with ⌘N saves with the others, in its own table; the first window keeps the main session.
         if isSecondary {
             if ProcessInfo.processInfo.environment["HB_FRESH_SESSION"] != "1" { Self.saveExtraWindows() }
@@ -3979,7 +3737,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Navigation
 
-    private func load(urlString raw: String, in tab: Tab) {
+    func load(urlString raw: String, in tab: Tab) {
         guard let resolution = AddressResolver.resolve(raw, defaultEngine: SettingsStore.shared.searchEngine,
                                                        custom: SettingsStore.shared.customSearchShortcuts) else { return }
         let url = resolution.url
@@ -4046,7 +3804,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Loading indicator: swaps the reload button into a stop button while
     /// the active tab's page is loading, and back again once it settles.
-    private func updateLoadingIndicator(for tab: Tab) {
+    func updateLoadingIndicator(for tab: Tab) {
         guard tab.id == activeTabID else { return }
         downloads.pageLoading(tab.webView?.isLoading == true)       // downloads yield to the page being loaded
         if tab.showsLoading {
@@ -4061,7 +3819,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The user agent for the page about to load: WebKit's own (Safari's) unless the user chose another identity, globally or for this site.
-    private func applyUserAgent(to webView: WKWebView, for url: URL?) {
+    func applyUserAgent(to webView: WKWebView, for url: URL?) {
         let settings = SettingsStore.shared
         let agent = UserAgent.override(mode: settings.userAgentMode, custom: settings.customUserAgent, host: url?.host, chromeHosts: settings.chromeUserAgentHosts,
                                        mobileHosts: settings.mobileSiteHosts)
@@ -4069,7 +3827,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Palette action: ask this site for its mobile version (or the desktop one again), then reload.
-    private func toggleMobileForCurrentSite() {
+    func toggleMobileForCurrentSite() {
         guard let tab = activeTab, let host = tab.webView?.url?.host else { return }
         let settings = SettingsStore.shared
         var hosts = settings.mobileSiteHosts
@@ -4080,7 +3838,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Palette action: present as Chrome on this site (or stop doing so), then reload.
-    private func toggleChromeAgentForCurrentSite() {
+    func toggleChromeAgentForCurrentSite() {
         guard let tab = activeTab, let host = tab.webView?.url?.host else { return }
         let settings = SettingsStore.shared
         var hosts = settings.chromeUserAgentHosts
@@ -4175,7 +3933,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     @objc func findNext() { runFind(backwards: false) }
     @objc func findPrevious() { runFind(backwards: true) }
 
-    private func runFind(backwards: Bool) {
+    func runFind(backwards: Bool) {
         guard let tab = activeTab else { return }
         let term = findField.stringValue
             .replacingOccurrences(of: "\\", with: "\\\\")
@@ -4238,7 +3996,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         load(urlString: urlString, in: tab)
     }
 
-    private func syncToolbar(for tab: Tab) {
+    func syncToolbar(for tab: Tab) {
         let url = tab.webView?.url ?? tab.currentURL
         addressPill.show(url: (url?.scheme == "http" || url?.scheme == "https") ? url : nil)
         backButton.isEnabled = tab.webView?.canGoBack ?? false
@@ -4250,17 +4008,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Boosts (change a site with one sentence) and calm mode
 
-    private func boostConfig() -> BoostScript.Config {
+    func boostConfig() -> BoostScript.Config {
         BoostScript.config(boosts: (try? boostRepo.all()) ?? [], calmAll: SettingsStore.shared.calmModeEverywhere)
     }
 
-    private func boostSignature() -> String {
+    func boostSignature() -> String {
         let boosts = (try? boostRepo.all()) ?? []
         return "\(SettingsStore.shared.calmModeEverywhere)|" + boosts.map { "\($0.host):\($0.enabled):\($0.calm):\($0.rules.count):\($0.updatedAt.timeIntervalSince1970)" }.joined(separator: ",")
     }
 
     /// Hands the boosts to every tab: future pages through their scripts, the page on screen at once.
-    private func refreshBoosts() {
+    func refreshBoosts() {
         let config = boostConfig()
         lastBoostSignature = boostSignature()
         for tab in tabs {
@@ -4293,7 +4051,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         DispatchQueue.main.async { field.becomeFirstResponder() }
     }
 
-    private func createBoost(request: String, for tab: Tab) {
+    func createBoost(request: String, for tab: Tab) {
         guard let web = tab.webView, let host = web.url?.host else { return }
         boostTask?.cancel()
         noticePill.show(message: "Création du boost…", button: "Annuler", seconds: 150) { [weak self] in self?.boostTask?.cancel(); self?.noticePill.dismiss() }
@@ -4361,7 +4119,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refreshBoosts()
     }
 
-    private func showSimpleAlert(_ title: String, _ text: String) {
+    func showSimpleAlert(_ title: String, _ text: String) {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = text
@@ -4371,18 +4129,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - L'essentiel
 
-    private func updateDigestButton(for tab: Tab) {
+    func updateDigestButton(for tab: Tab) {
         setRelevant(.essentiel, tab.digestCandidate != nil)
         digestButton.isActive = digestPanel.state != "closed"
         setRelevant(.calendar, tab.eventCandidate != nil)
     }
 
     /// What a page says about itself in its JSON-LD: a recipe or how-to, an event or booking.
-    private struct StructuredData { var digest: PageDigest?; var event: CalendarEvent? }
+    struct StructuredData { var digest: PageDigest?; var event: CalendarEvent? }
 
     /// Reads the page's JSON-LD. A busy page can answer late (ads, trackers), so it asks again a couple of times; a reply — even one with
     /// nothing in it — is final. nil only when the page never answered.
-    private func readStructuredData(in web: WKWebView, attempts: Int) async -> StructuredData? {
+    func readStructuredData(in web: WKWebView, attempts: Int) async -> StructuredData? {
         for attempt in 0..<attempts {
             if let reply = await web.callJSON(DigestScript.probe, world: DigestScript.world, seconds: 12) as? [String: Any],
                let blocks = reply["jsonld"] as? [String] {
@@ -4399,7 +4157,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// After a page has loaded: does it carry its own recipe / how-to or event data? If so the buttons appear; a recipe opens its essentials
     /// at once (default; no model, instant), the rest gets a one-line offer.
-    private func probeDigest(for tab: Tab) {
+    func probeDigest(for tab: Tab) {
         guard TranslationPolicy.canTranslate(url: tab.webView?.url), let web = tab.webView else { return }
         let key = ResumePolicy.key(for: web.url)
         Task {
@@ -4432,7 +4190,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The page's own data when it has some (instant); else the local model reads the page's text (about half a minute).
-    private func openDigest(for tab: Tab) {
+    func openDigest(for tab: Tab) {
         guard let web = tab.webView, let key = ResumePolicy.key(for: web.url) else { return }
         digestTask?.cancel()
         digestKey = key
@@ -4460,7 +4218,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The local model reads the page's text.
-    private func digestWithModel(tab: Tab, key: String) {
+    func digestWithModel(tab: Tab, key: String) {
         if let reason = LocalModel.unavailableReason {
             digestPanel.showMessage("L'essentiel a besoin du modèle local d'Apple Intelligence. " + reason)
             return
@@ -4497,7 +4255,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Le panneau IA écarte le bord droit de la page de `pushed` points (0 : il la recouvre ou il est fermé).
     /// Dev : la carte de page (ce que lirait l'IA) de l'onglet, avec son poids estimé.
-    private func pageMapOp(_ op: String, _ tab: Tab) -> String {
+    func pageMapOp(_ op: String, _ tab: Tab) -> String {
         if op == "pagemapget" || op == "actget" { return pageMapResult }
         #if DEBUG
         if op == "groqkey" || op == "cloudkey" {
@@ -4520,7 +4278,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Dev : exécute l'appel d'outil écrit dans /tmp/oree-ai-action.json, `{"name","arguments","profile","approve"}`. Sans `approve`, toute confirmation est refusée.
-    private func actOp(_ tab: Tab) async -> String {
+    func actOp(_ tab: Tab) async -> String {
         guard let web = tab.webView, let data = FileManager.default.contents(atPath: "/tmp/oree-ai-action.json"),
               let spec = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let name = spec["name"] as? String else { return "no action file" }
@@ -4537,7 +4295,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return "ok=\(result.ok) asked=\(result.askedConfirmation) msg=\(result.message)" + (asked.isEmpty ? "" : " question=\(asked)")
     }
 
-    private func pageMapReport(_ tab: Tab) async -> String {
+    func pageMapReport(_ tab: Tab) async -> String {
         guard let web = tab.webView else { return "no web view" }
         let started = Date()
         guard let map = await PageMapScript.capture(web) else { return "pagemap failed" }
@@ -4548,7 +4306,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Disposition des boutons (barre d'outils, barre latérale)
 
-    private func chromeButton(_ item: ChromeItem) -> ChromeIconButton? {
+    func chromeButton(_ item: ChromeItem) -> ChromeIconButton? {
         switch item {
         case .sidebarToggle: toggleSidebarButton
         case .back: backButton
@@ -4571,7 +4329,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Un bouton « selon la page » sert (ou ne sert plus) : on ne retouche la disposition que si cela change quelque chose.
-    private func setRelevant(_ item: ChromeItem, _ on: Bool) {
+    func setRelevant(_ item: ChromeItem, _ on: Bool) {
         guard chromeRelevant.contains(item) != on else { return }
         if on { chromeRelevant.insert(item) } else { chromeRelevant.remove(item) }
         applyChromeLayout()
@@ -4579,7 +4337,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Range chaque bouton là où la disposition le veut : barre d'outils à gauche / à droite, bas de la barre latérale, ou nulle part.
     /// Un bouton « selon la page » reste à sa place (grisé) s'il est épinglé, sinon il n'apparaît que quand il sert.
-    private func applyChromeLayout() {
+    func applyChromeLayout() {
         guard let toolbar else { return }
         let layout = SettingsStore.shared.chromeLayout
         appliedChromeLayout = layout
@@ -4604,7 +4362,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Clic droit sur un bouton : le masquer, le déplacer, le garder à sa place — sans passer par les réglages.
-    private func chromeMenu(for item: ChromeItem) -> NSMenu {
+    func chromeMenu(for item: ChromeItem) -> NSMenu {
         let menu = NSMenu()
         let layout = SettingsStore.shared.chromeLayout
         func update(_ change: @escaping (inout ChromeLayout) -> Void) {
@@ -4637,7 +4395,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// L'IA ouvre une adresse dans l'onglet actif (la personne la voit) et attend la fin du chargement, au plus 15 s.
-    private func agentNavigate(_ urlString: String) async -> Bool {
+    func agentNavigate(_ urlString: String) async -> Bool {
         guard let tab = activeTab, let web = tab.webView else { return false }
         load(urlString: urlString, in: tab)
         try? await Task.sleep(for: .milliseconds(400))
@@ -4645,14 +4403,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return !web.isLoading
     }
 
-    private func pushPage(by pushed: CGFloat) {
+    func pushPage(by pushed: CGFloat) {
         guard let edge = pageTrailing else { return }
         // 8 pt de « chrome » entre la page et le panneau (où se trouve la poignée) ; la page arrondit son coin haut-droit à 14 quand elle est poussée.
         contentContainer.maskedCorners = pushed > 0 ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMaxYCorner]
         Motion.animate(Motion.slow) { edge.animator().constant = pushed > 0 ? -(pushed + 8) : 0 }
     }
 
-    private func aiBar() -> AIPanelController {
+    func aiBar() -> AIPanelController {
         if let aiBarController { return aiBarController }
         guard let contentView = window?.contentView else { fatalError("fenêtre sans contenu") }
         let hooks = AIPanelController.Hooks(
@@ -4697,7 +4455,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The local model reads the page's text and names its main event; the date is kept only if the page really mentions that day and month.
-    private func findEventWithModel(in web: WKWebView) async throws -> CalendarEvent? {
+    func findEventWithModel(in web: WKWebView) async throws -> CalendarEvent? {
         guard let page = await web.callJSON(DigestScript.text, world: DigestScript.world, seconds: 15) as? [String: Any],
               let text = page["text"] as? String, text.count > 40 else { return nil }
         let now = Date()
@@ -4708,7 +4466,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Shows what will be added (title, when, where) and, on "Ajouter", opens Calendar with it.
-    private func confirmAndAdd(_ event: CalendarEvent, page: URL?) {
+    func confirmAndAdd(_ event: CalendarEvent, page: URL?) {
         var event = event
         if event.url == nil { event.url = page?.absoluteString }
         let formatter = DateFormatter()
@@ -4733,7 +4491,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Writes the event as a .ics file and opens it with Calendar (which shows its own "add" window; the app never touches the calendars).
-    private func openInCalendar(_ event: CalendarEvent) {
+    func openInCalendar(_ event: CalendarEvent) {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Oree-Events", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let file = directory.appendingPathComponent("Événement-\(UUID().uuidString.prefix(8)).ics")
@@ -4770,7 +4528,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Dev tooling (automation channel): what is stored for the page and what is on offer.
-    private func resumeReport(for tab: Tab) -> String {
+    func resumeReport(for tab: Tab) -> String {
         guard let key = ResumePolicy.key(for: tab.webView?.url) else { return "no key" }
         var parts = ["key=\(key)"]
         if let point = try? resumeRepo.point(for: key) {
@@ -4786,7 +4544,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The thin line at the bottom of the page: how far down the user is in a long article.
-    private func updateReadingBar(for tab: Tab?) {
+    func updateReadingBar(for tab: Tab?) {
         guard let tab, let fraction = tab.readFraction, SettingsStore.shared.resumeEnabled else { readingBar.isHidden = true; return }
         readingBar.isHidden = false
         readingBar.fill = Theme.accent
@@ -4794,7 +4552,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// On a fresh visit to a page the user had left half-way, offers to go back to the video position or to the paragraph.
-    private func offerResume(for tab: Tab) {
+    func offerResume(for tab: Tab) {
         guard SettingsStore.shared.resumeEnabled, !tab.isPrivate, !tab.isAwaitingWakeReveal,
               tab.lastNavigationType == .linkActivated || tab.lastNavigationType == .other,
               let key = ResumePolicy.key(for: tab.webView?.url), let point = try? resumeRepo.point(for: key),
@@ -4816,22 +4574,22 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Night mode
 
-    private var appearanceIsDark: Bool { NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
+    var appearanceIsDark: Bool { NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
 
-    private func nightConfig() -> NightScript.Config {
+    func nightConfig() -> NightScript.Config {
         let settings = SettingsStore.shared
         return .init(enabled: NightPolicy.isActive(mode: settings.nightMode, appearanceIsDark: appearanceIsDark),
                      excluded: settings.nightExcludedHosts, native: settings.nightNativeHosts)
     }
 
     /// Everything that should make the pages re-read the night settings.
-    private func nightSignature() -> [String] {
+    func nightSignature() -> [String] {
         let settings = SettingsStore.shared
         return [settings.nightMode.rawValue, appearanceIsDark ? "dark" : "light"] + settings.nightExcludedHosts + ["|"] + settings.nightNativeHosts
     }
 
     /// Hands the current night settings to every tab: future pages through their scripts, the page on screen at once.
-    private func refreshNightMode() {
+    func refreshNightMode() {
         let config = nightConfig()
         for tab in tabs {
             tab.setUserScripts(userScripts(for: tab.currentURL))
@@ -4843,7 +4601,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// The moon next to the address: visible while night mode is on; pressed = this site is being darkened.
-    private func updateNightButton(for tab: Tab) {
+    func updateNightButton(for tab: Tab) {
         let settings = SettingsStore.shared
         let host = tab.webView?.url?.host ?? tab.currentURL?.host
         setRelevant(.night, settings.nightMode != .off && TranslationPolicy.canTranslate(url: tab.webView?.url ?? tab.currentURL))
@@ -4866,7 +4624,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refreshNightMode()
     }
 
-    private func setNightMode(_ mode: NightMode) {
+    func setNightMode(_ mode: NightMode) {
         SettingsStore.shared.nightMode = mode
         lastNight = nightSignature()
         refreshNightMode()
@@ -4875,7 +4633,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     // MARK: - Page translation
 
     /// Keeps the translate button in step with the active tab's translator, and starts recognizing the page language.
-    private func bindTranslator(of tab: Tab) {
+    func bindTranslator(of tab: Tab) {
         updateNightButton(for: tab)
         updateReadingBar(for: tab)
         updateDigestButton(for: tab)
@@ -4894,7 +4652,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         updateTranslateButton(for: tab)
     }
 
-    private func updateTranslateButton(for tab: Tab) {
+    func updateTranslateButton(for tab: Tab) {
         let translator = tab.translator
         setRelevant(.translate, translator.shouldOffer && TranslationPolicy.canTranslate(url: tab.webView?.url))
         translateButton.isActive = translator.state != .idle
@@ -4914,7 +4672,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Asks the system to install the fast translation model for the current page's language (its own download sheet appears).
     @objc func downloadFastTranslationAction() { downloadFastTranslationAction(thenTranslate: false) }
 
-    private func downloadFastTranslationAction(thenTranslate: Bool) {
+    func downloadFastTranslationAction(thenTranslate: Bool) {
         guard PageTranslator.isAvailable, let window, let tab = activeTab else { return }
         guard let source = tab.translator.pageLanguage, source != "und" else {
             showTranslationFailure(.unknownLanguage)
@@ -4925,7 +4683,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    private func showTranslationFailure(_ failure: PageTranslator.Failure) {
+    func showTranslationFailure(_ failure: PageTranslator.Failure) {
         let alert = NSAlert()
         alert.alertStyle = .informational
         switch failure {
@@ -4962,22 +4720,22 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: - Tab suspension (memory optimization)
 
-    private func startSuspensionTimer() {
+    func startSuspensionTimer() {
         suspensionTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.suspendInactiveTabs() }
         }
     }
 
     /// Steady-state hygiene, once a minute: same pass as the memory timer (freeze / sleep by idle time).
-    private func suspendInactiveTabs() async {
+    func suspendInactiveTabs() async {
         await enforceMemoryBudget()
         archiveStaleTabs()
     }
 
     // MARK: - Archive of unused tabs
 
-    private static let archiveStore = TabArchiveStore(key: "tabArchive.v1" + benchSuffix)
-    private static let lastActiveKey = "session.lastActive" + benchSuffix
+    static let archiveStore = TabArchiveStore(key: "tabArchive.v1" + benchSuffix)
+    static let lastActiveKey = "session.lastActive" + benchSuffix
 
     /// Closes (and remembers) the tabs nobody has touched for the chosen number of days.
     func archiveStaleTabs(now: Date = Date()) {
@@ -5031,7 +4789,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         for tab in tabs where !tab.isPrivate { if let url = tab.currentURL?.absoluteString { map[url] = tab.lastActiveDate.timeIntervalSince1970 } }
         UserDefaults.standard.set(map, forKey: Self.lastActiveKey)
     }
-    private func restoreLastActive(_ tab: Tab, url: String) {
+    func restoreLastActive(_ tab: Tab, url: String) {
         if let when = (UserDefaults.standard.dictionary(forKey: Self.lastActiveKey) as? [String: Double])?[url] { tab.lastActiveDate = Date(timeIntervalSince1970: when) }
     }
 
@@ -5040,7 +4798,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// used, oldest-touched first, to hand memory back right away rather
     /// than wait for the idle timer. Uses the public `DispatchSource`
     /// memory-pressure API — no private WebKit hooks involved.
-    private func startMemoryPressureMonitor() {
+    func startMemoryPressureMonitor() {
         let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
         source.setEventHandler { [weak self] in
             Task { @MainActor in
@@ -5054,7 +4812,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         memoryPressureSource = source
     }
 
-    private func suspendAllBackgroundTabs() async {
+    func suspendAllBackgroundTabs() async {
         let reading = measureTabMemory()
         let tabsPerProcess = Dictionary(grouping: reading.processOfTab.values, by: { $0 }).mapValues(\.count)
         var entries: [TabLifecyclePolicy.Entry] = []
@@ -5084,7 +4842,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return (policy, preferences)
     }
 
-    private func decideNavigation(_ webView: WKWebView, _ navigationAction: WKNavigationAction, _ preferences: WKWebpagePreferences) async -> WKNavigationActionPolicy {
+    func decideNavigation(_ webView: WKWebView, _ navigationAction: WKNavigationAction, _ preferences: WKWebpagePreferences) async -> WKNavigationActionPolicy {
         if let url = navigationAction.request.url, url.scheme == StartPage.actionScheme {
             handleHomeAction(url)
             return .cancel

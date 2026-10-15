@@ -71,7 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.checkForUpdatesInBackground()
 
         // UI test channel for development only: off unless explicitly requested.
+        // Never in a shipped build: the channel can drive the browser and skips the fingerprint check of the password vault.
+        #if DEBUG
         if CommandLine.arguments.contains("--automation") { controller.enableAutomation() }
+        #endif
     }
 
     /// Links from other apps (when HyperBrowser is the default browser) and .html files.
