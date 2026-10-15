@@ -81,7 +81,7 @@ final class DigestPanelView: NSView, WKNavigationDelegate {
         // The card never outgrows the page: its size is a wish, the margins are the rule.
         let maxWidth = card.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -48)
         let maxHeight = card.heightAnchor.constraint(lessThanOrEqualTo: heightAnchor, constant: -48)
-        [width, height].forEach { $0.priority = .defaultHigh }
+        [width, height].forEach { $0.priority = NSLayoutConstraint.Priority(480) }   // below dragThatCannotResizeWindow (490): a wish must never make the window grow
         NSLayoutConstraint.activate([
             card.centerXAnchor.constraint(equalTo: centerXAnchor), card.centerYAnchor.constraint(equalTo: centerYAnchor),
             width, height, maxWidth, maxHeight,

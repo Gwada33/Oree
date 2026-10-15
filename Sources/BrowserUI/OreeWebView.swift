@@ -52,6 +52,7 @@ final class OreeWebView: WKWebView {
 
         if let raw = hit.link, let url = URL(string: raw) {
             add("Ouvrir le lien dans un nouvel onglet") { owner?.newTab(urlString: raw, isPrivate: isPrivate) }
+            add("Ouvrir le lien dans une mini-fenêtre") { owner?.openMiniWindow(url: url) }
             add("Copier le lien") { Self.copy(raw) }
             add("Télécharger le fichier lié") { [weak self] in self?.download(url) }
             menu.addItem(.separator())

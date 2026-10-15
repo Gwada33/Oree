@@ -827,7 +827,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                                  (reloadButton, #selector(reloadAction))] as [(ChromeIconButton, Selector)] {
             button.onClick = { [weak self] in _ = self?.perform(action) }
         }
-        toggleSidebarButton.onClick = { [weak self] in self?.toggleSidebar() }
+        toggleSidebarButton.onClick = { [weak self] in
+            if self?.isMini == true { self?.moveMiniToMainWindow() } else { self?.toggleSidebar() }
+        }
         customizeButton.onClick = { [weak self] in self?.openCustomize() }
         moreButton.onClick = { [weak self] in self?.openPalette(initialText: "", selectAll: false, opensInNewTab: true) }
         addressPill.onClick = { [weak self] in self?.focusAddressBar() }
@@ -1554,7 +1556,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// What is actually shown: the chosen mode, except that narrow windows fall back to compact.
     private var effectiveSidebarMode: SidebarMode {
-        BrowserCore.effectiveSidebarMode(SettingsStore.shared.sidebarMode, windowWidth: Double(window?.frame.width ?? 1280))
+        isMini ? .hidden : BrowserCore.effectiveSidebarMode(SettingsStore.shared.sidebarMode, windowWidth: Double(window?.frame.width ?? 1280))
     }
 
     /// Width of the expanded sidebar (user-resizable by dragging its right edge).
@@ -1562,7 +1564,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func applySidebarMode(animated: Bool) {
         let store = SettingsStore.shared
-        let horizontal = store.tabLayout == .horizontal
+        let horizontal = store.tabLayout == .horizontal && !isMini
         let mode: SidebarMode = horizontal ? .hidden : effectiveSidebarMode
         let compact = mode == .compact
         let hover = mode == .floating                          // hidden until the pointer touches the left edge
@@ -1597,9 +1599,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         collapseButton.toolTip = "Réduire la barre latérale"
         resizeHandle.isHidden = compact || hidden
         // The toolbar's sidebar button: brings back a hidden / hover / compact sidebar.
-        let showToggle = !horizontal && (hidden || hover || store.sidebarMode == .compact)
+        let showToggle = isMini || (!horizontal && (hidden || hover || store.sidebarMode == .compact))
         setRelevant(.sidebarToggle, showToggle)
-        toggleSidebarButton.toolTip = compact ? "Agrandir la barre latérale  ⌥⌘S" : "Afficher la barre latérale  ⌥⌘S"
+        if !isMini { toggleSidebarButton.toolTip = compact ? "Agrandir la barre latérale  ⌥⌘S" : "Afficher la barre latérale  ⌥⌘S" }
         let lightsClear: CGFloat = isFullScreen ? 12 : 92                            // room for the traffic lights when the toolbar starts at x = 0
         // Compact: the toolbar starts at the 58 pt rail, so its first button needs less inset to clear the lights.
         toolbar.setLeadingInset(horizontal ? 8 : (hidden || hover) ? lightsClear : (compact ? max(lightsClear - 58, 8) : 8))
@@ -3186,6 +3188,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         add(SettingsStore.shared.tabLayout == .horizontal ? "Fermer les onglets à droite" : "Fermer les onglets en dessous", enabled: !following.isEmpty) { [weak self] in
             for other in following { self?.closeTab(other) }
         }
+        add("Ouvrir dans une mini-fenêtre", enabled: tab.currentURL != nil) { [weak self, weak tab] in if let url = tab?.currentURL { self?.openMiniWindow(url: url) } }
         add("Déplacer vers une nouvelle fenêtre", enabled: tabs.count > 1) { [weak self, weak tab] in if let tab { self?.detachToNewWindow(tab) } }
         add("Fermer les autres onglets", enabled: tabs.filter({ $0.spaceIndex == tab.spaceIndex }).count > 1) { [weak self] in
             guard let self else { return }
@@ -3329,6 +3332,25 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             return "closed"
         case "newwindow": _ = Self.newWindowHandler?(true); return "requested"
         case "detach": detachToNewWindow(tab); return "detached"
+        case "setsize":
+            guard var frame = window?.frame else { return "no window" }
+            frame.size = NSSize(width: 420, height: 640); window?.setFrame(frame, display: true)
+            return "set"
+        case "constraints":
+            var out = ""
+            func walk(_ v: NSView) { for c in v.constraints where c.isActive && c.priority.rawValue >= 750 && (c.constant == 808 || c.constant == 800 || c.constant == 480) { out += "owner=\(type(of: v)) first=\(String(describing: c.firstItem).prefix(40)) attr=\(c.firstAttribute.rawValue) second=\(String(describing: c.secondItem).prefix(40)) k=\(c.constant) rel=\(c.relation.rawValue) p=\(c.priority.rawValue) id=\(c.identifier ?? "-")\n" }; v.subviews.forEach(walk) }
+            if let content = window?.contentView { walk(content) }
+            return out
+        case "size": return "\(window?.frame.size ?? .zero) isMini=\(isMini)"
+        case "mini":
+            guard let url = tab.currentURL else { return "no url" }
+            openMiniWindow(url: url); return "mini"
+        case "minireport":
+            let minis = NSApp.windows.compactMap { $0.windowController as? BrowserWindowController }.filter { $0.isMini && $0.window?.isVisible == true }
+            return "n=\(minis.count) " + minis.map { "level=\($0.window?.level.rawValue ?? -1) size=\(Int($0.window?.frame.width ?? 0))x\(Int($0.window?.frame.height ?? 0)) sidebarHidden=\($0.tabColumn?.isHidden ?? false) url=\($0.activeTab?.currentURL?.absoluteString ?? "-")" }.joined(separator: " ; ")
+        case "minitomain":
+            guard let mini = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: \.isMini) else { return "no mini" }
+            mini.moveMiniToMainWindow(); return "moved"
         case "windows":
             let all = NSApp.windows.compactMap { $0.windowController as? BrowserWindowController }
             return all.map { "\($0.isSecondary ? "secondary" : "primary") tabs=\($0.tabs.count) active=\($0.activeTab?.currentURL?.absoluteString ?? "-")" }.joined(separator: " ; ")
@@ -3584,6 +3606,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let isFreshSession: Bool
     /// A window opened with ⌘N after the first one: its tabs are not saved nor restored (the saved session is the first window's).
     let isSecondary: Bool
+    /// A small floating window for a quick look (a link, a video): no sidebar, always on top, one click to bring the page back to the main window.
+    private(set) var isMini = false
 
     /// Set by the app: the windows opened after the first one, oldest first (the order they come back in).
     public static var extraWindowsProvider: (() -> [BrowserWindowController])?
@@ -3647,6 +3671,51 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if wasActive, let next = TabSelection.neighbor(afterRemovingIndex: index, spaces: tabs.map(\.spaceIndex), space: tab.spaceIndex) { selectTab(tabs[next]) }
         else if wasActive, let first = tabs.first { selectTab(first) }
         other.adopt(tab)
+    }
+
+    /// Opens `url` in a small floating window (⌥-click on a link, tab menu, palette).
+    func openMiniWindow(url: URL) {
+        guard let other = Self.newWindowHandler?(false) else { NSSound.beep(); return }
+        other.becomeMini()
+        other.newTab(urlString: url.absoluteString, isPrivate: activeTab?.isPrivate ?? false)
+        other.shrinkMiniWindow()
+    }
+
+    /// WebKit pins the page view to the size it was born with; in a small window that would stretch the window back. Let the window decide.
+    private func shrinkMiniWindow() {
+        guard let web = activeTab?.webView else { return }
+        for constraint in web.constraints where constraint.isActive && constraint.secondItem == nil && constraint.constant > 300 { constraint.isActive = false }
+        window?.setFrame(miniFrame, display: true)
+    }
+
+    private var miniFrame: NSRect {
+        let area = (NSApp.mainWindow ?? window)?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let size = NSSize(width: 420, height: min(640, area.height - 80))
+        return NSRect(x: area.maxX - size.width - 24, y: area.minY + 24, width: size.width, height: size.height)
+    }
+
+    private func becomeMini() {
+        isMini = true
+        guard let window else { return }
+        window.level = .floating
+        window.collectionBehavior.insert(.fullScreenNone)
+        window.minSize = NSSize(width: 360, height: 320)
+        window.setFrame(miniFrame, display: true)
+        toggleSidebarButton.symbol = "arrow.up.left.and.arrow.down.right"
+        toggleSidebarButton.toolTip = "Ouvrir dans la fenêtre principale"
+        toggleSidebarButton.setAccessibilityLabel("Ouvrir dans la fenêtre principale")
+        applySidebarMode(animated: false)
+        applyChromeLayout()
+        window.setFrame(miniFrame, display: true)
+    }
+
+    /// The page leaves the mini window for a tab of the main window, and the mini window closes.
+    func moveMiniToMainWindow() {
+        guard isMini, let url = activeTab?.currentURL,
+              let main = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).first(where: { !$0.isSecondary }) else { NSSound.beep(); return }
+        main.newTab(urlString: url.absoluteString, isPrivate: activeTab?.isPrivate ?? false)
+        main.window?.makeKeyAndOrderFront(nil)
+        window?.close()
     }
 
     /// Takes a tab that another window gave up: it joins this window's current space and becomes the active tab.
@@ -4355,6 +4424,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard let stack else { continue }
             for item in layout.visibleItems(in: zone, relevant: { chromeRelevant.contains($0) }) {
                 guard let button = chromeButton(item) else { continue }
+                if isMini && zone != .sidebarFooter && ![.sidebarToggle, .back, .forward, .reload].contains(item) { continue }   // a small window keeps the essentials
                 button.isHidden = false
                 button.isEnabled = !item.isContextual || chromeRelevant.contains(item)
                 stack.addArrangedSubview(button)
