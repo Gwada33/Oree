@@ -227,8 +227,15 @@ final class TabButtonView: NSView {
         Motion.animate(Motion.standard) { animator().alphaValue = 1 }
     }
 
+    /// Closing: the row shrinks a little and fades, the way the system closes things; the rows below it then spring up into the gap.
     func animateOut(completion: @escaping @MainActor () -> Void) {
-        Motion.animate(Motion.quick, { animator().alphaValue = 0 }, completion: completion)
+        guard let layer, !Motion.reduced else { Motion.animate(Motion.quick, { animator().alphaValue = 0 }, completion: completion); return }
+        let scale = CABasicAnimation(keyPath: "transform.scale"); scale.fromValue = 1; scale.toValue = 0.88
+        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
+        let group = CAAnimationGroup(); group.animations = [scale, fade]; group.duration = 0.16
+        group.timingFunction = CAMediaTimingFunction(name: .easeIn); group.fillMode = .forwards; group.isRemovedOnCompletion = false
+        layer.add(group, forKey: "oreeClose")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { MainActor.assumeIsolated { completion() } }
     }
 
     // MARK: Interaction
@@ -244,39 +251,87 @@ final class TabButtonView: NSView {
         onSelect?()
     }
 
+    /// The tabs of the same list (sidebar or strip), in order, and the distance between two neighbours.
+    private var peers: [TabButtonView] { (superview as? NSStackView)?.arrangedSubviews.compactMap { $0 as? TabButtonView }.filter { !$0.isHidden } ?? [] }
+    private var pitch: CGFloat {
+        let all = peers
+        guard let me = all.firstIndex(where: { $0 === self }) else { return isHorizontal ? bounds.width + 3 : Self.rowPitch }
+        let other = me + 1 < all.count ? all[me + 1] : (me > 0 ? all[me - 1] : nil)
+        guard let other else { return isHorizontal ? bounds.width + 3 : Self.rowPitch }
+        return isHorizontal ? abs(other.frame.minX - frame.minX) : abs(other.frame.minY - frame.minY)
+    }
+    /// A move along the list's axis, positive = down / right, in the layer's own coordinates.
+    private func translation(_ screen: CGFloat) -> CATransform3D {
+        isHorizontal ? CATransform3DMakeTranslation(screen, 0, 0) : CATransform3DMakeTranslation(0, isFlippedGeometry ? screen : -screen, 0)
+    }
+    private var lastSlot = 0
+
     override func mouseDragged(with event: NSEvent) {
         guard let start = dragStart else { return }
         let delta = (isHorizontal ? event.locationInWindow.x : event.locationInWindow.y) - start
         if !isDragging && abs(delta) > 5 {
             isDragging = true
+            lastSlot = 0
             layer?.zPosition = 10
             layer?.shadowColor = NSColor.black.cgColor
-            layer?.shadowOpacity = 0.4
-            layer?.shadowRadius = 8
-            layer?.shadowOffset = CGSize(width: 0, height: -2)
+            layer?.shadowRadius = 10
+            layer?.shadowOffset = CGSize(width: 0, height: -3)
+            TabMotion.lift(self, true)
         }
         guard isDragging else { return }
-        // The row follows the pointer; it drops into place on mouse-up.
+        // The row follows the pointer, a touch larger; the others slide aside to open the slot it would drop into.
         dragOffset = delta
+        let screen = isHorizontal ? delta : -delta
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer?.transform = isHorizontal ? CATransform3DMakeTranslation(delta, 0, 0)
-            : CATransform3DMakeTranslation(0, isFlippedGeometry ? -delta : delta, 0)
+        var lifted = translation(screen)
+        lifted = CATransform3DScale(lifted, 1.03, 1.03, 1)
+        layer?.transform = lifted
         CATransaction.commit()
+
+        let all = peers
+        guard let me = all.firstIndex(where: { $0 === self }) else { return }
+        let slot = max(-me, min(all.count - 1 - me, Int((screen / pitch).rounded())))
+        guard slot != lastSlot else { return }
+        lastSlot = slot
+        for (index, peer) in all.enumerated() where peer !== self {
+            let shift: CGFloat = (slot > 0 && index > me && index <= me + slot) ? -pitch : (slot < 0 && index < me && index >= me + slot) ? pitch : 0
+            peer.slide(by: shift)
+        }
+    }
+
+    /// Springs to `screen` points off its place (0 = home).
+    fileprivate func slide(by screen: CGFloat) {
+        guard let layer else { return }
+        let from = layer.presentation()?.transform ?? layer.transform
+        layer.removeAnimation(forKey: "oreeSlide")
+        let target = translation(screen)
+        CATransaction.begin(); CATransaction.setDisableActions(true); layer.transform = target; CATransaction.commit()
+        guard !Motion.reduced else { return }
+        let animation = CASpringAnimation(keyPath: "transform")
+        animation.fromValue = NSValue(caTransform3D: from); animation.toValue = NSValue(caTransform3D: target)
+        animation.mass = 1; animation.stiffness = 360; animation.damping = 28
+        animation.duration = animation.settlingDuration
+        layer.add(animation, forKey: "oreeSlide")
     }
 
     override func mouseUp(with event: NSEvent) {
         defer { dragStart = nil }
         guard isDragging else { return }
         isDragging = false
-        // Vertical: pointer up (positive window-y) = earlier. Horizontal: pointer left = earlier.
-        let steps = isHorizontal ? Int((dragOffset / (bounds.width + 3)).rounded()) : -Int((dragOffset / Self.rowPitch).rounded())
-        Motion.transaction(Motion.standard) {
-            layer?.transform = CATransform3DIdentity
-            layer?.shadowOpacity = 0
-            layer?.zPosition = 0
-        }
+        let screen = isHorizontal ? dragOffset : -dragOffset
+        let all = peers
+        let me = all.firstIndex(where: { $0 === self }) ?? 0
+        let steps = max(-me, min(all.count - 1 - me, Int((screen / pitch).rounded())))
+        TabMotion.lift(self, false)
         if steps != 0 { onReorder?(steps) }
+        // Nothing moved (dropped where it was, or the move was refused): everything springs home.
+        if steps == 0 || !(superview is NSStackView) {
+            for view in all { TabMotion.spring(view, fromX: 0, fromY: 0) }
+            let visual = layer?.presentation()?.transform ?? CATransform3DIdentity
+            TabMotion.spring(self, fromX: visual.m41, fromY: visual.m42)
+        }
+        layer?.zPosition = 0
     }
 
     private var isFlippedGeometry: Bool { layer?.isGeometryFlipped ?? false }

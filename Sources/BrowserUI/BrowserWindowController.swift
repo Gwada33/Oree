@@ -2605,13 +2605,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         tabs.remove(at: idx)
         updateTabCount()
         let button = tab.tabButton
+        // The rows below spring up into the gap once the closed row has gone.
+        let container = button.superview as? NSStackView
         button.animateOut { [weak self] in
             guard let self else { return }
-            Motion.animate(Motion.standard) {
-                self.rebuildTabList()
-                self.tabBarStack.superview?.layoutSubtreeIfNeeded()
-            }
+            let before = TabMotion.visualFrames(of: container?.arrangedSubviews ?? [])
+            self.rebuildTabList()
             button.removeFromSuperview()
+            container?.layoutSubtreeIfNeeded()
+            self.tabStrip.layoutSubtreeIfNeeded()
+            TabMotion.reflow(container?.arrangedSubviews ?? [], from: before)
         }
         saveSession()
 
@@ -2643,13 +2646,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard let idx = tabs.firstIndex(where: { $0.id == tab.id }),
               let newIndex = TabSelection.destinationIndex(of: idx, offset: offset, spaces: tabs.map(\.spaceIndex)) else { return }
 
+        // Every row springs from where it is on screen (a dragged row: under the pointer) to its new slot.
+        let container = tab.tabButton.superview as? NSStackView
+        let before = TabMotion.visualFrames(of: container?.arrangedSubviews ?? [])
         tabs.remove(at: idx)
         tabs.insert(tab, at: newIndex)
-        Motion.animate(Motion.standard) {
-            rebuildTabList()
-            tabBarStack.superview?.layoutSubtreeIfNeeded()
-            tabStrip.layoutSubtreeIfNeeded()
-        }
+        rebuildTabList()
+        tabBarStack.superview?.layoutSubtreeIfNeeded()
+        tabStrip.layoutSubtreeIfNeeded()
+        TabMotion.reflow(container?.arrangedSubviews ?? [], from: before)
         saveSession()
     }
 
@@ -3363,6 +3368,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if let content = window?.contentView { walk(content) }
             return out
         case "size": return "\(window?.frame.size ?? .zero) isMini=\(isMini)"
+        case "taborder": return tabs.map { $0.currentURL?.query ?? "-" }.joined(separator: ",") + " frames=" + tabs.map { "\(Int($0.tabButton.frame.minY))" }.joined(separator: ",") + " transforms=" + tabs.map { ($0.tabButton.layer?.transform.m42 ?? 0) == 0 ? "0" : "x" }.joined()
+        case "fewtabs":
+            for i in 1..<5 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
+            return "tabs=\(tabs.count)"
+        case "closeat": closeTab(tab); return "closed"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"
