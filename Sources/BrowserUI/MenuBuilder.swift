@@ -116,6 +116,8 @@ public final class MenuBuilder {
         let windowMenu = NSMenu(title: "Fenêtre")
         addResponderItem(to: windowMenu, title: "Réduire", selector: #selector(NSWindow.performMiniaturize(_:)), key: "m")
         addResponderItem(to: windowMenu, title: "Fermer la fenêtre", selector: #selector(NSWindow.performClose(_:)), key: "w", modifiers: [.command, .shift])
+        windowMenu.addItem(.separator())
+        addCommand("taskManager", to: windowMenu, selector: #selector(BrowserWindowController.showTaskManager))
         windowMenuItem.submenu = windowMenu
         mainMenu.addItem(windowMenuItem)
         NSApp.windowsMenu = windowMenu

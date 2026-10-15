@@ -72,6 +72,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Tabs in the order they were last in front (most recent first): ⌃Tab goes back to the previous one, like Alt-Tab does for apps.
     var recentTabIDs: [UUID] = []
     private var qrPopover: NSPopover?
+    private var taskManager: TaskManagerWindowController?
     private var artworkCache: [String: NSImage] = [:]
     private var artworkRequested: Set<String> = []
     private var shownArtwork: String?
@@ -2222,6 +2223,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 ("Écran partagé", "rectangle.split.2x1", { $0.toggleSplit() }),
                 ("Ajouter à la liste de lecture", "text.book.closed", { if let tab = $0.activeTab { $0.addToReadingList(tab) } }),
                 ("Afficher l'historique", "clock", { $0.openHistoryPanel() }),
+                ("Gestionnaire de tâches", "gauge.with.dots.needle.33percent", { $0.showTaskManager() }),
                 ("Personnaliser l'apparence", "paintbrush", { $0.openCustomize() }),
                 ("Vue d'ensemble des espaces", "square.grid.2x2", { $0.openOverview() }),
                 ("Mettre l'onglet en veille", "moon", { $0.sleepActiveTab() }),
@@ -3007,6 +3009,29 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return MemoryReading(total: bytesByProcess.values.reduce(0, +), bytesByProcess: bytesByProcess, processOfTab: processOfTab)
     }
 
+    /// What the task manager shows now: every tab of every window with what its page costs.
+    func taskManagerSnapshot() -> (snapshot: TaskManagerRows.Snapshot, appBytes: UInt64?) {
+        let reading = measureTabMemory()
+        let infos = tabs.map { tab in
+            TaskManagerRows.TabInfo(id: tab.id, title: tab.displayTitle, host: tab.badgeHost, processID: tab.webView == nil ? nil : reading.processOfTab[tab.id],
+                                    isSleeping: tab.isSuspended, isFrozen: tab.isFrozen, playsAudio: tab.audioState == .playing, isActive: tab.id == activeTabID)
+        }
+        return (TaskManagerRows.snapshot(tabs: infos, bytesByProcess: reading.bytesByProcess), MemoryBudget.footprint(ofProcess: getpid()))
+    }
+
+    /// ⌥⌘T — the task manager window.
+    @objc func showTaskManager() {
+        if taskManager == nil {
+            let manager = TaskManagerWindowController()
+            manager.provider = { [weak self] in self?.taskManagerSnapshot() ?? (TaskManagerRows.snapshot(tabs: [], bytesByProcess: [:]), nil) }
+            manager.onSelect = { [weak self] id in if let tab = self?.tabs.first(where: { $0.id == id }) { self?.selectTab(tab) } }
+            manager.onSleep = { [weak self] id in if let tab = self?.tabs.first(where: { $0.id == id }) { self?.sleepTab(tab) } }
+            manager.onClose = { [weak self] id in if let tab = self?.tabs.first(where: { $0.id == id }) { self?.closeTab(tab) } }
+            taskManager = manager
+        }
+        taskManager?.show()
+    }
+
     /// JavaScript garbage collection plus WebKit's in-memory caches. At most once a minute:
     /// the collection runs in every web process, so it must not become a constant background cost.
     @discardableResult
@@ -3139,6 +3164,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             let size = Int((try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
             tab.webView?.configuration.preferences.minimumFontSize = CGFloat(size)
             return "minimumFontSize=\(tab.webView?.configuration.preferences.minimumFontSize ?? -1)"
+        case "tasks":
+            let (snapshot, app) = taskManagerSnapshot()
+            let lines = snapshot.rows.map { "\($0.title.prefix(24))|\(TaskManagerRows.memory($0.bytes))|\($0.state.rawValue)|shared=\($0.processTabs)" }
+            return "total=\(TaskManagerRows.memory(snapshot.totalBytes)) app=\(app.map(TaskManagerRows.memory) ?? "-") saved=\(snapshot.savedBytes.map(TaskManagerRows.memory) ?? "-") :: " + lines.joined(separator: " ; ")
+        case "taskwindow":
+            showTaskManager()
+            guard let view = taskManager?.window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return "no window" }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/oree-taskmanager.png"))
+            return "window shown, picture written"
         case "recent": return recentTabIDs.compactMap { id in tabs.firstIndex { $0.id == id } }.map(String.init).joined(separator: ",")
         case "recentgo": selectRecentTab(); return "active=\(tabs.firstIndex { $0.id == activeTabID } ?? -1)"
         case "calc":
