@@ -85,6 +85,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var pageTrailing: NSLayoutConstraint?
     private var pageMapResult = "(none)"
     private let digestPanel = DigestPanelView()
+    private let peekPanel = PeekPanelView()
     private let digestButton = ChromeIconButton(symbol: "list.bullet.clipboard", label: "Afficher l'essentiel")
     private let calendarButton = ChromeIconButton(symbol: "calendar.badge.plus", label: "Ajouter au Calendrier")
     private var eventTask: Task<Void, Never>?
@@ -877,6 +878,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             self.digestKey = nil
             if let tab = self.activeTab { self.updateDigestButton(for: tab) }
         }
+        contentContainer.addSubview(peekPanel)
+        NSLayoutConstraint.activate([
+            peekPanel.topAnchor.constraint(equalTo: contentContainer.topAnchor), peekPanel.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+            peekPanel.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor), peekPanel.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+        ])
+        peekPanel.onOpenInTab = { [weak self] url in self?.newTab(urlString: url.absoluteString, isPrivate: self?.activeTab?.isPrivate ?? false) }
+        peekPanel.onOpenInMini = { [weak self] url in self?.openMiniWindow(url: url) }
         contentContainer.addSubview(noticePill)
         readingBar.fill = Theme.accent
         readingBar.isHidden = true
@@ -2539,6 +2547,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         recentTabIDs.insert(tab.id, at: 0)
         if recentTabIDs.count > 50 { recentTabIDs.removeLast() }
         aiBarController?.tabChanged(id: tab.id, title: tab.displayTitle)
+        if peekPanel.isShown { peekPanel.close() }
         if digestPanel.state != "closed" { digestPanel.close() }     // the essentials belong to the page they were made from
         // Picking a tab that isn't one of the two sides leaves the split screen.
         if let pair = splitPair, tab.id != pair.left, tab.id != pair.right { endSplit(keeping: tab.id) }
@@ -3342,6 +3351,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if let content = window?.contentView { walk(content) }
             return out
         case "size": return "\(window?.frame.size ?? .zero) isMini=\(isMini)"
+        case "peek":
+            guard let url = URL(string: ProcessInfo.processInfo.environment["HB_PEEK_URL"] ?? "https://example.com") else { return "bad url" }
+            peek(url, from: tab); return "peek"
+        case "peekreport": return "shown=\(peekPanel.isShown) url=\(peekPanel.currentURL?.absoluteString ?? "-")"
+        case "peekshot": Task { @MainActor in await self.peekPanel.snapshot(to: "/tmp/oree-peek.png") }; return "asked"
+        case "peekclose": peekPanel.close(); return "closed"
+        case "peektab": if let url = peekPanel.currentURL { newTab(urlString: url.absoluteString, isPrivate: false); peekPanel.close() }; return "tabs=\(tabs.count)"
         case "mini":
             guard let url = tab.currentURL else { return "no url" }
             openMiniWindow(url: url); return "mini"
@@ -3671,6 +3687,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if wasActive, let next = TabSelection.neighbor(afterRemovingIndex: index, spaces: tabs.map(\.spaceIndex), space: tab.spaceIndex) { selectTab(tabs[next]) }
         else if wasActive, let first = tabs.first { selectTab(first) }
         other.adopt(tab)
+    }
+
+    /// Shows `url` in the preview card over the page.
+    func peek(_ url: URL, from tab: Tab) {
+        peekPanel.show(url, configuration: makeConfiguration(isPrivate: tab.isPrivate))
     }
 
     /// Opens `url` in a small floating window (⌥-click on a link, tab menu, palette).
@@ -4869,6 +4890,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .openDirectly: openExternalLink(navigationAction.request.url, from: webView, ask: false); return .cancel
         case .askFirst: openExternalLink(navigationAction.request.url, from: webView, ask: true); return .cancel
         case .block: presentNotice("Orée n’ouvre pas ce type de lien depuis une page web."); return .cancel
+        }
+        // ⌥-click on a link: a look at it without leaving the page.
+        if linkType == .linkActivated, navigationAction.modifierFlags.contains(.option), let url = navigationAction.request.url,
+           let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https", let tab = tab(for: webView) {
+            peek(url, from: tab)
+            return .cancel
         }
         guard navigationAction.targetFrame?.isMainFrame == true,
               let original = navigationAction.request.url,
