@@ -1,9 +1,9 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
-**135 fonctions examinées : 56 absentes (rien trouvé), 79 avec du code présent.**
+**135 fonctions examinées : 54 absentes (rien trouvé), 81 avec du code présent.**
 
-Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R). Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
+Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R), nouvelle fenêtre (⌘N) et déplacer un onglet vers une nouvelle fenêtre. Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
 
 
 - **Absent** : aucun code correspondant trouvé. Probablement absent, mais une fonction peut exister sous un autre nom que celui cherché.
@@ -24,8 +24,8 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Mise en veille des onglets | ◐ code présent (à tester) | Chrome, Edge, Firefox, Brave, Vivaldi, Opera, Safari |
 | Couper le son d’un onglet | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Glisser-déposer pour réordonner les onglets | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
-| Détacher un onglet dans une nouvelle fenêtre | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
-| Plusieurs fenêtres | ❌ absent | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
+| Détacher un onglet dans une nouvelle fenêtre | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
+| Plusieurs fenêtres | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Dupliquer l’onglet | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Fermer les autres onglets / ceux à droite | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Aperçu de l’onglet au survol | ❌ absent | Chrome, Safari, Edge, Arc, Vivaldi, Brave |

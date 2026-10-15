@@ -3084,6 +3084,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         add(SettingsStore.shared.tabLayout == .horizontal ? "Fermer les onglets à droite" : "Fermer les onglets en dessous", enabled: !following.isEmpty) { [weak self] in
             for other in following { self?.closeTab(other) }
         }
+        add("Déplacer vers une nouvelle fenêtre", enabled: tabs.count > 1) { [weak self, weak tab] in if let tab { self?.detachToNewWindow(tab) } }
         add("Fermer les autres onglets", enabled: tabs.filter({ $0.spaceIndex == tab.spaceIndex }).count > 1) { [weak self] in
             guard let self else { return }
             for other in self.tabs where other.id != tab.id && other.spaceIndex == tab.spaceIndex { self.closeTab(other) }
@@ -3130,7 +3131,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case "complete":
             guard let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no file" }
             return inlineCompletion(for: text) ?? "(nothing)"
-        case "newwindow": Self.newWindowHandler?(); return "requested"
+        case "newwindow": _ = Self.newWindowHandler?(true); return "requested"
+        case "detach": detachToNewWindow(tab); return "detached"
         case "windows":
             let all = NSApp.windows.compactMap { $0.windowController as? BrowserWindowController }
             return all.map { "\($0.isSecondary ? "secondary" : "primary") tabs=\($0.tabs.count) active=\($0.activeTab?.currentURL?.absoluteString ?? "-")" }.joined(separator: " ; ")
@@ -3140,6 +3142,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                   let tab = other.activeTab, let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no secondary window" }
             other.load(urlString: text, in: tab)
             return "loaded"
+        case "wmarker":
+            guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }), let web = other.activeTab?.webView else { return "no secondary window" }
+            Task { @MainActor in
+                let value = await web.safeEvaluate("String(window.__marker) + ' / ' + document.title", world: .page)
+                try? "\(String(describing: value))".write(toFile: "/tmp/oree-marker.txt", atomically: true, encoding: .utf8)
+            }
+            return "asked"
         case "wchain":
             // The ⌘T of a window in front must open its own tab: follow the responder chain from inside the last secondary window.
             guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }),
@@ -3363,9 +3372,37 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// A window opened with ⌘N after the first one: its tabs are not saved nor restored (the saved session is the first window's).
     let isSecondary: Bool
 
-    /// Set by the app: opens another window. `BrowserWindowController` cannot, it does not own the app's services.
-    public static var newWindowHandler: (() -> Void)?
-    @objc func newWindowAction() { Self.newWindowHandler?() }
+    /// Set by the app: opens another window (with a first tab, or empty when a tab is about to be moved in) and returns it.
+    /// `BrowserWindowController` cannot do it itself, it does not own the app's services.
+    public static var newWindowHandler: ((_ withTab: Bool) -> BrowserWindowController?)?
+    @objc func newWindowAction() { _ = Self.newWindowHandler?(true) }
+
+    /// Moves `tab` (page alive: playing video, typed text and scroll are kept) into a new window.
+    func detachToNewWindow(_ tab: Tab) {
+        guard tabs.count > 1, tabs.contains(where: { $0.id == tab.id }), let other = Self.newWindowHandler?(false) else { NSSound.beep(); return }
+        let wasActive = activeTabID == tab.id
+        let index = tabs.firstIndex { $0.id == tab.id } ?? 0
+        if let pair = splitPair, tab.id == pair.left || tab.id == pair.right { endSplit(keeping: tab.id == pair.left ? pair.right : pair.left) }
+        extensionManager.tabClosed(tab)
+        tab.contentSlot.removeFromSuperview()
+        tab.tabButton.removeFromSuperview()
+        tabs.removeAll { $0.id == tab.id }
+        rebuildTabList()
+        updateTabCount()
+        saveSession()
+        if wasActive, let next = TabSelection.neighbor(afterRemovingIndex: index, spaces: tabs.map(\.spaceIndex), space: tab.spaceIndex) { selectTab(tabs[next]) }
+        else if wasActive, let first = tabs.first { selectTab(first) }
+        other.adopt(tab)
+    }
+
+    /// Takes a tab that another window gave up: it joins this window's current space and becomes the active tab.
+    func adopt(_ tab: Tab) {
+        tab.spaceIndex = currentSpace
+        tab.groupID = nil
+        attachTab(tab)
+        selectTab(tab)
+        saveSession()
+    }
 
     private func restoreSessionOrOpenFreshTab(openFreshTab: Bool = true) {
         let snapshots = isFreshSession ? [] : ((try? sessionRepo.load()) ?? [])

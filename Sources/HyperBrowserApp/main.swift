@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = BrowserWindowController(contentBlocker: contentBlocker)
         browserController = controller
 
-        BrowserWindowController.newWindowHandler = { [weak self] in self?.openNewWindow() }
+        BrowserWindowController.newWindowHandler = { [weak self] withTab in self?.openNewWindow(withTab: withTab) }
         LaunchTrace.mark("window controller built")
         let builder = MenuBuilder(target: controller)
         controller.menuBuilder = builder
@@ -78,7 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// ⌘N: another window with its own tabs, next to the first (down and right of the one in front, as every Mac app does).
-    func openNewWindow() {
+    @discardableResult
+    func openNewWindow(withTab: Bool = true) -> BrowserWindowController {
         let controller = BrowserWindowController(contentBlocker: contentBlocker, isSecondary: true)
         controller.menuBuilder = menuBuilder
         extraControllers.append(controller)
@@ -88,13 +89,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
-        controller.ensureTabExists()
+        if withTab { controller.ensureTabExists() }
         if let window = controller.window {
             let id = ObjectIdentifier(controller)
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.extraControllers.removeAll { ObjectIdentifier($0) == id } }
             }
         }
+        return controller
     }
 
     func applicationWillTerminate(_ notification: Notification) {
