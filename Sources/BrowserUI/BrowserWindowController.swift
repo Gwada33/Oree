@@ -3144,6 +3144,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard alert.buttons.indices.contains(index) else { return "no such button" }
             alert.buttons[index].performClick(nil)
             return "pressed \(alert.buttons[index].title)"
+        case "quit": DispatchQueue.main.async { NSApp.terminate(nil) }; return "quitting"
+        case "closeextra":
+            // Closes the last extra window the way the user does (its red button).
+            guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }) else { return "no extra window" }
+            other.window?.close()
+            return "closed"
         case "newwindow": _ = Self.newWindowHandler?(true); return "requested"
         case "detach": detachToNewWindow(tab); return "detached"
         case "windows":
@@ -3385,6 +3391,47 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// A window opened with ⌘N after the first one: its tabs are not saved nor restored (the saved session is the first window's).
     let isSecondary: Bool
 
+    /// Set by the app: the windows opened after the first one, oldest first (the order they come back in).
+    public static var extraWindowsProvider: (() -> [BrowserWindowController])?
+    /// True while the app brings the saved windows back: a half-restored set must not be saved over the rest.
+    public static var suspendExtraSaves = false
+
+    /// Writes the tabs of every extra window (private tabs and blank pages left out); a window with nothing to save is dropped.
+    public static func saveExtraWindows() {
+        guard !suspendExtraSaves, let controllers = extraWindowsProvider?() else { return }
+        let windows: [[ExtraWindowTab]] = controllers.map { controller in
+            let savable = controller.tabs.filter { SessionPolicy.isSavable(url: $0.currentURL, isPrivate: $0.isPrivate) }
+            return savable.map { tab in
+                ExtraWindowTab(url: tab.currentURL?.absoluteString ?? "", interactionState: tab.currentInteractionState, title: tab.displayTitle,
+                               spaceIndex: tab.spaceIndex, isActive: tab.id == controller.activeTabID)
+            }
+        }.filter { !$0.isEmpty }
+        do { try ExtraWindowsRepository().save(windows) } catch { Log.storage.error("Failed to save extra windows: \(error.localizedDescription, privacy: .public)") }
+    }
+
+    public static func savedExtraWindows() -> [[ExtraWindowTab]] { (try? ExtraWindowsRepository().load()) ?? [] }
+
+    /// Fills this (new, empty) window with the tabs it had: all asleep but the one that was in front.
+    public func restoreExtraWindow(_ saved: [ExtraWindowTab]) {
+        guard !saved.isEmpty else { return }
+        let activeIndex = saved.firstIndex(where: \.isActive) ?? 0
+        for (index, item) in saved.enumerated() {
+            let config = makeConfiguration(isPrivate: false)
+            let space = min(max(item.spaceIndex, 0), spaces.count - 1)
+            if index != activeIndex, let url = URL(string: item.url) {
+                let sleeper = Tab(configuration: config, isPrivate: false, sleeping: (url, item.interactionState, item.title))
+                sleeper.spaceIndex = space
+                attachTab(sleeper)
+                continue
+            }
+            let tab = Tab(configuration: config, isPrivate: false)
+            tab.spaceIndex = space
+            attachTab(tab)
+            if let state = item.interactionState { tab.webView?.interactionState = state } else { load(urlString: item.url, in: tab) }
+        }
+        if tabs.indices.contains(activeIndex) { selectTab(tabs[activeIndex]) } else if let first = tabs.first { selectTab(first) }
+    }
+
     /// Set by the app: opens another window (with a first tab, or empty when a tab is about to be moved in) and returns it.
     /// `BrowserWindowController` cannot do it itself, it does not own the app's services.
     public static var newWindowHandler: ((_ withTab: Bool) -> BrowserWindowController?)?
@@ -3485,6 +3532,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// for suspended tabs too — `currentURL`/`currentInteractionState` fall
     /// back to what was captured right before suspension.
     private func saveSession() {
+        // A window opened with ⌘N saves with the others, in its own table; the first window keeps the main session.
+        if isSecondary {
+            if ProcessInfo.processInfo.environment["HB_FRESH_SESSION"] != "1" { Self.saveExtraWindows() }
+            return
+        }
         guard !isFreshSession else { return }
         // Tabs with no address (failed load, blank page) aren't worth restoring —
         // they used to come back as empty tabs and pile up on every launch.

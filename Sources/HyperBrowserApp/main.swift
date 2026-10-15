@@ -1,6 +1,7 @@
 import AppKit
 import WebKit
 import BrowserCore
+import BrowserStorage
 import BrowserUI
 
 LaunchTrace.mark("main.swift entered")
@@ -37,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browserController = controller
 
         BrowserWindowController.newWindowHandler = { [weak self] withTab in self?.openNewWindow(withTab: withTab) }
+        BrowserWindowController.extraWindowsProvider = { [weak self] in self?.extraControllers ?? [] }
         LaunchTrace.mark("window controller built")
         let builder = MenuBuilder(target: controller)
         controller.menuBuilder = builder
@@ -59,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 pendingURLs.removeAll()
                 controller.ensureTabExists()
                 controller.showOnboardingIfNeeded()
+                restoreExtraWindows()
             }
         }
 
@@ -77,6 +80,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls { browserController.openExternal(url) }
     }
 
+    /// The windows opened with ⌘N in the previous session, brought back next to the first (nothing is saved while they come back).
+    private func restoreExtraWindows() {
+        let saved = BrowserWindowController.savedExtraWindows()
+        guard !saved.isEmpty, ProcessInfo.processInfo.environment["HB_FRESH_SESSION"] != "1" else { return }
+        BrowserWindowController.suspendExtraSaves = true
+        for tabs in saved { openNewWindow(withTab: false).restoreExtraWindow(tabs) }
+        BrowserWindowController.suspendExtraSaves = false
+        BrowserWindowController.saveExtraWindows()
+    }
+
     /// ⌘N: another window with its own tabs, next to the first (down and right of the one in front, as every Mac app does).
     @discardableResult
     func openNewWindow(withTab: Bool = true) -> BrowserWindowController {
@@ -93,10 +106,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let window = controller.window {
             let id = ObjectIdentifier(controller)
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.extraControllers.removeAll { ObjectIdentifier($0) == id } }
+                MainActor.assumeIsolated {
+                    self?.extraControllers.removeAll { ObjectIdentifier($0) == id }
+                    // A window the user closes is gone for good; but not while the app quits (then it must come back).
+                    if self?.isQuitting == false { BrowserWindowController.saveExtraWindows() }
+                }
             }
         }
         return controller
+    }
+
+    private var isQuitting = false
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        isQuitting = true
+        BrowserWindowController.saveExtraWindows()       // one last time, with every window still open
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {

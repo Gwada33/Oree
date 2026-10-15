@@ -193,6 +193,19 @@ public final class AppDatabase: @unchecked Sendable {
             }
         }
 
+        // Tabs of the windows opened after the first one (the first window's tabs stay in `tabSessions`).
+        migrator.registerMigration("v12_extraWindows") { db in
+            try db.create(table: "extraWindowTabs") { t in
+                t.column("windowIndex", .integer).notNull()
+                t.column("orderIndex", .integer).notNull()
+                t.column("url", .text).notNull()
+                t.column("interactionState", .blob)
+                t.column("title", .text)
+                t.column("spaceIndex", .integer).notNull().defaults(to: 0)
+                t.column("isActive", .boolean).notNull().defaults(to: false)
+            }
+        }
+
         return migrator
     }
 }
