@@ -371,37 +371,43 @@ extension BrowserWindowController {
         let items = tabs.map { TabListLayout.Item(id: $0.id, spaceIndex: $0.spaceIndex, groupID: $0.groupID) }
         let rows = TabListLayout.rows(tabs: items, groups: groups, space: currentSpace)
         let byID = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
-        for stack in [tabBarStack, tabStrip.tabsStack] {
-            stack.arrangedSubviews.forEach { stack.removeArrangedSubview($0); $0.removeFromSuperview() }
-        }
         let container: NSStackView = horizontal ? tabStrip.tabsStack : tabBarStack
+        var desired: [NSView] = []
         for row in rows {
             switch row {
             case .groupHeader(let id):
                 guard let group = groups.first(where: { $0.id == id }) else { continue }
                 if horizontal {
-                    container.addArrangedSubview(makeStripGroupChip(group.name, hue: currentSpaceStyle.hue))
+                    desired.append(makeStripGroupChip(group.name, hue: currentSpaceStyle.hue))
                     continue
                 }
                 let members = tabs.filter { $0.groupID == id }.count
                 let header = GroupHeaderView(name: group.name, tabCount: members, collapsed: group.collapsed)
                 header.onToggle = { [weak self] in self?.toggleGroup(id) }
                 header.contextMenuProvider = { [weak self] in self?.makeGroupMenu(for: id) }
-                container.addArrangedSubview(header)
+                desired.append(header)
             case .looseHeader:
-                if !horizontal { container.addArrangedSubview(makeSectionLabel("Pages libres")) }
+                if !horizontal { desired.append(makeSectionLabel("Pages libres")) }
             case .tab(let id, let indented):
                 guard let tab = byID[id] else { continue }
                 tab.tabButton.isHidden = false
                 tab.tabButton.setHorizontal(horizontal)
                 tab.tabButton.setIndented(indented && !horizontal)
-                container.addArrangedSubview(tab.tabButton)
+                desired.append(tab.tabButton)
             }
         }
-        if !horizontal {
-            // Right after the last tab, where the eye is when the list is long (the one at the top stays for the shortcut).
-            let row = inlineNewTabRow ?? makeInlineNewTabRow()
-            container.addArrangedSubview(row)
+        if !horizontal { desired.append(inlineNewTabRow ?? makeInlineNewTabRow()) }   // right after the last tab, where the eye is when the list is long
+        // The same rows in the same order (a title changed, a tab was selected): nothing to take apart. This pass cost 0,8 ms per tab.
+        let tail: [NSView] = horizontal ? [tabStrip.overflowButton, tabStrip.newTabButton] : []
+        let current = container.arrangedSubviews
+        let other = horizontal ? tabBarStack : tabStrip.tabsStack
+        let unchanged = other.arrangedSubviews.isEmpty && current.count == desired.count + tail.count
+            && zip(current, desired + tail).allSatisfy { $0 === $1 }
+        if !unchanged {
+            for stack in [tabBarStack, tabStrip.tabsStack] {
+                stack.arrangedSubviews.forEach { stack.removeArrangedSubview($0); $0.removeFromSuperview() }
+            }
+            desired.forEach(container.addArrangedSubview)
         }
         if horizontal {
             tabStrip.spaceChip.configure(currentSpaceStyle)

@@ -192,6 +192,17 @@ extension BrowserWindowController {
             for _ in 0..<10 { saveSession() }
             let burst = (CFAbsoluteTimeGetCurrent() - t0) * 1000
             return String(format: "tabs=%d save=%.1f ms burst10=%.1f ms", tabs.count, one, burst)
+        case "rebuildbench":
+            var t0 = CFAbsoluteTimeGetCurrent()
+            for _ in 0..<10 { rebuildTabList() }
+            let rebuild = (CFAbsoluteTimeGetCurrent() - t0) * 100
+            t0 = CFAbsoluteTimeGetCurrent()
+            for _ in 0..<10 { updateTabCount() }
+            let count = (CFAbsoluteTimeGetCurrent() - t0) * 100
+            t0 = CFAbsoluteTimeGetCurrent()
+            for _ in 0..<10 { tabStrip.needsLayout = true; tabStrip.layoutSubtreeIfNeeded(); tabBarStack.superview?.layoutSubtreeIfNeeded() }
+            let layout = (CFAbsoluteTimeGetCurrent() - t0) * 100
+            return String(format: "tabs=%d rebuildTabList=%.2f ms updateTabCount=%.2f ms layout=%.2f ms", tabs.count, rebuild, count, layout)
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"

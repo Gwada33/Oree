@@ -15,6 +15,7 @@ final class TabButtonView: NSView {
     private var widthConstraint: NSLayoutConstraint?
     /// In the horizontal strip: fixed width, no drag-reorder.
     private(set) var isHorizontal = false
+    private var isIndented = false
     private let guide = CALayer()
     private let titleLabel = NSTextField(labelWithString: "")
     private let closeButton = NSButton()
@@ -119,6 +120,8 @@ final class TabButtonView: NSView {
 
     /// Switches between a full-width sidebar row and a 190 pt chip of the horizontal strip.
     func setHorizontal(_ horizontal: Bool) {
+        // Unchanged: leave the width alone (re-creating the constraint at each list rebuild cost most of its time, and reset a width the strip had animated).
+        if horizontal == isHorizontal, (widthConstraint != nil) == horizontal { return }
         isHorizontal = horizontal
         widthConstraint?.isActive = false
         widthConstraint = nil
@@ -138,6 +141,8 @@ final class TabButtonView: NSView {
 
     /// Tabs inside a group sit 14 pt in, with a thin guide line on the left.
     func setIndented(_ indented: Bool) {
+        guard indented != isIndented else { return }
+        isIndented = indented
         badgeLeading.constant = indented ? 23 : 9
         guide.isHidden = !indented
         if indented, guide.superlayer == nil { layer?.insertSublayer(guide, at: 0) }

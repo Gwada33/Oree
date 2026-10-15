@@ -56,6 +56,20 @@ extension BrowserWindowController {
     /// Window → [sidebar: rail + tab column] | [toolbar over (lisière + page sheet)].
     func buildUI() {
         guard let window else { return }
+        let contentView = configureWindow(window)
+        let sidebar = wireSidebar()
+        let bar = wireToolbar()
+        buildPageSheet()
+        layoutMain(in: contentView, sidebar: sidebar, bar: bar)
+        wireAddressBar(in: contentView)
+        wireFloatingEdge(in: contentView)
+        buildFindBar(in: contentView)
+
+        applySidebarMode(animated: false)
+    }
+
+    /// The window itself: transparent title bar, minimum size, the empty toolbar that makes macOS centre the traffic lights; returns its root view.
+    private func configureWindow(_ window: NSWindow) -> NSView {
 
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
@@ -71,8 +85,11 @@ extension BrowserWindowController {
         let root = SurfaceView(fill: Theme.chrome)
         root.translatesAutoresizingMaskIntoConstraints = true
         window.contentView = root
-        let contentView: NSView = root
+        return root
+    }
 
+    /// The left dock, its glass backdrop and the handle that resizes it.
+    private func wireSidebar() -> NSView {
         let sidebar = buildSidebar()
         sidebarView = sidebar
         (sidebar as? SurfaceView)?.onHover = { [weak self] inside in
@@ -97,7 +114,11 @@ extension BrowserWindowController {
             SettingsStore.shared.sidebarWidth = SidebarWidth.standard
             self?.applySidebarMode(animated: true)
         }
+        return sidebar
+    }
 
+    /// Toolbar buttons, downloads and the address pill's click, plus the appearance observer.
+    private func wireToolbar() -> ToolbarView {
         // Toolbar: ← → ↻ · address · customize, more.
         for (button, action) in [(backButton, #selector(goBack)), (forwardButton, #selector(goForward)),
                                  (reloadButton, #selector(reloadAction))] as [(ChromeIconButton, Selector)] {
@@ -135,7 +156,11 @@ extension BrowserWindowController {
         downloads.start()
         assistantButton.onClick = { [weak self] in self?.askAIAction() }
         applyChromeLayout()
+        return bar
+    }
 
+    /// The page sheet and what floats over it: loading bar, essentials, web panel, preview, notices, reading progress.
+    private func buildPageSheet() {
         // Page sheet: top-left corner rounded, flush against the right and bottom edges.
         contentContainer.cornerRadius = Theme.pageCornerRadius
         contentContainer.maskedCorners = [.layerMinXMaxYCorner]
@@ -189,8 +214,10 @@ extension BrowserWindowController {
             loadingBar.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
             loadingBar.heightAnchor.constraint(equalToConstant: 2),
         ])
+    }
 
-        // The sidebar goes last so, in floating mode, it overlays the page.
+    /// Puts the bars, the sheet and the sidebar in the window and pins them (the sidebar goes last so, floating, it overlays the page).
+    private func layoutMain(in contentView: NSView, sidebar: NSView, bar: ToolbarView) {
         [tabStrip, bar, contentContainer, sidebar].forEach(contentView.addSubview)
         contentView.addLayoutGuide(mainGuide)
         let mainLead = mainGuide.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: expandedSidebarWidth)
@@ -230,7 +257,10 @@ extension BrowserWindowController {
         let pageEdge = contentContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
         pageEdge.isActive = true
         pageTrailing = pageEdge
+    }
 
+    /// The suggestions under the address bar and the bar's editing callbacks.
+    private func wireAddressBar(in contentView: NSView) {
         contentView.addSubview(addressDropdown)
         NSLayoutConstraint.activate([
             addressDropdown.topAnchor.constraint(equalTo: addressPill.bottomAnchor, constant: 6),
@@ -245,7 +275,10 @@ extension BrowserWindowController {
             self?.endAddressEditing()
             item.perform(false)
         }
+    }
 
+    /// The strip on the left edge that reveals the floating sidebar, and the menu-tracking guards that keep it from hiding mid-click.
+    private func wireFloatingEdge(in contentView: NSView) {
         contentView.addSubview(edgeTrigger)
         edgeTrigger.onReveal = { [weak self] in self?.scheduleFloatingShow() }
         edgeTrigger.onLeave = { [weak self] in self?.floatingShowWork?.cancel() }
@@ -262,10 +295,6 @@ extension BrowserWindowController {
             edgeTrigger.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
             edgeTrigger.widthAnchor.constraint(equalToConstant: 10),
         ])
-
-        buildFindBar(in: contentView)
-
-        applySidebarMode(animated: false)
     }
 
     /// Left dock: a 44 pt row for the traffic lights, then the space rail and the tab column
