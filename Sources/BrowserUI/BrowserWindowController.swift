@@ -2228,6 +2228,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 let asChrome = SettingsStore.shared.chromeUserAgentHosts.contains { UserAgent.hostMatches(host, listed: $0) }
                 actions.append((asChrome ? "Se présenter comme Safari sur ce site" : "Se présenter comme Chrome sur ce site", "person.crop.circle.badge.questionmark", { $0.toggleChromeAgentForCurrentSite() }))
             }
+            if activeTab?.webView?.url?.scheme?.hasPrefix("http") == true {
+                actions.append((activeTab?.readerOrigin == nil ? "Mode lecture" : "Quitter le mode lecture", "text.book.closed", { $0.toggleReaderMode() }))
+            }
             if PageTranslator.isAvailable, TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
                 let showing = activeTab?.translator.state != .idle
                 actions.append((showing ? "Afficher la page d'origine" : "Traduire la page", "translate", { $0.translatePageAction() }))
@@ -3135,6 +3138,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case "complete":
             guard let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no file" }
             return inlineCompletion(for: text) ?? "(nothing)"
+        case "reader": toggleReaderMode(); return "toggled"
         case "siteinfo": showSiteInfo(); return "shown"
         case "siteinfotext":
             func texts(_ view: NSView) -> [String] { ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts) }

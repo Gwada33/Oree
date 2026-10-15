@@ -74,6 +74,7 @@ public enum ShortcutRegistry {
         c("print", "Imprimer…", "Page", "p"),
         c("savePDF", "Enregistrer la page en PDF…", "Page", "s", [.command, .shift]),
         c("viewSource", "Afficher le code source", "Page", "u", [.command, .option]),
+        c("reader", "Mode lecture", "Page", "r", [.command, .shift]),
         c("ai", "Demander à l’IA", "Navigation", "j"),
         c("history", "Historique", "Navigation", "y"),
         c("bookmark", "Ajouter aux favoris", "Navigation", "d"),

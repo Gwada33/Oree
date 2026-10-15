@@ -75,4 +75,26 @@ extension BrowserWindowController {
 
     /// A small message in the notice pill (nothing else to press).
     func showToolNotice(_ message: String) { presentNotice(message) }
+
+    // MARK: Reader mode
+
+    /// ⇧⌘R — the article of the page, alone, in a calm layout; again to come back to the page.
+    @objc func toggleReaderMode() {
+        guard let tab = activeTab, let web = tab.webView else { NSSound.beep(); return }
+        if let origin = tab.readerOrigin {
+            tab.readerOrigin = nil
+            web.load(URLRequest(url: origin))
+            return
+        }
+        guard let url = web.url, url.scheme == "http" || url.scheme == "https" else { showToolNotice(ReaderPage.notReadableMessage()); return }
+        Task { @MainActor [weak self, weak tab, weak web] in
+            guard let self, let tab, let web else { return }
+            guard let json = await web.safeEvaluate(ReaderScript.extract, world: ReaderScript.world) as? String,
+                  let article = ReaderArticle.parse(json, originalURL: url.absoluteString), article.isReadable else {
+                self.showToolNotice(ReaderPage.notReadableMessage()); return
+            }
+            tab.readerOrigin = url
+            web.loadHTMLString(ReaderPage.html(article), baseURL: url)
+        }
+    }
 }

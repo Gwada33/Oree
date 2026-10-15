@@ -192,8 +192,13 @@ final class Tab: NSObject {
     /// back/forward or reload, where WebKit already restores the position.
     var lastNavigationType: WKNavigationType = .other {
         // The user reloads, clicks a link or goes back: that load is theirs and shows (only the load that wakes a tab is silent).
-        didSet { if !isAwaitingWakeReveal, lastNavigationType != .other { silentWakeLoad = false } }
+        didSet {
+            if !isAwaitingWakeReveal, lastNavigationType != .other { silentWakeLoad = false }
+            if lastNavigationType != .other { readerOrigin = nil }          // leaving the reader: the page is the real one again
+        }
     }
+    /// The page this tab shows in reader mode (nil when it shows a page as it is).
+    var readerOrigin: URL?
     /// Set by the window: a page's night-mode script found its site already dark (the host is passed).
     static var nativeDarkReported: ((String) -> Void)?
     /// Set by the window: called when the user copies something that is one postal address.
@@ -326,7 +331,8 @@ final class Tab: NSObject {
         isDirty = false
         hasCommittedSinceWake = true
         media = nil
-        if silentWakeLoad, webView?.url != wakeURL { silentWakeLoad = false }   // the user went elsewhere: a real load
+        if silentWakeLoad, webView?.url != wakeURL { silentWakeLoad = false }
+        if let origin = readerOrigin, webView?.url != origin { readerOrigin = nil }   // another page was opened: no longer the reader   // the user went elsewhere: a real load
     }
 
     /// Reads field values and the video position before a forced teardown.
