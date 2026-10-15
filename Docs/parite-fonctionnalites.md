@@ -1,7 +1,7 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
-**140 fonctions examinées : 54 absentes (rien trouvé), 86 avec du code présent.**
+**140 fonctions examinées : 52 absentes (rien trouvé), 88 avec du code présent.**
 
 Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R), nouvelle fenêtre (⌘N) et déplacer un onglet vers une nouvelle fenêtre. Réparé : un plantage au téléchargement d’un fichier créé par la page (blob), le message d’une fenêtre de connexion qui se ferme (perdu), zoom de la page (⌘+ ⌘− ⌘0, mémorisé par site) et pincer pour zoomer (ils manquaient), mot de passe demandé par un site, liens mailto:/tel:/applications externes, choisir un fichier à envoyer (il ne faisait rien) et les fenêtres alert / confirm / prompt des pages (confirm répondait toujours non). Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
 
@@ -157,12 +157,12 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 |---|---|---|
 | Image dans l’image | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Commandes de lecture en cours dans le navigateur | ◐ code présent (à tester) | Chrome, Arc, Firefox, Edge, Vivaldi, Opera |
-| Contrôle de la vitesse de lecture des vidéos | ❌ absent | Chrome, Firefox, Edge, Vivaldi, Opera |
+| Contrôle de la vitesse de lecture des vidéos | ◐ code présent (à tester) | Chrome, Firefox, Edge, Vivaldi, Opera |
 | Diffusion vers une TV (Chromecast, AirPlay) | ❌ absent | Chrome, Safari, Edge, Opera |
 | Choix de la sortie audio | ◐ code présent (à tester) | Chrome, Firefox, Edge |
 | Gestion de l’autoplay | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Vidéos protégées (DRM) | ◐ géré par WebKit lui-même, jamais testé ici | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
-| Touches multimédia du clavier | ❌ absent | Chrome, Safari, Firefox, Edge, Opera |
+| Touches multimédia du clavier | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Opera |
 
 ## Développeurs
 

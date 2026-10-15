@@ -50,6 +50,8 @@ final class NowPlayingView: NSView {
     var onSkip: ((Double) -> Void)?
     var onSeek: ((Double) -> Void)?
     var onPictureInPicture: (() -> Void)?
+    /// Asked for the next playback speed.
+    var onRate: (() -> Void)?
     var onShowTab: (() -> Void)?
 
     private let box = SurfaceView(fill: Theme.raised, cornerRadius: 12)
@@ -64,6 +66,7 @@ final class NowPlayingView: NSView {
     private let play = ChromeIconButton(symbol: "pause.fill", label: "Pause")
     private let forward = ChromeIconButton(symbol: "goforward.10", label: "Avancer de 10 secondes")
     private let pip = ChromeIconButton(symbol: "pip.enter", label: "Image dans l’image")
+    private let rateButton = NSButton(title: "1×", target: nil, action: nil)
     private let deviceIcon = NSImageView()
     private let deviceLabel = oreeLabel("", font: Theme.sans(11), color: Theme.muted)
     private var collapsedHeight: NSLayoutConstraint!
@@ -102,9 +105,15 @@ final class NowPlayingView: NSView {
         texts.translatesAutoresizingMaskIntoConstraints = false
         texts.addGestureRecognizer(open)
 
+        rateButton.isBordered = false
+        rateButton.font = Theme.sans(11.5, .semibold)
+        rateButton.contentTintColor = Theme.muted
+        rateButton.target = self; rateButton.action = #selector(rateClicked)
+        rateButton.setAccessibilityLabel("Vitesse de lecture")
+        rateButton.translatesAutoresizingMaskIntoConstraints = false
         let controls = NSStackView(views: [back, play, forward]); controls.spacing = 4; controls.translatesAutoresizingMaskIntoConstraints = false
         let device = NSStackView(views: [deviceIcon, deviceLabel]); device.spacing = 4; device.translatesAutoresizingMaskIntoConstraints = false
-        [header, texts, pip, bar, elapsed, total, controls, device].forEach(box.addSubview)
+        [header, texts, pip, bar, elapsed, total, controls, rateButton, device].forEach(box.addSubview)
         NSLayoutConstraint.activate([
             box.topAnchor.constraint(equalTo: topAnchor, constant: 6), box.leadingAnchor.constraint(equalTo: leadingAnchor),
             box.trailingAnchor.constraint(equalTo: trailingAnchor), box.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -123,6 +132,7 @@ final class NowPlayingView: NSView {
             total.trailingAnchor.constraint(equalTo: bar.trailingAnchor), total.topAnchor.constraint(equalTo: elapsed.topAnchor),
 
             controls.topAnchor.constraint(equalTo: elapsed.bottomAnchor, constant: 2), controls.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+            rateButton.trailingAnchor.constraint(equalTo: bar.trailingAnchor), rateButton.centerYAnchor.constraint(equalTo: controls.centerYAnchor),
             device.topAnchor.constraint(equalTo: controls.bottomAnchor, constant: 4),
             device.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 10), device.trailingAnchor.constraint(lessThanOrEqualTo: box.trailingAnchor, constant: -10),
             device.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -9),
@@ -132,6 +142,7 @@ final class NowPlayingView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     @objc private func showTab() { onShowTab?() }
+    @objc private func rateClicked() { onRate?() }
 
     /// `deviceLine` e.g. "AirPods de Nolhan · 80 %"; nil hides the row's text (the speakers of the Mac still get an icon).
     func update(_ info: MediaInfo, host: String, deviceSymbol: String, deviceLine: String) {
@@ -146,6 +157,8 @@ final class NowPlayingView: NSView {
         pip.isHidden = !info.hasVideo
         pip.symbol = info.pictureInPicture ? "pip.exit" : "pip.enter"
         back.isEnabled = !info.isLive; forward.isEnabled = !info.isLive
+        rateButton.title = MediaPolicy.rateLabel(info.rate)
+        rateButton.contentTintColor = info.rate == 1 ? Theme.muted : Theme.accent       // a changed speed shows
         deviceIcon.image = .oreeSymbol(deviceSymbol, size: 11, weight: .regular) { Theme.muted }
         deviceLabel.stringValue = deviceLine
     }

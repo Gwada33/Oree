@@ -6,6 +6,7 @@ import BrowserStorage
 import BrowserSettingsUI
 import DownloadKit
 import OreeObjC
+import MediaPlayer
 
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
 
@@ -3103,6 +3104,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case "media":
             return "\(nowPlaying.summary) | tab=\(mediaTabID == tab.id ? "this" : "other") | out=\(audioRoute.output.name) bt=\(audioRoute.output.bluetooth)"
         case "mediatoggle": mediaCommand(tab, "toggle"); return "ok"
+        case "mediakey":
+            // Presses a media key's action (toggle by default), and reports what Control Center would show.
+            MediaKeys.shared.perform(.toggle)
+            let info = MPNowPlayingInfoCenter.default().nowPlayingInfo
+            return "title=\(info?[MPMediaItemPropertyTitle] as? String ?? "-") rate=\(info?[MPNowPlayingInfoPropertyPlaybackRate] ?? "-") state=\(MPNowPlayingInfoCenter.default().playbackState.rawValue)"
+        case "mediarate": mediaCommand(tab, "rate", MediaPolicy.nextRate(after: tab.media?.rate ?? 1)); return "ok"
         case "mediaskip": mediaCommand(tab, "skip", 10); return "ok"
         case "mediaseek": mediaCommand(tab, "seek", (tab.media?.duration ?? 0) / 2); return "ok"
         case "mediapip":
@@ -3238,7 +3245,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     func refreshNowPlaying() {
         guard let tab = mediaTab(), var info = tab.media else {
             mediaTabID = nil
-            if nowPlaying.isShown { nowPlaying.isShown = false; nowPlaying.setArtwork(nil); shownArtwork = nil }
+            if nowPlaying.isShown { nowPlaying.isShown = false; nowPlaying.setArtwork(nil); shownArtwork = nil; MediaKeys.shared.clear() }
             return
         }
         mediaTabID = tab.id
@@ -3251,8 +3258,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if let tab, let duration = tab.media?.duration, duration > 0 { self?.mediaCommand(tab, "seek", fraction * duration) }
         }
         nowPlaying.onPictureInPicture = { [weak self, weak tab] in if let tab { self?.mediaCommand(tab, "pip") } }
+        nowPlaying.onRate = { [weak self, weak tab] in
+            if let tab, let rate = tab.media?.rate { self?.mediaCommand(tab, "rate", MediaPolicy.nextRate(after: rate)) }
+        }
         nowPlaying.onShowTab = { [weak self, weak tab] in if let tab { self?.selectTab(tab) } }
         nowPlaying.isShown = true
+        MediaKeys.shared.update(info, host: host) { [weak self, weak tab] action in
+            guard let self, let tab else { return }
+            switch action {
+            case .play: self.mediaCommand(tab, "play")
+            case .pause: self.mediaCommand(tab, "pause")
+            case .toggle: self.mediaCommand(tab, "toggle")
+            case .skip(let seconds): self.mediaCommand(tab, "skip", seconds)
+            case .seek(let position): self.mediaCommand(tab, "seek", position)
+            }
+        }
         loadArtwork(info.artwork, private: tab.isPrivate)
         audioRoute.watchBattery { [weak self] in self?.nowPlaying.isShown == true }
     }

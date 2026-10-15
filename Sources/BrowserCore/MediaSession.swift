@@ -12,11 +12,13 @@ public struct MediaInfo: Equatable, Sendable, Codable {
     public var paused: Bool
     public var hasVideo: Bool
     public var pictureInPicture: Bool
+    /// Playback speed (1 = normal).
+    public var rate: Double
 
     public init(title: String = "", artist: String = "", artwork: String? = nil, position: Double = 0, duration: Double = 0,
-                paused: Bool = false, hasVideo: Bool = false, pictureInPicture: Bool = false) {
+                paused: Bool = false, hasVideo: Bool = false, pictureInPicture: Bool = false, rate: Double = 1) {
         self.title = title; self.artist = artist; self.artwork = artwork; self.position = position; self.duration = duration
-        self.paused = paused; self.hasVideo = hasVideo; self.pictureInPicture = pictureInPicture
+        self.paused = paused; self.hasVideo = hasVideo; self.pictureInPicture = pictureInPicture; self.rate = rate
     }
 
     public var isLive: Bool { !(duration.isFinite && duration > 0) }
@@ -31,11 +33,30 @@ public struct MediaInfo: Equatable, Sendable, Codable {
         let artwork = (object["artwork"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return MediaInfo(title: (object["title"] as? String) ?? "", artist: (object["artist"] as? String) ?? "", artwork: artwork,
                          position: number("position"), duration: number("duration"), paused: (object["paused"] as? Bool) ?? false,
-                         hasVideo: (object["video"] as? Bool) ?? false, pictureInPicture: (object["pip"] as? Bool) ?? false)
+                         hasVideo: (object["video"] as? Bool) ?? false, pictureInPicture: (object["pip"] as? Bool) ?? false,
+                         rate: MediaPolicy.validRate((object["rate"] as? NSNumber)?.doubleValue))
     }
 }
 
 public enum MediaPolicy {
+    /// The speeds the card steps through.
+    public static let rates: [Double] = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
+
+    /// A speed a page reports, kept inside what a player accepts (0.0625…16); anything else counts as normal speed.
+    public static func validRate(_ value: Double?) -> Double {
+        guard let value, value.isFinite, (0.0625...16).contains(value) else { return 1 }
+        return value
+    }
+
+    /// The next speed in the cycle after `rate` (from an odd speed, the next one above; after the fastest, back to the slowest).
+    public static func nextRate(after rate: Double) -> Double { rates.first { $0 > rate + 0.001 } ?? rates[0] }
+
+    /// "1×", "1,25×", "0,5×" (French decimal comma).
+    public static func rateLabel(_ rate: Double) -> String {
+        let text = rate == rate.rounded() ? String(Int(rate)) : String(format: "%g", rate).replacingOccurrences(of: ".", with: ",")
+        return text + "×"
+    }
+
     /// A card is worth showing for a real piece of media, not for a 2-second UI sound or a muted decorative loop.
     public static func isWorthShowing(_ info: MediaInfo, playing: Bool) -> Bool {
         if info.isLive { return playing }

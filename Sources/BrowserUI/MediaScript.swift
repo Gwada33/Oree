@@ -14,7 +14,7 @@ enum MediaScript {
         WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: world)
     }
 
-    /// `play`, `pause`, `toggle`, `seek` (seconds), `skip` (± seconds), `pip` (enter or leave picture in picture), `report` (answer now).
+    /// `play`, `pause`, `toggle`, `seek` (seconds), `skip` (± seconds), `rate` (speed), `pip` (enter or leave picture in picture), `report` (answer now).
     static func commandCall(_ name: String, value: Double = 0) -> (body: String, arguments: [String: Any]) {
         ("return window.__oreeMedia ? window.__oreeMedia.command(name, value) : 'no-script';", ["name": name, "value": value])
     }
@@ -45,11 +45,11 @@ enum MediaScript {
         send({
           title: (md && md.title) || document.title || '', artist: (md && md.artist) || '', artwork: art,
           position: Math.floor(v.currentTime), duration: isFinite(v.duration) ? Math.floor(v.duration) : 0,
-          paused: v.paused || v.ended, video: v.tagName === 'VIDEO' && v.videoWidth > 0, pip: inPiP(v),
+          paused: v.paused || v.ended, video: v.tagName === 'VIDEO' && v.videoWidth > 0, pip: inPiP(v), rate: v.playbackRate,
         });
       }
       // Media events do not bubble: listen in the capture phase on the document.
-      for (const type of ['play', 'playing', 'pause', 'ended', 'seeked', 'loadedmetadata', 'durationchange', 'emptied', 'enterpictureinpicture', 'leavepictureinpicture', 'webkitpresentationmodechanged'])
+      for (const type of ['play', 'playing', 'pause', 'ended', 'seeked', 'loadedmetadata', 'durationchange', 'emptied', 'enterpictureinpicture', 'leavepictureinpicture', 'webkitpresentationmodechanged', 'ratechange'])
         document.addEventListener(type, report, true);
       document.addEventListener('timeupdate', () => {
         const now = Date.now();
@@ -68,6 +68,7 @@ enum MediaScript {
             case 'toggle': v.paused ? v.play() : v.pause(); break;
             case 'seek': if (isFinite(v.duration)) v.currentTime = Math.max(0, Math.min(value, v.duration)); break;
             case 'skip': v.currentTime = Math.max(0, v.currentTime + value); break;
+            case 'rate': v.playbackRate = Math.max(0.0625, Math.min(16, value)); break;
             case 'pip':
               if (inPiP(v)) { if (document.exitPictureInPicture && document.pictureInPictureElement) document.exitPictureInPicture(); else v.webkitSetPresentationMode('inline'); }
               else if (v.requestPictureInPicture) v.requestPictureInPicture().catch(e => { try { v.webkitSetPresentationMode('picture-in-picture'); } catch (_) {} });

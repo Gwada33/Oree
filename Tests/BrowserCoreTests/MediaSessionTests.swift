@@ -53,4 +53,25 @@ import Foundation
         #expect(devices.first { $0.name == "Clavier" }?.shownLevel == nil)
         #expect(BluetoothAudioDevice.parse(profilerJSON: Data("x".utf8)).isEmpty)
     }
+
+    @Test func speedCyclesThroughTheLevels() {
+        #expect(MediaPolicy.nextRate(after: 1) == 1.25)
+        #expect(MediaPolicy.nextRate(after: 2) == 0.5)                // after the fastest: back to the slowest
+        #expect(MediaPolicy.nextRate(after: 1.1) == 1.25)             // a page set an odd speed
+        #expect(MediaPolicy.nextRate(after: 0.3) == 0.5)
+    }
+
+    @Test func speedLabelsUseTheFrenchComma() {
+        #expect(MediaPolicy.rateLabel(1) == "1×")
+        #expect(MediaPolicy.rateLabel(1.25) == "1,25×")
+        #expect(MediaPolicy.rateLabel(0.5) == "0,5×")
+        #expect(MediaPolicy.rateLabel(2) == "2×")
+    }
+
+    @Test func aReportedSpeedIsKeptSane() throws {
+        #expect(MediaInfo.parse(#"{"title":"t","duration":100,"rate":1.5}"#)?.rate == 1.5)
+        #expect(MediaInfo.parse(#"{"title":"t","duration":100}"#)?.rate == 1)
+        #expect(MediaInfo.parse(#"{"title":"t","duration":100,"rate":0}"#)?.rate == 1)
+        #expect(MediaInfo.parse(#"{"title":"t","duration":100,"rate":999}"#)?.rate == 1)
+    }
 }
