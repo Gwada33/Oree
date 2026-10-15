@@ -56,3 +56,19 @@ struct HistoryRepositoryTests {
         #expect(try repo.recent().isEmpty)
     }
 }
+
+extension HistoryRepositoryTests {
+    @Test func addressesContainingTextComeMostVisitedFirstAndWildcardsAreLiteral() throws {
+        let (database, cleanup) = try makeTestDatabase()
+        defer { cleanup() }
+        let repo = HistoryRepository(database: database)
+        try repo.recordVisit(url: "https://github.com/a", title: "A")
+        try repo.recordVisit(url: "https://github.io/b", title: "B")
+        try repo.recordVisit(url: "https://github.io/b", title: "B")          // visited twice: first
+        try repo.recordVisit(url: "https://exemple.fr/100%_fini", title: "C")
+        #expect(try repo.addresses(containing: "github") == ["https://github.io/b", "https://github.com/a"])
+        #expect(try repo.addresses(containing: "100%_") == ["https://exemple.fr/100%_fini"])
+        #expect(try repo.addresses(containing: "%").count == 1)                // "%" alone is a character, not "everything"
+        #expect(try repo.addresses(containing: "zzz").isEmpty)
+    }
+}

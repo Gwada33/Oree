@@ -46,6 +46,16 @@ public struct HistoryRepository: Sendable {
         }
     }
 
+    /// Addresses containing `text`, most visited first (then most recent): the raw material of the address bar's inline completion.
+    public func addresses(containing text: String, limit: Int = 40) throws -> [String] {
+        let escaped = text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
+        return try dbPool.read { db in
+            try String.fetchAll(db, sql: """
+                SELECT url FROM history WHERE url LIKE ? ESCAPE '\\' ORDER BY visitCount DESC, lastVisitedAt DESC LIMIT ?
+                """, arguments: ["%\(escaped)%", limit])
+        }
+    }
+
     public func clear() throws {
         try dbPool.write { db in _ = try HistoryEntry.deleteAll(db) }
     }

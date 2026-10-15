@@ -817,6 +817,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         moreButton.onClick = { [weak self] in self?.openPalette(initialText: "", selectAll: false, opensInNewTab: true) }
         addressPill.onClick = { [weak self] in self?.focusAddressBar() }
         addressPill.onIconClick = { [weak self] in self?.showSiteInfo() }
+        addressPill.onComplete = { [weak self] typed in self?.inlineCompletion(for: typed) }
         let bar = ToolbarView(pill: addressPill)
         toolbar = bar
         splitButton.onClick = { [weak self] in self?.toggleSplit() }
@@ -2085,6 +2086,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         addressDropdown.show(sections)
     }
 
+    /// What the address bar can finish `typed` with, from the favorites and the history (most visited first).
+    func inlineCompletion(for typed: String) -> String? {
+        let text = typed.trimmingCharacters(in: .whitespaces)
+        guard text.count >= 2 else { return nil }
+        let favorites = ((try? bookmarkRepo.all()) ?? []).map(\.url)
+        let visited = (try? historyRepo.addresses(containing: text.components(separatedBy: "/").first ?? text)) ?? []
+        return InlineCompletion.completion(for: typed, candidates: favorites + visited)
+    }
+
     private func endAddressEditing() {
         addressPill.endEditing()
         addressDropdown.hide()
@@ -3122,6 +3132,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             let items = ((try? bookmarkRepo.all()) ?? []).map { BookmarkExport.Item(title: $0.title, url: $0.url, folder: $0.spaceIndex.flatMap { spaces.indices.contains($0) ? spaces[$0].name : nil } ?? "Tous les espaces", added: $0.createdAt) }
             try? BookmarkExport.html(items).write(toFile: "/tmp/oree-bookmarks.html", atomically: true, encoding: .utf8)
             return "exported \(items.count)"
+        case "complete":
+            guard let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no file" }
+            return inlineCompletion(for: text) ?? "(nothing)"
         case "siteinfo": showSiteInfo(); return "shown"
         case "siteinfotext":
             func texts(_ view: NSView) -> [String] { ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts) }

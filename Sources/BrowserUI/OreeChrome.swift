@@ -447,6 +447,9 @@ final class AddressPillView: SurfaceView, NSTextFieldDelegate {
     var onCommit: ((String, _ newTab: Bool) -> Void)?
     var onMove: ((Int) -> Void)?
     var onEndEditing: (() -> Void)?
+    /// Asked after each typed character: the text the bar could finish with ("gith" → "github.com"), if any.
+    var onComplete: ((String) -> String?)?
+    private var lastEditWasDeletion = false
     private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private let field = NSTextField()
@@ -573,7 +576,16 @@ final class AddressPillView: SurfaceView, NSTextFieldDelegate {
         show(url: shownURL)
     }
 
-    func controlTextDidChange(_ obj: Notification) { onTextChange?(field.stringValue) }
+    func controlTextDidChange(_ obj: Notification) {
+        let typed = field.stringValue
+        onTextChange?(typed)
+        defer { lastEditWasDeletion = false }
+        // Finish the address in a selected tail, so that the next key replaces it (never after a deletion, or backspace would fight us).
+        guard !lastEditWasDeletion, let editor = field.currentEditor() as? NSTextView, editor.selectedRange.location == (typed as NSString).length,
+              let full = onComplete?(typed), full.count > typed.count, full.lowercased().hasPrefix(typed.lowercased()) else { return }
+        field.stringValue = full
+        editor.setSelectedRange(NSRange(location: (typed as NSString).length, length: (full as NSString).length - (typed as NSString).length))
+    }
 
     func controlTextDidEndEditing(_ obj: Notification) {
         // Return/Escape are handled in doCommandBy; this is the "clicked elsewhere" path.
@@ -587,6 +599,8 @@ final class AddressPillView: SurfaceView, NSTextFieldDelegate {
         case #selector(NSResponder.insertNewline(_:)): onCommit?(field.stringValue, false); return true
         case #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)): onCommit?(field.stringValue, true); return true
         case #selector(NSResponder.cancelOperation(_:)): onEndEditing?(); return true
+        case #selector(NSResponder.deleteBackward(_:)), #selector(NSResponder.deleteForward(_:)), #selector(NSResponder.deleteWordBackward(_:)),
+             #selector(NSResponder.deleteToBeginningOfLine(_:)): lastEditWasDeletion = true; return false
         default: return false
         }
     }
