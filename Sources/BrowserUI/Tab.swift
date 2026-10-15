@@ -416,6 +416,7 @@ final class Tab: NSObject {
         let webView = OreeWebView(frame: .zero, configuration: configuration)
         webView.tab = self
         webView.allowsBackForwardNavigationGestures = true
+        webView.allowsMagnification = true          // pinch to zoom, as in Safari
         webView.isInspectable = SettingsStore.shared.webInspectorEnabled
         // Invisible until the first content commits, so the user sees the dark
         // card instead of WKWebView's white default background flashing.

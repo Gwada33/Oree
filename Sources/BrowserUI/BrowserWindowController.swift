@@ -3178,6 +3178,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }),
                   let responder = other.window?.firstResponder else { return "no secondary window" }
             return "handled=\(responder.tryToPerform(#selector(BrowserWindowController.newTabAction), with: nil))"
+        case "zoomin": zoomInAction(); return "zoom=\(tab.webView?.pageZoom ?? 0)"
+        case "zoomout": zoomOutAction(); return "zoom=\(tab.webView?.pageZoom ?? 0)"
+        case "zoomreset": zoomResetAction(); return "zoom=\(tab.webView?.pageZoom ?? 0)"
+        case "zoomget": return "zoom=\(tab.webView?.pageZoom ?? 0) magnification=\(tab.webView?.allowsMagnification ?? false) memory=\(SettingsStore.shared.siteZoom)"
         case "reader": toggleReaderMode(); return "toggled"
         case "siteinfo": showSiteInfo(); return "shown"
         case "siteinfotext":
@@ -4697,6 +4701,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard let tab = tab(for: webView) else { return }
         noteNavigation("commit", webView)
+        applySiteZoom(to: webView)
         tab.interstitial.hide()
         tab.pageDidCommit()
         refreshNowPlaying()        // a new page: whatever the old one played is over

@@ -202,6 +202,13 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.chromeUserAgentHosts") }
     }
 
+    /// Zoom remembered per site (host → factor). Tests and benchmarks (`HB_DB_PATH`) use their own key, never the real one.
+    public var siteZoom: [String: Double] {
+        get { defaults.dictionary(forKey: Self.siteZoomKey) as? [String: Double] ?? [:] }
+        set { defaults.set(newValue, forKey: Self.siteZoomKey) }
+    }
+    private static let siteZoomKey = "settings.siteZoom" + (ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "" : ".bench")
+
     /// Search shortcuts added by the user ("wk" + space + words).
     public var customSearchShortcuts: [SearchShortcut] {
         get { defaults.data(forKey: "settings.customSearchShortcuts").flatMap { try? JSONDecoder().decode([SearchShortcut].self, from: $0) } ?? [] }

@@ -1,9 +1,9 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
-**137 fonctions examinées : 54 absentes (rien trouvé), 83 avec du code présent.**
+**140 fonctions examinées : 54 absentes (rien trouvé), 86 avec du code présent.**
 
-Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R), nouvelle fenêtre (⌘N) et déplacer un onglet vers une nouvelle fenêtre. Réparé : choisir un fichier à envoyer (il ne faisait rien) et les fenêtres alert / confirm / prompt des pages (confirm répondait toujours non). Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
+Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R), nouvelle fenêtre (⌘N) et déplacer un onglet vers une nouvelle fenêtre. Réparé : zoom de la page (⌘+ ⌘− ⌘0, mémorisé par site) et pincer pour zoomer (ils manquaient), mot de passe demandé par un site, liens mailto:/tel:/applications externes, choisir un fichier à envoyer (il ne faisait rien) et les fenêtres alert / confirm / prompt des pages (confirm répondait toujours non). Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
 
 
 - **Absent** : aucun code correspondant trouvé. Probablement absent, mais une fonction peut exister sous un autre nom que celui cherché.
@@ -197,6 +197,9 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Mode économie d’énergie | ❌ absent | Chrome, Edge, Brave, Opera |
 | Choisir un fichier à envoyer (champ « fichier » des formulaires) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Fenêtres alert / confirm / prompt des pages | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
+| Mot de passe demandé par un site (HTTP basic, serveur mandataire) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
+| Liens mailto:, tel: et applications externes | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
+| Pincer pour zoomer | ◐ code présent (à tester) | Safari, Chrome, Firefox, Edge, Brave |
 | Gestionnaire de tâches (mémoire par onglet) | ❌ absent | Chrome, Edge, Firefox, Vivaldi, Opera |
 | Préchargement des pages probables | ◐ code présent (à tester) | Chrome, Edge, Firefox, Brave |
 | Accélération matérielle réglable | ❌ absent | Chrome, Firefox, Edge, Brave, Vivaldi, Opera |

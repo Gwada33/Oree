@@ -63,6 +63,10 @@ public final class MenuBuilder {
         addCommand("address", to: fileMenu, selector: #selector(BrowserWindowController.focusAddressBar))
         addCommand("sidebar", to: fileMenu, selector: #selector(BrowserWindowController.toggleSidebar))
         fileMenu.addItem(.separator())
+        addCommand("zoomIn", to: fileMenu, selector: #selector(BrowserWindowController.zoomInAction))
+        addCommand("zoomOut", to: fileMenu, selector: #selector(BrowserWindowController.zoomOutAction))
+        addCommand("zoomReset", to: fileMenu, selector: #selector(BrowserWindowController.zoomResetAction))
+        fileMenu.addItem(.separator())
         addResponderItem(to: fileMenu, title: "Plein écran", selector: #selector(NSWindow.toggleFullScreen(_:)), key: "f", modifiers: [.command, .control])
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)

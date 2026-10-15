@@ -97,4 +97,27 @@ extension BrowserWindowController {
             web.loadHTMLString(ReaderPage.html(article), baseURL: url)
         }
     }
+
+    // MARK: Zoom
+
+    @objc func zoomInAction() { changeZoom { ZoomPolicy.zoomedIn(from: $0) } }
+    @objc func zoomOutAction() { changeZoom { ZoomPolicy.zoomedOut(from: $0) } }
+    @objc func zoomResetAction() { changeZoom { _ in 1 } }
+
+    /// ⌘+ ⌘− ⌘0: the page is zoomed, and the site keeps that zoom for its next visits.
+    private func changeZoom(_ next: (Double) -> Double) {
+        guard let web = activeTab?.webView else { NSSound.beep(); return }
+        let zoom = next(Double(web.pageZoom))
+        web.pageZoom = CGFloat(zoom)
+        if let key = ZoomPolicy.key(for: web.url) {
+            SettingsStore.shared.siteZoom = ZoomPolicy.updated(SettingsStore.shared.siteZoom, key: key, zoom: zoom)
+        }
+        presentNotice("Zoom \(ZoomPolicy.label(zoom))")
+    }
+
+    /// A page is shown at the zoom its site had last time.
+    func applySiteZoom(to web: WKWebView) {
+        let zoom = CGFloat(ZoomPolicy.zoom(for: web.url, memory: SettingsStore.shared.siteZoom))
+        if web.pageZoom != zoom { web.pageZoom = zoom }
+    }
 }
