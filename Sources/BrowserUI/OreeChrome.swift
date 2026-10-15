@@ -342,6 +342,9 @@ final class RailTabView: HoverView {
     override func accessibilityPerformPress() -> Bool { onClick?(); return true }
 }
 
+/// Top-aligned document of the rail's scrolling tab list.
+private final class RailDocumentView: NSView { override var isFlipped: Bool { true } }
+
 /// The 52 pt column on the far left: one spine per space, "+" to add one, overview and settings at the bottom.
 @MainActor
 final class SpaceRailView: NSView {
@@ -361,6 +364,15 @@ final class SpaceRailView: NSView {
     private var buttons: [SpineButton] = []
     private var compact = false
     private let strip = NSStackView()
+    private let stripScroll = NSScrollView()
+    private let document = RailDocumentView()
+
+    override func layout() {
+        super.layout()
+        let size = strip.fittingSize
+        document.frame = NSRect(x: 0, y: 0, width: 40, height: max(size.height, stripScroll.bounds.height))
+        strip.frame = NSRect(x: (40 - size.width) / 2, y: 0, width: size.width, height: size.height)
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -378,14 +390,27 @@ final class SpaceRailView: NSView {
         strip.spacing = 2
         strip.alignment = .centerX
         strip.translatesAutoresizingMaskIntoConstraints = false
+        // The tab icons scroll between the spaces and the bottom buttons: with many tabs (or a short screen) the list must never run under them or off the window.
+        strip.translatesAutoresizingMaskIntoConstraints = true      // framed by hand in layout(): the list scrolls inside its clip view
+        document.addSubview(strip)
+        stripScroll.documentView = document
+        stripScroll.drawsBackground = false
+        stripScroll.hasVerticalScroller = false
+        stripScroll.hasHorizontalScroller = false
+        stripScroll.verticalScrollElasticity = .allowed
+        stripScroll.horizontalScrollElasticity = .none
+        stripScroll.automaticallyAdjustsContentInsets = false
+        stripScroll.translatesAutoresizingMaskIntoConstraints = false
         addSubview(spines)
-        addSubview(strip)
+        addSubview(stripScroll)
         addSubview(bottom)
         NSLayoutConstraint.activate([
             spinesTop,
             spines.centerXAnchor.constraint(equalTo: centerXAnchor),
-            strip.topAnchor.constraint(equalTo: spines.bottomAnchor, constant: 14),
-            strip.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stripScroll.topAnchor.constraint(equalTo: spines.bottomAnchor, constant: 14),
+            stripScroll.bottomAnchor.constraint(equalTo: bottom.topAnchor, constant: -8),
+            stripScroll.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stripScroll.widthAnchor.constraint(equalToConstant: 40),
             bottom.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
             bottom.centerXAnchor.constraint(equalTo: centerXAnchor),
         ])
@@ -425,7 +450,9 @@ final class SpaceRailView: NSView {
             let view = RailTabView(title: t.title, host: t.host, active: t.active, sleeping: t.sleeping)
             view.onClick = t.onClick
             strip.addArrangedSubview(view)
+            if t.active { DispatchQueue.main.async { [weak view] in view?.scrollToVisible(view?.bounds ?? .zero) } }
         }
+        needsLayout = true
     }
 
     func select(_ index: Int) {
@@ -1126,6 +1153,10 @@ final class TabStripView: NSView {
     let tabsStack = NSStackView()
     let spaceChip = SpaceChipButton()
     let newTabButton = ChromeIconButton(symbol: "plus", label: "Nouvel onglet  ⌘T")
+    /// Appears when the tabs no longer fit: lists every tab of the space.
+    let overflowButton = ChromeIconButton(symbol: "chevron.down", label: "Tous les onglets")
+    /// The tab that must stay visible even when the strip is full (the one in front).
+    weak var activeTabView: NSView?
     /// The room right of the space chip: the tabs and the + button share exactly this width, no scrolling.
     private let tabsHost = NSView()
     private lazy var chipLeading = spaceChip.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 92)
@@ -1144,7 +1175,7 @@ final class TabStripView: NSView {
         [spaceChip, tabsHost].forEach(addSubview)   // the + button lives at the end of `tabsStack`, right after the last tab
         // Optional trailing edge: with an absurd number of tabs the strip overflows instead of breaking layout.
         let trailing = tabsStack.trailingAnchor.constraint(lessThanOrEqualTo: tabsHost.trailingAnchor)
-        trailing.priority = .init(600)
+        trailing.priority = .init(480)   // under dragThatCannotResizeWindow: a long row of tabs must never stretch the window; fitTabs shrinks and hides tabs instead
         NSLayoutConstraint.activate([
             chipLeading,
             spaceChip.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -1165,25 +1196,46 @@ final class TabStripView: NSView {
     }
 
     /// Shares the host's width between the tabs (group chips keep their own width): 190 pt at most, 56 pt at least.
+    /// When even 56 pt each is too much, the first tabs that fit stay (the one in front always does), the rest hide behind the ▾ button.
     private func fitTabs() {
         let available = tabsHost.bounds.width
-        let items = tabsStack.arrangedSubviews
-        let tabs = items.compactMap { $0 as? TabButtonView }
+        let tabs = allTabs
         guard available > 0, !tabs.isEmpty else { return }
-        let others = items.filter { !($0 is TabButtonView) }.reduce(CGFloat(0)) { $0 + $1.fittingSize.width }
-        let gaps = CGFloat(items.count - 1) * tabsStack.spacing
-        let width = max(56, min(190, floor((available - others - gaps) / CGFloat(tabs.count))))
-        for tab in tabs { tab.setStripWidth(width) }
+        let minWidth: CGFloat = 56
+        let groupChips = tabsStack.arrangedSubviews.filter { !($0 is TabButtonView) && $0 !== newTabButton && $0 !== overflowButton }.reduce(CGFloat(0)) { $0 + $1.fittingSize.width + tabsStack.spacing }
+        let plus = newTabButton.fittingSize.width + tabsStack.spacing
+        let fitsAll = floor((available - groupChips - plus - CGFloat(tabs.count - 1) * tabsStack.spacing) / CGFloat(tabs.count)) >= minWidth
+        let overflowRoom = overflowButton.fittingSize.width + tabsStack.spacing
+        let capacity = fitsAll ? tabs.count : max(1, Int(floor((available - groupChips - plus - overflowRoom + tabsStack.spacing) / (minWidth + tabsStack.spacing))))
+        var visible = Array(tabs.prefix(capacity))
+        if let active = activeTabView, let at = tabs.firstIndex(where: { $0 === active }), !visible.contains(where: { $0 === active }) { visible[visible.count - 1] = tabs[at] }
+        let width = max(minWidth, min(190, floor((available - groupChips - plus - (fitsAll ? 0 : overflowRoom) - CGFloat(visible.count - 1) * tabsStack.spacing) / CGFloat(visible.count))))
+        for tab in tabs {
+            let show = visible.contains { $0 === tab }
+            if tab.isHidden == show { tab.isHidden = !show }
+            if show { (tab as? TabButtonView)?.setStripWidth(width) }
+        }
+        overflowButton.isHidden = fitsAll
     }
+
+    private var allTabs: [TabButtonView] { tabsStack.arrangedSubviews.compactMap { $0 as? TabButtonView } }
 
     /// Re-share the width after the tab list changed. The + button goes (back) after the last tab.
     func tabsChanged() {
-        if newTabButton.superview !== tabsStack || tabsStack.arrangedSubviews.last !== newTabButton { tabsStack.addArrangedSubview(newTabButton) }
+        // ▾ then +, always last, in that order.
+        let tail = Array(tabsStack.arrangedSubviews.suffix(2))
+        if tail.count < 2 || tail[0] !== overflowButton || tail[1] !== newTabButton {
+            for button in [overflowButton, newTabButton] {
+                if tabsStack.arrangedSubviews.contains(button) { tabsStack.removeArrangedSubview(button) }
+                button.removeFromSuperview()
+            }
+            tabsStack.addArrangedSubview(overflowButton)
+            tabsStack.addArrangedSubview(newTabButton)
+            overflowButton.isHidden = true
+        }
         needsLayout = true
     }
 
-    /// Kept for callers: every tab is always in view now.
-    func reveal(_ view: NSView) {}
 }
 
 /// Group label in the horizontal strip: a small tinted chip.

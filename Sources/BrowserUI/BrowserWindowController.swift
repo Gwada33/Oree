@@ -928,6 +928,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         stripH.isActive = true
         tabStrip.spaceChip.onClick = { [weak self] in self?.openOverview() }
         tabStrip.newTabButton.onClick = { [weak self] in self?.newTabAction() }
+        tabStrip.overflowButton.onClick = { [weak self] in self?.showAllTabsMenu() }
         NSLayoutConstraint.activate([
             sidebarTopConstraint, sidebarBottomConstraint,
             sideLead, mainLead,
@@ -2569,7 +2570,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         activeTabID = tab.id
         tab.contentSlot.isHidden = false
         tab.tabButton.isActive = true
-        if SettingsStore.shared.tabLayout == .horizontal, tab.tabButton.superview === tabStrip.tabsStack { tabStrip.reveal(tab.tabButton) }
+        if SettingsStore.shared.tabLayout == .horizontal, tab.tabButton.superview === tabStrip.tabsStack { tabStrip.activeTabView = tab.tabButton; tabStrip.needsLayout = true }
         if switching {
             tab.contentSlot.alphaValue = 0
             Motion.animate(Motion.quick) { tab.contentSlot.animator().alphaValue = 1 }
@@ -2724,10 +2725,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         if horizontal {
             tabStrip.spaceChip.configure(currentSpaceStyle)
+            tabStrip.activeTabView = activeTab?.tabButton
             tabStrip.tabsChanged()
-            if let active = activeTab, active.tabButton.superview === tabStrip.tabsStack { tabStrip.reveal(active.tabButton) }
         }
         updateTabCount()
+    }
+
+    /// The ▾ button of a full tab strip: every tab of this space, the one in front ticked; a pick brings it to the front.
+    private func showAllTabsMenu() {
+        let menu = NSMenu()
+        for tab in tabs where tab.spaceIndex == currentSpace {
+            let item = ClosureMenuItem(title: tab.displayTitle.isEmpty ? (tab.badgeHost.isEmpty ? "Nouvel onglet" : tab.badgeHost) : tab.displayTitle) { [weak self, weak tab] in if let tab { self?.selectTab(tab) } }
+            item.state = tab.id == activeTabID ? .on : .off
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: tabStrip.overflowButton.bounds.height + 4), in: tabStrip.overflowButton)
     }
 
     private var inlineNewTabRow: SidebarRowView?
@@ -3351,6 +3363,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if let content = window?.contentView { walk(content) }
             return out
         case "size": return "\(window?.frame.size ?? .zero) isMini=\(isMini)"
+        case "manytabs":
+            for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
+            return "tabs=\(tabs.count)"
+        case "stripreport":
+            tabStrip.layoutSubtreeIfNeeded()
+            let buttons = tabStrip.tabsStack.arrangedSubviews.compactMap { $0 as? TabButtonView }
+            let shown = buttons.filter { !$0.isHidden }
+            return "tabs=\(buttons.count) shown=\(shown.count) overflow=\(!tabStrip.overflowButton.isHidden) activeShown=\(activeTab.map { !$0.tabButton.isHidden } ?? false) stripW=\(Int(tabStrip.tabsStack.frame.width)) hostW=\(Int(tabStrip.frame.width)) plusX=\(Int(tabStrip.newTabButton.frame.maxX))"
+        case "overflowmenu": showAllTabsMenu(); return "menu"
+        case "railreport":
+            return "rail=\(spaceRail.frame) compactMode=\(SettingsStore.shared.sidebarMode)"
         case "peek":
             guard let url = URL(string: ProcessInfo.processInfo.environment["HB_PEEK_URL"] ?? "https://example.com") else { return "bad url" }
             peek(url, from: tab); return "peek"

@@ -524,7 +524,7 @@ public final class SettingsStore: @unchecked Sendable {
 
     public var sidebarMode: SidebarMode {
         get {
-            let raw = defaults.string(forKey: Key.sidebarMode) ?? ""
+            let raw = ProcessInfo.processInfo.environment["HB_SIDEBAR_MODE"] ?? defaults.string(forKey: Key.sidebarMode) ?? ""   // HB_SIDEBAR_MODE: essais
             return SidebarMode(rawValue: raw == "overlay" ? "floating" : raw) ?? .fixed   // "Superposée" was folded into "Au survol"
         }
         set { defaults.set(newValue.rawValue, forKey: Key.sidebarMode) }
@@ -572,7 +572,7 @@ public final class SettingsStore: @unchecked Sendable {
     }
 
     public var tabLayout: TabLayout {
-        get { TabLayout(rawValue: defaults.string(forKey: Key.tabLayout) ?? "") ?? .vertical }
+        get { TabLayout(rawValue: ProcessInfo.processInfo.environment["HB_TAB_LAYOUT"] ?? defaults.string(forKey: Key.tabLayout) ?? "") ?? .vertical }   // HB_TAB_LAYOUT: essais
         set { defaults.set(newValue.rawValue, forKey: Key.tabLayout) }
     }
 
