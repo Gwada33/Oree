@@ -9,20 +9,50 @@ public enum AppearanceMode: String, CaseIterable, Sendable, Codable {
 public enum SearchEngine: String, CaseIterable, Sendable {
     case google
     case duckduckgoLite
+    case duckduckgo
+    case bing
+    case brave
+    case qwant
+    case ecosia
+    case startpage
 
     public var displayName: String {
         switch self {
         case .google: return "Google"
         case .duckduckgoLite: return "DuckDuckGo Lite (zéro JS, le plus léger)"
+        case .duckduckgo: return "DuckDuckGo"
+        case .bing: return "Bing"
+        case .brave: return "Brave Search"
+        case .qwant: return "Qwant"
+        case .ecosia: return "Ecosia"
+        case .startpage: return "Startpage"
         }
     }
 
+    /// Short name for messages ("« chat » sur Google").
+    public var shortName: String {
+        switch self {
+        case .duckduckgoLite, .duckduckgo: return "DuckDuckGo"
+        default: return displayName
+        }
+    }
+
+    /// The address a search is sent to (the query goes in the `q` parameter).
     public var queryURL: String {
         switch self {
         case .google: return "https://www.google.com/search"
         case .duckduckgoLite: return "https://lite.duckduckgo.com/lite/"
+        case .duckduckgo: return "https://duckduckgo.com/"
+        case .bing: return "https://www.bing.com/search"
+        case .brave: return "https://search.brave.com/search"
+        case .qwant: return "https://www.qwant.com/"
+        case .ecosia: return "https://www.ecosia.org/search"
+        case .startpage: return "https://www.startpage.com/do/search"
         }
     }
+
+    /// Same address with the query to fill in (`%s`).
+    public var template: String { queryURL + "?q=%s" }
 }
 
 /// App preferences, backed by `UserDefaults` (the standard, lightweight
@@ -152,6 +182,18 @@ public final class SettingsStore: @unchecked Sendable {
             Key.homeShowsFavorites: true,
             Key.homeShowsSpaces: true,
         ])
+    }
+
+    /// Search shortcuts added by the user ("wk" + space + words).
+    public var customSearchShortcuts: [SearchShortcut] {
+        get { defaults.data(forKey: "settings.customSearchShortcuts").flatMap { try? JSONDecoder().decode([SearchShortcut].self, from: $0) } ?? [] }
+        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "settings.customSearchShortcuts") }
+    }
+
+    /// Where downloads go; empty = the system Downloads folder.
+    public var downloadDirectoryPath: String {
+        get { defaults.string(forKey: "settings.downloadDirectory") ?? "" }
+        set { defaults.set(newValue, forKey: "settings.downloadDirectory") }
     }
 
     public var searchEngine: SearchEngine {

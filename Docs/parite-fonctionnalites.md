@@ -1,9 +1,7 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
-**135 fonctions examinées : 66 absentes (rien trouvé), 69 avec du code présent.**
-
-Mis à jour le 14 octobre 2026 (soir) : impression (⌘P), enregistrement en PDF (⇧⌘S) et affichage du code source (⌥⌘U) ajoutés.
+**135 fonctions examinées : 64 absentes (rien trouvé), 71 avec du code présent.**
 
 
 - **Absent** : aucun code correspondant trouvé. Probablement absent, mais une fonction peut exister sous un autre nom que celui cherché.
@@ -67,7 +65,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Fonction | Orée | Qui l’a |
 |---|---|---|
 | Moteurs de recherche au choix | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
-| Moteurs et mots-clés personnalisés (« w » + Tab) | ❌ absent | Chrome, Firefox, Edge, Vivaldi, Opera, Brave |
+| Moteurs et mots-clés personnalisés (« w » + Tab) | ◐ code présent (à tester) | Chrome, Firefox, Edge, Vivaldi, Opera, Brave |
 | Suggestions de recherche en ligne | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Recherche dans les onglets, favoris et historique depuis la barre | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Vivaldi, Opera |
 | Calculatrice et conversions dans la barre | ❌ absent | Chrome, Edge, Vivaldi, Arc |
@@ -127,7 +125,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Gestionnaire de téléchargements | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Reprise de téléchargement interrompu | ◐ code présent (à tester) | Chrome, Firefox, Edge, Brave, Vivaldi, Opera |
 | Téléchargement en plusieurs connexions | ◐ code présent (à tester) | Vivaldi, Opera |
-| Choisir le dossier de téléchargement / demander à chaque fois | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
+| Choisir le dossier de téléchargement / demander à chaque fois | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Ouvrir automatiquement les fichiers sûrs | ❌ absent | Safari, Chrome |
 | Historique avec recherche et suppression ciblée | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 

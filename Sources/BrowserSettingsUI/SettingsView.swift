@@ -64,6 +64,37 @@ final class SettingsViewModel: ObservableObject {
     @Published var extensionMessage: String?
 
     @Published var searchEngine: SearchEngine { didSet { settings.searchEngine = searchEngine } }
+    @Published var customShortcuts: [SearchShortcut] = []
+    @Published var newShortcutName = ""
+    @Published var newShortcutKeyword = ""
+    @Published var newShortcutTemplate = ""
+    @Published var shortcutMessage: String?
+    @Published var downloadDirectory = ""
+
+    var newShortcut: SearchShortcut { SearchShortcut(name: newShortcutName, keyword: newShortcutKeyword.lowercased(), template: newShortcutTemplate) }
+
+    func addShortcut() {
+        let shortcut = newShortcut
+        guard shortcut.isValid else { shortcutMessage = "Il faut un nom, un mot-clé court sans espace, et une adresse http(s) qui contient %s."; return }
+        if customShortcuts.contains(where: { $0.keyword == shortcut.keyword }) { shortcutMessage = "Ce mot-clé existe déjà."; return }
+        customShortcuts.append(shortcut)
+        settings.customSearchShortcuts = customShortcuts
+        newShortcutName = ""; newShortcutKeyword = ""; newShortcutTemplate = ""; shortcutMessage = nil
+    }
+
+    func removeShortcut(_ keyword: String) {
+        customShortcuts.removeAll { $0.keyword == keyword }
+        settings.customSearchShortcuts = customShortcuts
+    }
+
+    func chooseDownloadFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.prompt = "Choisir"; panel.message = "Dossier où enregistrer les téléchargements"
+        if panel.runModal() == .OK, let url = panel.url { downloadDirectory = url.path; settings.downloadDirectoryPath = url.path }
+    }
+
+    func resetDownloadFolder() { downloadDirectory = ""; settings.downloadDirectoryPath = "" }
     @Published var homepageURL: String {
         didSet { settings.customHomepageURL = homepageURL.trimmingCharacters(in: .whitespacesAndNewlines) }
     }
@@ -132,6 +163,8 @@ final class SettingsViewModel: ObservableObject {
         lightLongPages = current.lightLongPages
         learnSiteMemory = current.learnSiteMemory
         searchEngine = current.searchEngine
+        customShortcuts = current.customSearchShortcuts
+        downloadDirectory = current.downloadDirectoryPath
         homepageURL = current.customHomepageURL
         adBlockEnabled = current.adBlockEnabled
         privateByDefault = current.privateByDefault
@@ -490,6 +523,33 @@ public struct SettingsView: View {
                         Text(engine.displayName).tag(engine)
                     }
                 }
+                Text("Raccourcis : tape un mot-clé, un espace, puis ta recherche dans la barre d’adresse. Ex. « w Lisbonne », « yt chats », « gh swift », « so crash », « maps Paris », « ddg », « b », « br », « q ».")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(model.customShortcuts) { shortcut in
+                    HStack {
+                        Text("\(shortcut.keyword)").font(.system(.body, design: .monospaced)).frame(width: 70, alignment: .leading)
+                        Text(shortcut.name)
+                        Spacer()
+                        Text(shortcut.template).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        Button(role: .destructive) { model.removeShortcut(shortcut.keyword) } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
+                    }
+                }
+                HStack {
+                    TextField("Nom", text: $model.newShortcutName).frame(width: 110)
+                    TextField("Mot-clé", text: $model.newShortcutKeyword).frame(width: 80)
+                    TextField("https://site.exemple/?q=%s", text: $model.newShortcutTemplate)
+                    Button("Ajouter") { model.addShortcut() }
+                }
+                if let message = model.shortcutMessage { Text(message).font(.caption).foregroundStyle(.red) }
+            }
+            Section("Téléchargements") {
+                HStack {
+                    Text(model.downloadDirectory.isEmpty ? "Dossier Téléchargements du Mac" : model.downloadDirectory).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button("Choisir…") { model.chooseDownloadFolder() }
+                    if !model.downloadDirectory.isEmpty { Button("Par défaut") { model.resetDownloadFolder() } }
+                }
+                Text("S’applique aux prochains téléchargements.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Mode nuit des sites") {
                 Picker("Assombrir les sites", selection: $model.nightMode) {

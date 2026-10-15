@@ -2124,11 +2124,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         var sections: [PaletteSection] = []
 
         if filter == .all, !q.isEmpty {
-            let isAddress = Self.looksLikeAddress(q)
+            let resolution = AddressResolver.resolve(q, defaultEngine: SettingsStore.shared.searchEngine, custom: SettingsStore.shared.customSearchShortcuts)
+            var siteName: String?
+            if case .search(let site, _)? = resolution { siteName = site }
+            let isAddress = siteName == nil
             sections.append(PaletteSection(title: isAddress ? "Ouvrir" : "Rechercher", items: [
                 PaletteItem(
                     icon: .symbol(isAddress ? "arrow.up.right" : "magnifyingglass"),
-                    title: isAddress ? q : "« \(q) » sur le web",
+                    title: isAddress ? q : "« \(q) » sur \(siteName ?? "le web")",
                     subtitle: nil,
                     trailing: "↵",
                     perform: { [weak self] inNewTab in self?.openFromPalette(q, inNewTab: inNewTab) }
@@ -2244,13 +2247,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Whether typed text should be opened as an address rather than searched.
-    static func looksLikeAddress(_ text: String) -> Bool {
-        if text.contains(" ") { return false }
-        if text.contains("://") { return true }
-        if text.hasPrefix("localhost") { return true }
-        if text.range(of: #"^[\w.-]+:\d{2,5}(/.*)?$"#, options: .regularExpression) != nil { return true }
-        return text.contains(".")
-    }
+    static func looksLikeAddress(_ text: String) -> Bool { AddressResolver.looksLikeAddress(text) }
 
     private func buildFindBar(in contentView: NSView) {
         findField.translatesAutoresizingMaskIntoConstraints = false
@@ -3106,6 +3103,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 if let data = await self.makePDF(of: web) { try? data.write(to: target) }
             }
             return "pdf requested"
+        case "addr":
+            // Types the text of /tmp/oree-address.txt in the address bar, as if the user pressed return on it.
+            guard let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no file" }
+            load(urlString: text, in: tab)
+            return "loaded"
         case "source": viewPageSource(); return "source requested"
         case "printop":
             // The print operation exists and lays the page out (it is not shown: no panel in an automated run).
@@ -3411,19 +3413,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     // MARK: - Navigation
 
     private func load(urlString raw: String, in tab: Tab) {
-        var urlString = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !urlString.isEmpty else { return }
-        if !urlString.contains("://") {
-            if Self.looksLikeAddress(urlString) {
-                // localhost / host:port are dev servers that rarely speak TLS.
-                let isLocal = urlString.hasPrefix("localhost") || urlString.range(of: #"^[\w.-]+:\d{2,5}"#, options: .regularExpression) != nil
-                urlString = "\(isLocal ? "http" : "https")://\(urlString)"
-            } else {
-                let query = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? urlString
-                urlString = "\(SettingsStore.shared.searchEngine.queryURL)?q=\(query)"
-            }
-        }
-        guard let url = URL(string: urlString) else { return }
+        guard let resolution = AddressResolver.resolve(raw, defaultEngine: SettingsStore.shared.searchEngine,
+                                                       custom: SettingsStore.shared.customSearchShortcuts) else { return }
+        let url = resolution.url
         tab.lastRequestedURL = url
         tab.webView?.load(URLRequest(url: url))
     }

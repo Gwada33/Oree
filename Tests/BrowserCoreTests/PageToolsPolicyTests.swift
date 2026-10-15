@@ -38,3 +38,26 @@ extension PageToolsPolicyTests {
         #expect(PageToolsPolicy.pdfSlices(contentHeight: .nan, sliceHeight: 2400, maxSlices: 40).count == 1)
     }
 }
+
+@Suite struct DownloadFolderPolicyTests {
+    private let fallback = URL(fileURLWithPath: "/tmp/fallback", isDirectory: true)
+
+    @Test func emptyChoiceUsesTheFallback() {
+        #expect(DownloadFolderPolicy.directory(chosenPath: "  ", fallback: fallback) == fallback)
+    }
+
+    @Test func anExistingWritableFolderIsUsed() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dl-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(DownloadFolderPolicy.directory(chosenPath: dir.path, fallback: fallback).path == dir.path)
+    }
+
+    @Test func aMissingFolderOrAFileFallsBack() throws {
+        #expect(DownloadFolderPolicy.directory(chosenPath: "/nonexistent/\(UUID().uuidString)", fallback: fallback) == fallback)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("f-\(UUID().uuidString)")
+        try Data("x".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        #expect(DownloadFolderPolicy.directory(chosenPath: file.path, fallback: fallback) == fallback)
+    }
+}

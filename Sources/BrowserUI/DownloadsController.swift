@@ -66,7 +66,11 @@ final class DownloadsController {
     private var firstSeen: [UUID: Date] = [:]
     private var webkit: [ObjectIdentifier: WebKitEntry] = [:]
     private var handedOver: Set<ObjectIdentifier> = []
-    private let downloadsDirectory = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+    /// The folder chosen in Settings, else the system Downloads folder. Read each time: a change applies to the next download.
+    private var downloadsDirectory: URL {
+        DownloadFolderPolicy.directory(chosenPath: SettingsStore.shared.downloadDirectoryPath,
+                                       fallback: FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0])
+    }
 
     // MARK: Engine
 
