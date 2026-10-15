@@ -15,8 +15,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private nonisolated(unsafe) var settingsObserver: NSObjectProtocol?
     private let processPool = ProcessPoolFactory.launchPool
     private let privateProcessPool = ProcessPoolFactory.makeLeanProcessPool()
-    private var tabs: [Tab] = []
-    private var activeTabID: UUID?
+    var tabs: [Tab] = []
+    var activeTabID: UUID?
     // `nonisolated(unsafe)`: only touched from `deinit`, which (unlike the
     // rest of this @MainActor-inferred class) is never actor-isolated in
     // Swift 6 — invalidating a Timer / canceling a dispatch source is
@@ -65,6 +65,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let audioRoute = AudioRoute()
     private var mediaTabID: UUID?                      // the tab the card is about
     var siteInfoPopover: NSPopover?
+    /// The window of a page's alert / confirm / prompt while it is open (kept so that a test can see and answer it).
+    var activeWebDialog: NSAlert?
     private var artworkCache: [String: NSImage] = [:]
     private var artworkRequested: Set<String> = []
     private var shownArtwork: String?
@@ -3131,6 +3133,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case "complete":
             guard let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no file" }
             return inlineCompletion(for: text) ?? "(nothing)"
+        case "dialog":
+            guard let alert = activeWebDialog else { return "(none)" }
+            return "\(alert.messageText) | \(alert.informativeText) | buttons=\(alert.buttons.map(\.title)) | field=\(alert.accessoryView is NSTextField)"
+        case "dialogok", "dialogcancel":
+            // Answers the open dialog like a click would: first button = OK, second = Annuler. A prompt gets /tmp/oree-address.txt as its text.
+            guard let alert = activeWebDialog else { return "(none)" }
+            if let field = alert.accessoryView as? NSTextField, let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) { field.stringValue = text }
+            let index = op == "dialogok" ? 0 : 1
+            guard alert.buttons.indices.contains(index) else { return "no such button" }
+            alert.buttons[index].performClick(nil)
+            return "pressed \(alert.buttons[index].title)"
         case "newwindow": _ = Self.newWindowHandler?(true); return "requested"
         case "detach": detachToNewWindow(tab); return "detached"
         case "windows":

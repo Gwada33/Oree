@@ -1,0 +1,7 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fenêtres de page</title></head><body>
+<input type="file" id="f"><input type="file" id="m" multiple>
+<p id="out"></p>
+<script>
+window.__r = 'pending';
+document.getElementById('f').addEventListener('change', e => { const f = e.target.files[0]; window.__file = f ? f.name + ':' + f.size : 'none'; });
+</script></body></html>
