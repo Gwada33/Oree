@@ -51,6 +51,18 @@ final class Tab: NSObject {
         return nil
     }
 
+    /// A picture of this tab's page for the preview card: the live page if there is one, else the picture kept when it went to sleep.
+    func previewImage() async -> NSImage? {
+        if let webView, !isAwaitingWakeReveal, !contentSlot.isHidden || true {
+            let configuration = WKSnapshotConfiguration()
+            configuration.snapshotWidth = 480
+            if let image = try? await webView.takeSnapshot(configuration: configuration) { return image }
+        }
+        if let snapshotData { return HEICSnapshotCodec.decode(snapshotData) }
+        if let capturedAt, capturedAt >= lastActiveDate, let data = try? Data(contentsOf: snapshotFile) { return HEICSnapshotCodec.decode(data) }
+        return nil
+    }
+
     var isSuspended = false {
         // Observation only: lets the sidebar show the "sleeping" look. No behavior depends on it.
         didSet { if oldValue != isSuspended { onSleepChange?(isSuspended) } }

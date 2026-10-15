@@ -175,6 +175,17 @@ final class TabButtonView: NSView {
     var onHoverDwell: (() -> Void)?
     private var dwellWork: DispatchWorkItem?
 
+    /// The pointer has rested on the tab for a moment (true), or left it (false): the window shows or hides the preview card.
+    var onHoverPreview: ((Bool) -> Void)?
+    private var previewWork: DispatchWorkItem?
+
+    private func startPreview() {
+        previewWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { if self?.isHovered == true { self?.onHoverPreview?(true) } } }
+        previewWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: work)
+    }
+
     private func startDwell() {
         dwellWork?.cancel()
         guard isSleeping else { return }
@@ -227,6 +238,7 @@ final class TabButtonView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
+        previewWork?.cancel(); onHoverPreview?(false)
         dragStart = isHorizontal ? event.locationInWindow.x : event.locationInWindow.y
         isDragging = false
         onSelect?()
@@ -297,8 +309,8 @@ final class TabButtonView: NSView {
         guide.backgroundColor = Theme.cg(Theme.line, in: self)
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovered = true; updateAppearance(animated: true); startDwell() }
-    override func mouseExited(with event: NSEvent) { isHovered = false; dwellWork?.cancel(); updateAppearance(animated: true) }
+    override func mouseEntered(with event: NSEvent) { isHovered = true; updateAppearance(animated: true); startDwell(); startPreview() }
+    override func mouseExited(with event: NSEvent) { isHovered = false; dwellWork?.cancel(); previewWork?.cancel(); onHoverPreview?(false); updateAppearance(animated: true) }
 
     private func updateAppearance(animated: Bool) {
         let target: (color: NSColor, opacity: Float) = isActive

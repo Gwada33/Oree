@@ -346,6 +346,12 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Key.sendGPC) }
     }
 
+    /// The card that shows a picture of a tab when the pointer rests on it.
+    public var tabPreviews: Bool {
+        get { defaults.object(forKey: "settings.tabPreviews") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "settings.tabPreviews") }
+    }
+
     public var energyMode: EnergyMode {
         get {
             if let forced = ProcessInfo.processInfo.environment["HB_ENERGY_MODE"], let mode = EnergyMode(rawValue: forced) { return mode }      // tests

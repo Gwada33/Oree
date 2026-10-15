@@ -72,6 +72,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Tabs in the order they were last in front (most recent first): ⌃Tab goes back to the previous one, like Alt-Tab does for apps.
     var recentTabIDs: [UUID] = []
     private var qrPopover: NSPopover?
+    private var tabPreviewPopover: NSPopover?
+    private var tabPreviewTask: Task<Void, Never>?
     private var taskManager: TaskManagerWindowController?
     private var artworkCache: [String: NSImage] = [:]
     private var artworkRequested: Set<String> = []
@@ -2404,6 +2406,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             tab.tabButton.setFrozen(tab.isFrozen)
             self.updateTabCount()
         }
+        tab.tabButton.onHoverPreview = { [weak self, weak tab] hovering in
+            guard let self, let tab else { return }
+            if hovering { self.showTabPreview(for: tab) } else { self.hideTabPreview(of: tab) }
+        }
         tab.tabButton.onHoverDwell = { [weak self, weak tab] in
             guard let self, let tab else { return }
             self.prewake(tab)
@@ -2485,6 +2491,39 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case "customize": openSettings()
         default: break
         }
+    }
+
+    /// The card under the pointer: a picture of the page, its title and site, and its state or memory. Never for the tab in front.
+    func showTabPreview(for tab: Tab) {
+        guard SettingsStore.shared.tabPreviews, tab.id != activeTabID, window?.isKeyWindow == true || ProcessInfo.processInfo.environment["HB_FRESH_SESSION"] != nil else { return }
+        tabPreviewTask?.cancel()
+        tabPreviewTask = Task { @MainActor [weak self, weak tab] in
+            guard let self, let tab else { return }
+            let image = await tab.previewImage()
+            guard !Task.isCancelled, tab.tabButton.window != nil, tab.id != self.activeTabID else { return }
+            let row = self.taskManagerSnapshot().snapshot.rows.first { $0.id == tab.id }
+            let status: String
+            switch row?.state {
+            case .sleeping?: status = "En veille"
+            case .frozen?: status = "Figé · " + TaskManagerRows.memory(row?.bytes ?? 0)
+            case .audio?: status = "Joue du son · " + TaskManagerRows.memory(row?.bytes ?? 0)
+            case .some(let state) where (row?.bytes ?? 0) > 0: status = state.rawValue + " · " + TaskManagerRows.memory(row?.bytes ?? 0)
+            default: status = ""
+            }
+            self.tabPreviewPopover?.close()
+            let controller = NSViewController()
+            controller.view = TabPreviewCard(image: image, title: tab.displayTitle, host: tab.badgeHost, status: status)
+            let popover = NSPopover()
+            popover.behavior = .applicationDefined; popover.animates = false; popover.contentViewController = controller
+            let horizontal = SettingsStore.shared.tabLayout == .horizontal
+            if self.showPopoverSafely(popover, relativeTo: tab.tabButton, edge: horizontal ? .minY : .maxX) { self.tabPreviewPopover = popover }
+        }
+    }
+
+    func hideTabPreview(of tab: Tab? = nil) {
+        tabPreviewTask?.cancel()
+        tabPreviewPopover?.close()
+        tabPreviewPopover = nil
     }
 
     /// ⌃Tab — back to the tab used before this one (again: back to this one).
@@ -3195,6 +3234,22 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             let active = EnergyPolicy.isActive(mode: mode, systemLowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
             let timing = lifecycleTiming()
             return "mode=\(mode.rawValue) systemLowPower=\(ProcessInfo.processInfo.isLowPowerModeEnabled) active=\(active) freezeAfter=\(timing.freezeAfter) sleepAfter=\(timing.sleepAfter)"
+        case "tabpreview":
+            // Builds the card for the first tab that is not the one in front and writes its picture (the card is not shown: no pointer in a test).
+            guard let other = tabs.first(where: { $0.id != activeTabID }) else { return "no other tab" }
+            Task { @MainActor in
+                let image = await other.previewImage()
+                let row = self.taskManagerSnapshot().snapshot.rows.first { $0.id == other.id }
+                let card = TabPreviewCard(image: image, title: other.displayTitle, host: other.badgeHost, status: row.map { "\($0.state.rawValue) · \(TaskManagerRows.memory($0.bytes))" } ?? "")
+                card.frame = NSRect(origin: .zero, size: card.fittingSize)
+                card.layoutSubtreeIfNeeded()
+                if let rep = card.bitmapImageRepForCachingDisplay(in: card.bounds) {
+                    card.cacheDisplay(in: card.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/oree-tabpreview.png"))
+                }
+                try? "image=\(image != nil) size=\(image.map { "\(Int($0.size.width))x\(Int($0.size.height))" } ?? "-")".write(toFile: "/tmp/oree-tabpreview.txt", atomically: true, encoding: .utf8)
+            }
+            return "asked"
         case "recent": return recentTabIDs.compactMap { id in tabs.firstIndex { $0.id == id } }.map(String.init).joined(separator: ",")
         case "recentgo": selectRecentTab(); return "active=\(tabs.firstIndex { $0.id == activeTabID } ?? -1)"
         case "calc":
@@ -3827,14 +3882,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Shows a popover under `anchor`, or under `fallback` when the anchor is not on screen (a toolbar button the user removed, a window not shown):
     /// AppKit raises an exception for a popover without a place, which used to stop the whole app. Returns false if it could not be shown.
     @discardableResult
-    func showPopoverSafely(_ popover: NSPopover, relativeTo anchor: NSView, fallback: NSView? = nil) -> Bool {
+    func showPopoverSafely(_ popover: NSPopover, relativeTo anchor: NSView, fallback: NSView? = nil, edge: NSRectEdge = .maxY) -> Bool {
         func usable(_ view: NSView?) -> NSView? {
             guard let view, view.window != nil, !view.isHiddenOrHasHiddenAncestor, view.bounds.width > 0, view.bounds.height > 0 else { return nil }
             return view
         }
         guard let target = usable(anchor) ?? usable(fallback) else { Log.tabs.error("Popover not shown: no visible place for it"); return false }
         var reason: NSString?
-        if OreeShowPopover(popover, target.bounds, target, .maxY, &reason) { return true }
+        if OreeShowPopover(popover, target.bounds, target, edge, &reason) { return true }
         Log.tabs.error("Popover refused by AppKit: \((reason as String?) ?? "?", privacy: .public)")
         return false
     }

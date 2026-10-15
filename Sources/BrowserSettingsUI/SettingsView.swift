@@ -70,6 +70,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var newShortcutTemplate = ""
     @Published var shortcutMessage: String?
     @Published var downloadDirectory = ""
+    @Published var tabPreviews = true { didSet { settings.tabPreviews = tabPreviews } }
     @Published var energyMode: EnergyMode = .automatic { didSet { settings.energyMode = energyMode } }
     @Published var sendGPC = true { didSet { settings.sendGlobalPrivacyControl = sendGPC } }
     @Published var minimumFontSize = 0 { didSet { settings.minimumFontSize = minimumFontSize } }
@@ -188,6 +189,7 @@ final class SettingsViewModel: ObservableObject {
         searchEngine = current.searchEngine
         customShortcuts = current.customSearchShortcuts
         downloadDirectory = current.downloadDirectoryPath
+        tabPreviews = current.tabPreviews
         energyMode = current.energyMode
         sendGPC = current.sendGlobalPrivacyControl
         minimumFontSize = current.minimumFontSize
@@ -598,6 +600,11 @@ public struct SettingsView: View {
                     }
                 }
                 Text("Safari convient presque partout. Certains sites refusent un navigateur qu’ils ne connaissent pas : présente-toi comme Chrome pour eux seulement (aussi dans la palette ⌘K, « Se présenter comme Chrome sur ce site »).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Onglets") {
+                Toggle("Aperçu d’un onglet quand le pointeur s’y arrête", isOn: $model.tabPreviews)
+                Text("Une image de la page, son titre et la mémoire qu’elle prend (ou « En veille »). Jamais pour l’onglet affiché.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Énergie") {
