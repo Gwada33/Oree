@@ -72,6 +72,7 @@ final class OreeWebView: WKWebView {
             add("Copier") { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }
             let short = selection.count > 24 ? String(selection.prefix(24)) + "…" : selection
             add("Rechercher « \(short) »") { owner?.newTab(urlString: selection, isPrivate: isPrivate) }
+            if !isPrivate { add("Ajouter à ma note") { owner?.openNotes(append: selection) } }
         }
         if hit.editable == true {
             add("Coller") { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }

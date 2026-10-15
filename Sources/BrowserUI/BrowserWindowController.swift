@@ -122,6 +122,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }()
     private let sidePanel = SidePanelView()
     private let readingRepo = ReadingListRepository()
+    private let noteRepo = NoteRepository()
+    private var notesPopover: NSPopover?
+    private var notesView: NotesPanelView?
     private var panelButtons: [(kind: PanelKind, button: ChromeIconButton)] = []
     private var activePanel: PanelKind?
     private var panelScroll: NSScrollView?
@@ -2244,6 +2247,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 ("Nouvel onglet privé", "lock.shield", { $0.newPrivateTabAction() }),
                 ("Rouvrir l'onglet fermé", "arrow.uturn.backward", { $0.reopenClosedTab() }),
                 ("Onglets archivés…", "archivebox", { $0.showArchiveMenu() }),
+                ("Notes", "note.text", { $0.showNotes() }),
                 ("Aller à l'espace suivant", "square.stack", { $0.selectNextSpace() }),
                 ("Recharger la page", "arrow.clockwise", { $0.reloadAction() }),
                 ("Ajouter ou retirer des favoris", "star", { if let tab = $0.activeTab { $0.toggleBookmark(for: tab) } }),
@@ -3379,6 +3383,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             for t in tabs where t.id != activeTabID { t.lastActiveDate = Date().addingTimeInterval(-40 * 86_400) }
             archiveStaleTabs()
             return "tabs=\(tabs.count) archive=\(Self.archiveStore.load().count)"
+        case "notes":
+            // Opens the pad, types a first line, appends a selection, saves, and reports what the database holds.
+            openNotes(append: nil)
+            notesView?.append("Première ligne de test")
+            notesView?.append("Texte copié")
+            notesView?.saveNow()
+            if let v = notesView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) { v.cacheDisplay(in: v.bounds, to: rep); try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/oree-notes.png")) }
+            return "notes=\((try? noteRepo.all().count) ?? -1) title=\(notesView?.note.title ?? "-") body=\(notesView?.note.body.replacingOccurrences(of: "\n", with: "|") ?? "-")"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"
@@ -4023,6 +4035,31 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if OreeShowPopover(popover, target.bounds, target, edge, &reason) { return true }
         Log.tabs.error("Popover refused by AppKit: \((reason as String?) ?? "?", privacy: .public)")
         return false
+    }
+
+    /// The notes pad, under the address bar: on the note about this page, or the last one. `append` adds a selection from the page.
+    @objc func showNotes() { openNotes(append: nil) }
+
+    func openNotes(append: String?) {
+        if let popover = notesPopover, popover.isShown, let view = notesView {
+            if let append { view.append(append) } else { popover.close() }
+            return
+        }
+        let url = activeTab?.currentURL.flatMap { $0.scheme == "http" || $0.scheme == "https" ? $0.absoluteString : nil }
+        let view = NotesPanelView(repo: noteRepo, pageURL: url, append: append)
+        let controller = NSViewController()
+        controller.view = view
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.contentViewController = controller
+        popover.contentSize = NotesPanelView.size
+        notesView = view
+        notesPopover = popover
+        NotificationCenter.default.addObserver(forName: NSPopover.willCloseNotification, object: popover, queue: .main) { [weak view] _ in
+            MainActor.assumeIsolated { view?.saveNow() }
+        }
+        if showPopoverSafely(popover, relativeTo: addressPill, fallback: window?.contentView, edge: .minY) { DispatchQueue.main.async { view.focusText() } }
     }
 
     /// The QR code of the page's address, to scan with a phone, with copy and save.

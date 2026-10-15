@@ -206,6 +206,16 @@ public final class AppDatabase: @unchecked Sendable {
             }
         }
 
+        // Notes written in the browser; a note can belong to a page (`url`) or stand alone.
+        migrator.registerMigration("v13_notes") { db in
+            try db.create(table: "notes") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("body", .text).notNull().defaults(to: "")
+                t.column("url", .text)
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }
