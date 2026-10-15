@@ -352,6 +352,12 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.tabPreviews") }
     }
 
+    /// Days without being in front after which a tab goes to the archive (0 = never).
+    public var tabArchiveDays: Int {
+        get { Int(ProcessInfo.processInfo.environment["HB_ARCHIVE_DAYS"] ?? "") ?? defaults.object(forKey: "settings.tabArchiveDays") as? Int ?? 0 }   // HB_ARCHIVE_DAYS: essais
+        set { defaults.set(newValue, forKey: "settings.tabArchiveDays") }
+    }
+
     public var energyMode: EnergyMode {
         get {
             if let forced = ProcessInfo.processInfo.environment["HB_ENERGY_MODE"], let mode = EnergyMode(rawValue: forced) { return mode }      // tests

@@ -71,6 +71,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var shortcutMessage: String?
     @Published var downloadDirectory = ""
     @Published var tabPreviews = true { didSet { settings.tabPreviews = tabPreviews } }
+    @Published var tabArchiveDays = 0 { didSet { settings.tabArchiveDays = tabArchiveDays } }
     @Published var energyMode: EnergyMode = .automatic { didSet { settings.energyMode = energyMode } }
     @Published var sendGPC = true { didSet { settings.sendGlobalPrivacyControl = sendGPC } }
     @Published var minimumFontSize = 0 { didSet { settings.minimumFontSize = minimumFontSize } }
@@ -190,6 +191,7 @@ final class SettingsViewModel: ObservableObject {
         customShortcuts = current.customSearchShortcuts
         downloadDirectory = current.downloadDirectoryPath
         tabPreviews = current.tabPreviews
+        tabArchiveDays = current.tabArchiveDays
         energyMode = current.energyMode
         sendGPC = current.sendGlobalPrivacyControl
         minimumFontSize = current.minimumFontSize
@@ -605,6 +607,14 @@ public struct SettingsView: View {
             Section("Onglets") {
                 Toggle("Aperçu d’un onglet quand le pointeur s’y arrête", isOn: $model.tabPreviews)
                 Text("Une image de la page, son titre et la mémoire qu’elle prend (ou « En veille »). Jamais pour l’onglet affiché.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Picker("Archiver les onglets inutilisés", selection: $model.tabArchiveDays) {
+                    Text("Jamais").tag(0)
+                    Text("Après 1 jour").tag(1)
+                    Text("Après 7 jours").tag(7)
+                    Text("Après 30 jours").tag(30)
+                }
+                Text("Un onglet archivé se ferme mais reste dans la liste « Onglets archivés » (palette ⌘K), où un clic le rouvre. Pas les onglets privés, ni celui qui joue du son.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Énergie") {

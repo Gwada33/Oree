@@ -2243,6 +2243,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 ("Nouvel onglet vide", "plus", { $0.newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault) }),
                 ("Nouvel onglet privé", "lock.shield", { $0.newPrivateTabAction() }),
                 ("Rouvrir l'onglet fermé", "arrow.uturn.backward", { $0.reopenClosedTab() }),
+                ("Onglets archivés…", "archivebox", { $0.showArchiveMenu() }),
                 ("Aller à l'espace suivant", "square.stack", { $0.selectNextSpace() }),
                 ("Recharger la page", "arrow.clockwise", { $0.reloadAction() }),
                 ("Ajouter ou retirer des favoris", "star", { if let tab = $0.activeTab { $0.toggleBookmark(for: tab) } }),
@@ -2589,14 +2590,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
-    func closeTab(_ tab: Tab) {
+    func closeTab(_ tab: Tab, remember: Bool = true) {
         aiBarController?.tabClosed(tab.id)
         guard let idx = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         if let pair = splitPair, tab.id == pair.left || tab.id == pair.right {
             endSplit(keeping: tab.id == pair.left ? pair.right : pair.left)
         }
         extensionManager.tabClosed(tab)
-        if !tab.isPrivate, let url = tab.currentURL {
+        if remember, !tab.isPrivate, let url = tab.currentURL {
             closedTabs.append((url, tab.currentInteractionState, tab.displayTitle, tab.spaceIndex))
             if closedTabs.count > 20 { closedTabs.removeFirst() }
         }
@@ -3373,6 +3374,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             for i in 1..<5 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"
         case "closeat": closeTab(tab); return "closed"
+        case "archive":
+            // Archives every tab but the active one as if it had been idle for 40 days, then reports the archive (needs the setting on: HB_ARCHIVE_DAYS).
+            for t in tabs where t.id != activeTabID { t.lastActiveDate = Date().addingTimeInterval(-40 * 86_400) }
+            archiveStaleTabs()
+            return "tabs=\(tabs.count) archive=\(Self.archiveStore.load().count)"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"
@@ -3801,6 +3807,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 let sleeper = Tab(configuration: config, isPrivate: snapshot.isPrivate, sleeping: (url, snapshot.interactionState, snapshot.title))
                 sleeper.spaceIndex = min(max(snapshot.spaceIndex, 0), spaces.count - 1)
                 sleeper.groupID = snapshot.groupID.flatMap(UUID.init(uuidString:))
+                restoreLastActive(sleeper, url: snapshot.url)
                 attachTab(sleeper)
                 continue
             }
@@ -3863,6 +3870,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             UserDefaults.standard.set(index, forKey: Self.activeIndexKey)
         }
         UserDefaults.standard.set(currentSpace, forKey: Self.activeSpaceKey)
+        saveLastActive()
         if let pair = splitPair,
            let l = savable.firstIndex(where: { $0.id == pair.left }), let r = savable.firstIndex(where: { $0.id == pair.right }) {
             UserDefaults.standard.set([l, r], forKey: Self.splitKey)
@@ -4858,6 +4866,68 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Steady-state hygiene, once a minute: same pass as the memory timer (freeze / sleep by idle time).
     private func suspendInactiveTabs() async {
         await enforceMemoryBudget()
+        archiveStaleTabs()
+    }
+
+    // MARK: - Archive of unused tabs
+
+    private static let archiveStore = TabArchiveStore(key: "tabArchive.v1" + benchSuffix)
+    private static let lastActiveKey = "session.lastActive" + benchSuffix
+
+    /// Closes (and remembers) the tabs nobody has touched for the chosen number of days.
+    func archiveStaleTabs(now: Date = Date()) {
+        let days = SettingsStore.shared.tabArchiveDays
+        guard days > 0, !isSecondary else { return }
+        let stale = tabs.filter { tab in
+            TabArchivePolicy.canArchive(url: tab.currentURL, isPrivate: tab.isPrivate, isActive: tab.id == activeTabID || isOnScreen(tab),
+                                        playsAudio: tab.audioState != .none)
+                && TabArchivePolicy.isStale(idle: now.timeIntervalSince(tab.lastActiveDate), days: days)
+        }
+        guard !stale.isEmpty, stale.count < tabs.count else { return }
+        var list = Self.archiveStore.load()
+        for tab in stale {
+            guard let url = tab.currentURL else { continue }
+            list = TabArchivePolicy.adding(ArchivedTab(url: url.absoluteString, title: tab.displayTitle, space: tab.spaceIndex, archivedAt: now), to: list)
+        }
+        Self.archiveStore.save(list)
+        for tab in stale { closeTab(tab, remember: false) }
+        presentNotice(stale.count == 1 ? "Un onglet inutilisé a été archivé." : "\(stale.count) onglets inutilisés ont été archivés.")
+    }
+
+    /// The archive as a menu: a click brings a tab back in its space; the last item empties the list.
+    func showArchiveMenu() {
+        let list = Self.archiveStore.load()
+        let menu = NSMenu()
+        if list.isEmpty {
+            let empty = NSMenuItem(title: "Aucun onglet archivé", action: nil, keyEquivalent: ""); empty.isEnabled = false
+            menu.addItem(empty)
+        }
+        for entry in list.prefix(40) {
+            let host = URL(string: entry.url)?.host ?? entry.url
+            let item = ClosureMenuItem(title: entry.title.isEmpty ? host : "\(entry.title) — \(host)") { [weak self] in
+                guard let self else { return }
+                Self.archiveStore.save(Self.archiveStore.load().filter { $0.url != entry.url })
+                self.newTab(urlString: entry.url, isPrivate: false)
+                if let tab = self.activeTab { tab.spaceIndex = min(max(entry.space, 0), self.spaces.count - 1) }
+            }
+            menu.addItem(item)
+        }
+        if !list.isEmpty {
+            menu.addItem(.separator())
+            menu.addItem(ClosureMenuItem(title: "Vider l’archive") { Self.archiveStore.save([]) })
+        }
+        let point = window.map { $0.contentView?.convert($0.mouseLocationOutsideOfEventStream, from: nil) ?? .zero } ?? .zero
+        menu.popUp(positioning: nil, at: point, in: window?.contentView)
+    }
+
+    /// Tabs' last use, saved with the session so that "unused for 7 days" also counts the days the app was closed.
+    func saveLastActive() {
+        var map: [String: Double] = [:]
+        for tab in tabs where !tab.isPrivate { if let url = tab.currentURL?.absoluteString { map[url] = tab.lastActiveDate.timeIntervalSince1970 } }
+        UserDefaults.standard.set(map, forKey: Self.lastActiveKey)
+    }
+    private func restoreLastActive(_ tab: Tab, url: String) {
+        if let when = (UserDefaults.standard.dictionary(forKey: Self.lastActiveKey) as? [String: Double])?[url] { tab.lastActiveDate = Date(timeIntervalSince1970: when) }
     }
 
     /// Emergency response: the OS just told us real memory is tight. Discard
