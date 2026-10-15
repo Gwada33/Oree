@@ -5,6 +5,7 @@ import BrowserCore
 import BrowserStorage
 import BrowserSettingsUI
 import DownloadKit
+import OreeObjC
 
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
 
@@ -1230,7 +1231,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         controller.view = panel
         popover.contentViewController = controller
         popover.contentSize = NSSize(width: DownloadsPanelView.width, height: panel.frame.height)
-        popover.show(relativeTo: downloadsButton.bounds, of: downloadsButton, preferredEdge: .maxY)
+        guard showPopoverSafely(popover, relativeTo: downloadsButton, fallback: addressPill) else { return }
         downloadsPopover = popover
         downloadsPanel = panel
     }
@@ -3149,6 +3150,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard alert.buttons.indices.contains(index) else { return "no such button" }
             alert.buttons[index].performClick(nil)
             return "pressed \(alert.buttons[index].title)"
+        case "downloads": return downloads.items.map { "\($0.name)|\($0.phase)|\($0.error ?? "-")" }.joined(separator: " ; ")
         case "quit": DispatchQueue.main.async { NSApp.terminate(nil) }; return "quitting"
         case "closeextra":
             // Closes the last extra window the way the user does (its red button).
@@ -3680,6 +3682,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         settings.chromeUserAgentHosts = hosts
         tab.webView?.reload()
         presentNotice(hosts.contains(where: { UserAgent.hostMatches(host, listed: $0) }) ? "\(host) voit Orée comme Chrome." : "\(host) voit Orée comme Safari.")
+    }
+
+    /// Shows a popover under `anchor`, or under `fallback` when the anchor is not on screen (a toolbar button the user removed, a window not shown):
+    /// AppKit raises an exception for a popover without a place, which used to stop the whole app. Returns false if it could not be shown.
+    @discardableResult
+    func showPopoverSafely(_ popover: NSPopover, relativeTo anchor: NSView, fallback: NSView? = nil) -> Bool {
+        func usable(_ view: NSView?) -> NSView? {
+            guard let view, view.window != nil, !view.isHiddenOrHasHiddenAncestor, view.bounds.width > 0, view.bounds.height > 0 else { return nil }
+            return view
+        }
+        guard let target = usable(anchor) ?? usable(fallback) else { Log.tabs.error("Popover not shown: no visible place for it"); return false }
+        var reason: NSString?
+        if OreeShowPopover(popover, target.bounds, target, .maxY, &reason) { return true }
+        Log.tabs.error("Popover refused by AppKit: \((reason as String?) ?? "?", privacy: .public)")
+        return false
     }
 
     func presentNotice(_ message: String) { noticePill.show(message: message, button: "OK", seconds: 6) { } }

@@ -23,4 +23,8 @@ BOOL OreeCallAsyncJS(WKWebView *webView, NSString *body, NSDictionary<NSString *
 /// À appeler une fois, au lancement.
 void OreeInstallSpellCheckerGuard(void);
 
+/// `NSPopover showRelativeToRect:ofView:preferredEdge:` lève une exception quand la vue n'est pas (ou plus) dans une fenêtre, ou que la fenêtre n'est pas
+/// affichable : sans filet, l'application s'arrête (rapport du 15 octobre, un téléchargement suffisait). Renvoie NO, avec le texte de l'exception, plutôt que de planter.
+BOOL OreeShowPopover(NSPopover *popover, NSRect rect, NSView *view, NSRectEdge edge, NSString *_Nullable *_Nullable reason);
+
 NS_ASSUME_NONNULL_END

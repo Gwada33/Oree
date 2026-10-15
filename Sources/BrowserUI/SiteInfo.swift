@@ -68,7 +68,7 @@ extension BrowserWindowController {
         let popover = NSPopover()
         popover.behavior = .transient
         popover.contentViewController = controller
-        popover.show(relativeTo: addressPill.bounds, of: addressPill, preferredEdge: .maxY)
+        guard showPopoverSafely(popover, relativeTo: addressPill) else { return }
         siteInfoPopover = popover
     }
 

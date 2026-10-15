@@ -45,7 +45,12 @@ extension BrowserWindowController {
 
     /// `window.close()` from a page that a script opened: closes its tab.
     public func webViewDidClose(_ webView: WKWebView) {
-        if let tab = tabs.first(where: { $0.webView === webView }) { closeTab(tab) }
+        // A sign-in popup typically does `opener.postMessage(result); window.close()` in one go: closing at once would drop that message
+        // before the page that opened it has received it. A short delay lets it arrive.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self, weak webView] in
+            guard let self, let webView, let tab = self.tabs.first(where: { $0.webView === webView }) else { return }
+            self.closeTab(tab)
+        }
     }
 
     private func present(_ content: WebDialogContent, for webView: WKWebView, field: NSTextField?, completion: @escaping @MainActor (NSApplication.ModalResponse) -> Void) {

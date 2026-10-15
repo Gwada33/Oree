@@ -70,3 +70,13 @@ void OreeInstallSpellCheckerGuard(void) {
         }
     });
 }
+
+BOOL OreeShowPopover(NSPopover *popover, NSRect rect, NSView *view, NSRectEdge edge, NSString **reason) {
+    @try {
+        [popover showRelativeToRect:rect ofView:view preferredEdge:edge];
+        return YES;
+    } @catch (NSException *exception) {
+        if (reason) { *reason = [NSString stringWithFormat:@"%@: %@", exception.name, exception.reason ?: @""]; }
+        return NO;
+    }
+}

@@ -37,6 +37,8 @@ public final class StateStore: @unchecked Sendable {
     }
 
     public static var standard: StateStore {
+        // Tests set HB_DOWNLOAD_STATE_DIR: they must neither read nor add to the real list of downloads.
+        if let forced = ProcessInfo.processInfo.environment["HB_DOWNLOAD_STATE_DIR"] { return StateStore(directory: URL(fileURLWithPath: forced, isDirectory: true)) }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return StateStore(directory: base.appendingPathComponent("Orée/Downloads", isDirectory: true))
     }

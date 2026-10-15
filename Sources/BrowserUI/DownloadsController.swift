@@ -68,7 +68,9 @@ final class DownloadsController {
     private var handedOver: Set<ObjectIdentifier> = []
     /// The folder chosen in Settings, else the system Downloads folder. Read each time: a change applies to the next download.
     private var downloadsDirectory: URL {
-        DownloadFolderPolicy.directory(chosenPath: SettingsStore.shared.downloadDirectoryPath,
+        // Tests set HB_DOWNLOAD_DIR so that what they download never lands in the real Downloads folder.
+        if let forced = ProcessInfo.processInfo.environment["HB_DOWNLOAD_DIR"] { return URL(fileURLWithPath: forced, isDirectory: true) }
+        return DownloadFolderPolicy.directory(chosenPath: SettingsStore.shared.downloadDirectoryPath,
                                        fallback: FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0])
     }
 
@@ -186,7 +188,7 @@ final class DownloadsController {
         if destination.lastPathComponent.isEmpty { destination = downloadsDirectory.appendingPathComponent("téléchargement") }
         let id = UUID()
         let entry = WebKitEntry(download: download, itemID: id, destination: destination, origin: download.originalRequest?.url)
-        entry.observation = download.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] progress, _ in
+        entry.observation = download.progress.observe(\.fractionCompleted, options: [.new]) { @Sendable [weak self] progress, _ in
             let received = progress.completedUnitCount, total = progress.totalUnitCount
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.webkitProgress(id, received: received, total: total) } }
         }
@@ -194,7 +196,9 @@ final class DownloadsController {
         adopt(Item(id: id, name: destination.lastPathComponent, sourceURL: entry.origin ?? URL(string: "about:blank")!, phase: .running,
                    received: 0, total: response.expectedContentLength > 0 ? response.expectedContentLength : nil,
                    bytesPerSecond: 0, connections: 1, error: nil, fileURL: nil, origin: .webkit))
-        onStart?()
+        // Not now: we are inside WebKit's own "where do I save this?" callback, and opening the downloads popover from in here crashed the
+        // app (a blob download link was enough). It opens on the next turn of the run loop, once the callback has returned.
+        DispatchQueue.main.async { [weak self] in self?.onStart?() }
         return destination
     }
 
@@ -331,7 +335,7 @@ final class DownloadsController {
                     guard let self else { return }
                     resumed.delegate = webView.navigationDelegate as? WKDownloadDelegate
                     let renewed = WebKitEntry(download: resumed, itemID: id, destination: entry.destination, origin: entry.origin)
-                    renewed.observation = resumed.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] progress, _ in
+                    renewed.observation = resumed.progress.observe(\.fractionCompleted, options: [.new]) { @Sendable [weak self] progress, _ in
                         let r = progress.completedUnitCount, t = progress.totalUnitCount
                         DispatchQueue.main.async { MainActor.assumeIsolated { self?.webkitProgress(id, received: r, total: t) } }
                     }
