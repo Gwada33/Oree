@@ -787,5 +787,137 @@
     "fade_ms": 0
    }
   ]
+ },
+ {
+  "date": "2026-10-15 14:10",
+  "ghost": "1",
+  "rows": [
+   {
+    "site": "https://fr.wikipedia.org/wiki/Lisbonne",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 8,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://www.bbc.com/news",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 103,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://github.com/torvalds/linux",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 100,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://react.dev",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 100,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://developer.mozilla.org/fr/docs/Web/CSS",
+    "reloads": 0,
+    "jump_pt": 700,
+    "shifts": 1,
+    "swap_ms": 102,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   }
+  ]
+ },
+ {
+  "date": "2026-10-15 14:12",
+  "ghost": "1",
+  "rows": [
+   {
+    "site": "https://fr.wikipedia.org/wiki/Lisbonne",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 2568,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://www.bbc.com/news",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 1252,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://github.com/torvalds/linux",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 3416,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://react.dev",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 1347,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   },
+   {
+    "site": "https://developer.mozilla.org/fr/docs/Web/CSS",
+    "reloads": 0,
+    "jump_pt": 0,
+    "shifts": 0,
+    "swap_ms": 1531,
+    "bar_ms": 0,
+    "spin_ms": 0,
+    "stop_ms": 0,
+    "blank": 0,
+    "fade_ms": 0
+   }
+  ]
  }
 ]

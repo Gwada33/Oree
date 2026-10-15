@@ -27,6 +27,7 @@ public final class MenuBuilder {
 
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "Fichier")
+        addCommand("newWindow", to: fileMenu, selector: #selector(BrowserWindowController.newWindowAction))
         addCommand("newTab", to: fileMenu, selector: #selector(BrowserWindowController.newTabAction))
         addCommand("newPrivateTab", to: fileMenu, selector: #selector(BrowserWindowController.newPrivateTabAction))
         addCommand("closeTab", to: fileMenu, selector: #selector(BrowserWindowController.closeActiveTabAction))
@@ -35,14 +36,14 @@ public final class MenuBuilder {
             let item = NSMenuItem(title: "Espace \(number)", action: #selector(BrowserWindowController.selectSpaceByNumber(_:)), keyEquivalent: String(number))
             item.keyEquivalentModifierMask = [.control]
             item.tag = number
-            item.target = target
+            item.target = nil          // the responder chain: the window in front handles it
             fileMenu.addItem(item)
         }
         for number in 1...9 {
             let item = NSMenuItem(title: number == 9 ? "Dernier onglet" : "Onglet \(number)", action: #selector(BrowserWindowController.selectTabByNumber(_:)), keyEquivalent: String(number))
             item.keyEquivalentModifierMask = [.command]
             item.tag = number
-            item.target = target
+            item.target = nil          // the responder chain: the window in front handles it
             fileMenu.addItem(item)
         }
         fileMenu.addItem(.separator())
@@ -139,14 +140,14 @@ public final class MenuBuilder {
         let binding = bindings[id]
         let item = NSMenuItem(title: title ?? command?.title ?? id, action: selector, keyEquivalent: binding?.key ?? "")
         if let binding { item.keyEquivalentModifierMask = Self.flags(binding.modifiers) }
-        item.target = target
+        item.target = nil          // the responder chain: the window in front handles it
         menu.addItem(item)
     }
 
     private func addControllerItem(to menu: NSMenu, title: String, selector: Selector, key: String, modifiers: NSEvent.ModifierFlags = [.command]) {
         let item = NSMenuItem(title: title, action: selector, keyEquivalent: key)
         item.keyEquivalentModifierMask = modifiers
-        item.target = target
+        item.target = nil          // the responder chain: the window in front handles it
         menu.addItem(item)
     }
 
@@ -165,7 +166,7 @@ public final class MenuBuilder {
         let recent = target?.recentHistoryForMenu(limit: 15) ?? []
         for entry in recent {
             let item = NSMenuItem(title: entry.title.isEmpty ? entry.url : entry.title, action: #selector(BrowserWindowController.historyItemClicked(_:)), keyEquivalent: "")
-            item.target = target
+            item.target = nil          // the responder chain: the window in front handles it
             item.representedObject = entry.url
             historyMenu.addItem(item)
         }
@@ -178,7 +179,7 @@ public final class MenuBuilder {
         }
         for bookmark in target?.allBookmarksForMenu() ?? [] {
             let item = NSMenuItem(title: bookmark.title.isEmpty ? bookmark.url : bookmark.title, action: #selector(BrowserWindowController.bookmarkItemClicked(_:)), keyEquivalent: "")
-            item.target = target
+            item.target = nil          // the responder chain: the window in front handles it
             item.representedObject = bookmark.url
             bookmarksMenu.addItem(item)
         }

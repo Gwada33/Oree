@@ -10,6 +10,8 @@ ProcessPoolFactory.warmUpFirstProcess()
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var browserController: BrowserWindowController?
+    /// Windows opened with ⌘N (the first one is `browserController`). Kept here: nothing else owns a window controller.
+    private var extraControllers: [BrowserWindowController] = []
     var menuBuilder: MenuBuilder?
     let contentBlocker = ContentBlockerManager()
 
@@ -34,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = BrowserWindowController(contentBlocker: contentBlocker)
         browserController = controller
 
+        BrowserWindowController.newWindowHandler = { [weak self] in self?.openNewWindow() }
         LaunchTrace.mark("window controller built")
         let builder = MenuBuilder(target: controller)
         controller.menuBuilder = builder
@@ -72,6 +75,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         guard sessionReady, let browserController else { pendingURLs += urls; return }
         for url in urls { browserController.openExternal(url) }
+    }
+
+    /// ⌘N: another window with its own tabs, next to the first (down and right of the one in front, as every Mac app does).
+    func openNewWindow() {
+        let controller = BrowserWindowController(contentBlocker: contentBlocker, isSecondary: true)
+        controller.menuBuilder = menuBuilder
+        extraControllers.append(controller)
+        if let front = NSApp.keyWindow ?? browserController?.window, let window = controller.window {
+            window.setFrame(front.frame, display: false)
+            window.setFrameTopLeftPoint(window.cascadeTopLeft(from: NSPoint(x: front.frame.minX + 28, y: front.frame.maxY - 28)))
+        }
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+        controller.ensureTabExists()
+        if let window = controller.window {
+            let id = ObjectIdentifier(controller)
+            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.extraControllers.removeAll { ObjectIdentifier($0) == id } }
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

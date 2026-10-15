@@ -58,6 +58,7 @@ public enum ShortcutRegistry {
 
     public static let commands: [ShortcutCommand] = [
         c("newTab", "Nouvel onglet", "Onglets", "t"),
+        c("newWindow", "Nouvelle fenêtre", "Fenêtre", "n"),
         c("newPrivateTab", "Nouvel onglet privé", "Onglets", "n", [.command, .shift]),
         c("closeTab", "Fermer l’onglet", "Onglets", "w"),
         c("reopenTab", "Rouvrir l’onglet fermé", "Onglets", "t", [.command, .shift]),

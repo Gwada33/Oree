@@ -239,8 +239,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         tabs.first { $0.id == activeTabID }
     }
 
-    public init(contentBlocker: ContentBlockerManager) {
+    public init(contentBlocker: ContentBlockerManager, isSecondary: Bool = false) {
         self.contentBlocker = contentBlocker
+        self.isSecondary = isSecondary
+        self.isFreshSession = isSecondary || ProcessInfo.processInfo.environment["HB_FRESH_SESSION"] == "1"
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
@@ -254,7 +256,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
         super.init(window: window)
 
-        try? permissionRepo.purgeSessionScoped()
+        if !isSecondary { try? permissionRepo.purgeSessionScoped() }      // a second window must not forget what the first one was told this session
         currentSpace = isFreshSession ? 0 : min(max(UserDefaults.standard.integer(forKey: Self.activeSpaceKey), 0), spaces.count - 1)
         credentialHandler.onMessage = { [weak self] webView, origin, body in
             self?.handleCredentialMessage(webView: webView, origin: origin, body: body)
@@ -821,14 +823,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let bar = ToolbarView(pill: addressPill)
         toolbar = bar
         splitButton.onClick = { [weak self] in self?.toggleSplit() }
-        Tab.nativeDarkReported = { [weak self] host in
-            let settings = SettingsStore.shared
-            let updated = NightPolicy.adding(host, to: settings.nightNativeHosts)
-            guard updated != settings.nightNativeHosts else { return }
-            settings.nightNativeHosts = updated
-            self?.lastNight = self?.nightSignature() ?? []
-            self?.refreshNightMode()
-        }
         appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
             Task { @MainActor in self?.settingsChanged() }
         }
@@ -879,8 +873,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             readingBar.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
             readingBar.heightAnchor.constraint(equalToConstant: 2), barWidth,
         ])
-        Tab.resumeReported = { [weak self] tab, json in self?.handleResume(tab: tab, json: json) }
-        Tab.mediaReported = { [weak self] tab, json in self?.handleMedia(tab: tab, json: json) }
         audioRoute.onChange = { [weak self] in self?.refreshNowPlaying() }
         audioRoute.start()
         NSLayoutConstraint.activate([
@@ -3138,6 +3130,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case "complete":
             guard let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no file" }
             return inlineCompletion(for: text) ?? "(nothing)"
+        case "newwindow": Self.newWindowHandler?(); return "requested"
+        case "windows":
+            let all = NSApp.windows.compactMap { $0.windowController as? BrowserWindowController }
+            return all.map { "\($0.isSecondary ? "secondary" : "primary") tabs=\($0.tabs.count) active=\($0.activeTab?.currentURL?.absoluteString ?? "-")" }.joined(separator: " ; ")
+        case "wload":
+            // Loads the address of /tmp/oree-address.txt in the active tab of the last secondary window.
+            guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }),
+                  let tab = other.activeTab, let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) else { return "no secondary window" }
+            other.load(urlString: text, in: tab)
+            return "loaded"
+        case "wchain":
+            // The ⌘T of a window in front must open its own tab: follow the responder chain from inside the last secondary window.
+            guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }),
+                  let responder = other.window?.firstResponder else { return "no secondary window" }
+            return "handled=\(responder.tryToPerform(#selector(BrowserWindowController.newTabAction), with: nil))"
         case "reader": toggleReaderMode(); return "toggled"
         case "siteinfo": showSiteInfo(); return "shown"
         case "siteinfotext":
@@ -3159,7 +3166,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     // MARK: Now playing card
 
-    private func handleMedia(tab: Tab, json: String) {
+    /// A page's script found the site already dark: remember it, so night mode leaves it alone.
+    func nativeDarkDetected(_ host: String) {
+        let settings = SettingsStore.shared
+        let updated = NightPolicy.adding(host, to: settings.nightNativeHosts)
+        guard updated != settings.nightNativeHosts else { return }
+        settings.nightNativeHosts = updated
+        lastNight = nightSignature()
+        refreshNightMode()
+    }
+
+    func handleMedia(tab: Tab, json: String) {
         guard !tab.isSuspended, tab.webView != nil else { return }
         let info = MediaInfo.parse(json)
         guard tab.media != info else { return }
@@ -3342,7 +3359,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Benchmarks and tests launch with `HB_FRESH_SESSION=1`: start empty and
     /// never touch the saved session.
-    private let isFreshSession = ProcessInfo.processInfo.environment["HB_FRESH_SESSION"] == "1"
+    private let isFreshSession: Bool
+    /// A window opened with ⌘N after the first one: its tabs are not saved nor restored (the saved session is the first window's).
+    let isSecondary: Bool
+
+    /// Set by the app: opens another window. `BrowserWindowController` cannot, it does not own the app's services.
+    public static var newWindowHandler: (() -> Void)?
+    @objc func newWindowAction() { Self.newWindowHandler?() }
 
     private func restoreSessionOrOpenFreshTab(openFreshTab: Bool = true) {
         let snapshots = isFreshSession ? [] : ((try? sessionRepo.load()) ?? [])
@@ -4135,7 +4158,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     // MARK: - Resume where you left off
 
     /// A report from the page: a video position and/or a reading position. Stored per page (never in a private tab).
-    private func handleResume(tab: Tab, json: String) {
+    func handleResume(tab: Tab, json: String) {
         guard SettingsStore.shared.resumeEnabled, !tab.isPrivate,
               let data = json.data(using: .utf8), let report = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let key = ResumePolicy.key(for: (report["u"] as? String).flatMap { URL(string: $0) }) else { return }

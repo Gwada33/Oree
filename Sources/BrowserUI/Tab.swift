@@ -165,9 +165,6 @@ final class Tab: NSObject {
     /// Full-page warning/recovery screen (crash, insecure HTTP, unsafe site).
     let interstitial = InterstitialView()
     /// Set by the window: the page's resume script reported a video position or a reading position (JSON).
-    static var resumeReported: ((Tab, String) -> Void)?
-    /// A page's media script reported (see `MediaScript`); set by the window.
-    static var mediaReported: ((Tab, String) -> Void)?
     /// What this tab is playing, if anything worth a "now playing" card.
     var media: MediaInfo?
 
@@ -200,7 +197,6 @@ final class Tab: NSObject {
     /// The page this tab shows in reader mode (nil when it shows a page as it is).
     var readerOrigin: URL?
     /// Set by the window: a page's night-mode script found its site already dark (the host is passed).
-    static var nativeDarkReported: ((String) -> Void)?
     /// Set by the window: called when the user copies something that is one postal address.
     var onAddressCopied: ((String) -> Void)?
     func copiedText(_ text: String) {

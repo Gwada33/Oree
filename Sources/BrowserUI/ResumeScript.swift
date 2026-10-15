@@ -87,6 +87,6 @@ enum ResumeScript {
 final class ResumeMessageHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let json = message.body as? String else { return }
-        MainActor.assumeIsolated { if let tab = Tab.tabsByWebView.object(forKey: message.webView) { Tab.resumeReported?(tab, json) } }
+        MainActor.assumeIsolated { if let tab = Tab.tabsByWebView.object(forKey: message.webView) { tab.owner?.handleResume(tab: tab, json: json) } }
     }
 }
