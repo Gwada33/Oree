@@ -3135,11 +3135,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             return inlineCompletion(for: text) ?? "(nothing)"
         case "dialog":
             guard let alert = activeWebDialog else { return "(none)" }
-            return "\(alert.messageText) | \(alert.informativeText) | buttons=\(alert.buttons.map(\.title)) | field=\(alert.accessoryView is NSTextField)"
+            return "\(alert.messageText) | \(alert.informativeText.replacingOccurrences(of: "\n", with: " / ")) | buttons=\(alert.buttons.map(\.title)) | field=\(alert.accessoryView is NSTextField) fields=\((alert.accessoryView as? NSStackView)?.arrangedSubviews.count ?? 0)"
         case "dialogok", "dialogcancel":
             // Answers the open dialog like a click would: first button = OK, second = Annuler. A prompt gets /tmp/oree-address.txt as its text.
             guard let alert = activeWebDialog else { return "(none)" }
-            if let field = alert.accessoryView as? NSTextField, let text = try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8) { field.stringValue = text }
+            let supplied = (try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8)) ?? ""
+            if let field = alert.accessoryView as? NSTextField { field.stringValue = supplied }
+            if let stack = alert.accessoryView as? NSStackView {           // a username and password request: "user" then "password", one per line
+                let parts = supplied.components(separatedBy: "\n")
+                for (view, text) in zip(stack.arrangedSubviews, parts) { (view as? NSTextField)?.stringValue = text }
+            }
             let index = op == "dialogok" ? 0 : 1
             guard alert.buttons.indices.contains(index) else { return "no such button" }
             alert.buttons[index].performClick(nil)
@@ -4541,6 +4546,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             return .cancel
         }
         if navigationAction.shouldPerformDownload { return .download }
+        // A link for another app (mail, phone, a video-call app…): the web view cannot show it, so the system opens it.
+        let linkType = navigationAction.navigationType
+        let clicked = linkType == .linkActivated || linkType == .formSubmitted
+        switch ExternalLinkPolicy.decision(for: navigationAction.request.url, userInitiated: clicked) {
+        case .notExternal: break
+        case .openDirectly: openExternalLink(navigationAction.request.url, from: webView, ask: false); return .cancel
+        case .askFirst: openExternalLink(navigationAction.request.url, from: webView, ask: true); return .cancel
+        case .block: presentNotice("Orée n’ouvre pas ce type de lien depuis une page web."); return .cancel
+        }
         guard navigationAction.targetFrame?.isMainFrame == true,
               let original = navigationAction.request.url,
               let scheme = original.scheme?.lowercased(), scheme == "http" || scheme == "https",
