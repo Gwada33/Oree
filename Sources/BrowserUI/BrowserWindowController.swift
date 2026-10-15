@@ -86,6 +86,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var pageMapResult = "(none)"
     private let digestPanel = DigestPanelView()
     private let peekPanel = PeekPanelView()
+    private lazy var webPanel = WebPanelView { [unowned self] _ in self.makeConfiguration(isPrivate: false) }
     private let digestButton = ChromeIconButton(symbol: "list.bullet.clipboard", label: "Afficher l'essentiel")
     private let calendarButton = ChromeIconButton(symbol: "calendar.badge.plus", label: "Ajouter au Calendrier")
     private var eventTask: Task<Void, Never>?
@@ -881,6 +882,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             self.digestKey = nil
             if let tab = self.activeTab { self.updateDigestButton(for: tab) }
         }
+        contentContainer.addSubview(webPanel)
+        NSLayoutConstraint.activate([
+            webPanel.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: 10), webPanel.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor, constant: -10),
+            webPanel.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor, constant: -10),
+        ])
+        webPanel.onOpenInTab = { [weak self] url in self?.newTab(urlString: url.absoluteString, isPrivate: false) }
         contentContainer.addSubview(peekPanel)
         NSLayoutConstraint.activate([
             peekPanel.topAnchor.constraint(equalTo: contentContainer.topAnchor), peekPanel.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
@@ -2277,6 +2284,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 actions.append((digestPanel.state == "closed" ? "L'essentiel" : "Fermer « L'essentiel »", "list.bullet.clipboard", { $0.digestAction() }))
             }
             actions.append(("Demander à l'IA", "sparkles", { $0.askAIAction() }))
+            actions.append(contentsOf: webPanelActions())
             if TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
                 actions.append(("Ajouter au Calendrier", "calendar.badge.plus", { $0.addToCalendarAction() }))
                 actions.append(("Personnaliser ce site…", "wand.and.stars", { $0.customizeSiteAction() }))
@@ -3391,6 +3399,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             notesView?.saveNow()
             if let v = notesView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) { v.cacheDisplay(in: v.bounds, to: rep); try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/oree-notes.png")) }
             return "notes=\((try? noteRepo.all().count) ?? -1) title=\(notesView?.note.title ?? "-") body=\(notesView?.note.body.replacingOccurrences(of: "\n", with: "|") ?? "-")"
+        case "webpanel":
+            // Adds a panel for HB_PANEL_URL, shows it, reports what the list holds.
+            guard let url = WebPanels.normalize(ProcessInfo.processInfo.environment["HB_PANEL_URL"] ?? "example.com") else { return "bad url" }
+            let entry = WebPanelEntry(name: WebPanels.defaultName(for: url), url: url.absoluteString)
+            SettingsStore.shared.webPanels = WebPanels.adding(entry, to: SettingsStore.shared.webPanels)
+            webPanel.show(entry)
+            return "panels=\(SettingsStore.shared.webPanels.count) shown=\(webPanel.isShown) actions=\(webPanelActions().map(\.0).joined(separator: " | "))"
+        case "webpanelreport": return "shown=\(webPanel.isShown) current=\(webPanel.current?.name ?? "-") frame=\(webPanel.frame)"
+        case "webpanelremove":
+            if let entry = SettingsStore.shared.webPanels.first { removeWebPanel(entry) }
+            return "panels=\(SettingsStore.shared.webPanels.count)"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"
@@ -3738,6 +3757,55 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if wasActive, let next = TabSelection.neighbor(afterRemovingIndex: index, spaces: tabs.map(\.spaceIndex), space: tab.spaceIndex) { selectTab(tabs[next]) }
         else if wasActive, let first = tabs.first { selectTab(first) }
         other.adopt(tab)
+    }
+
+    // MARK: - Web panels
+
+    /// The palette's entries for the side panels: one per app, plus adding and removing.
+    func webPanelActions() -> [(String, String, @MainActor (BrowserWindowController) -> Void)] {
+        var items: [(String, String, @MainActor (BrowserWindowController) -> Void)] = []
+        for entry in SettingsStore.shared.webPanels {
+            items.append(("Panneau : \(entry.name)", "sidebar.right", { $0.toggleWebPanel(entry) }))
+        }
+        items.append(("Ajouter un panneau web…", "plus.rectangle.on.rectangle", { $0.addWebPanel() }))
+        for entry in SettingsStore.shared.webPanels {
+            items.append(("Retirer le panneau « \(entry.name) »", "minus.rectangle", { $0.removeWebPanel(entry) }))
+        }
+        return items
+    }
+
+    func toggleWebPanel(_ entry: WebPanelEntry) {
+        if webPanel.isShown, webPanel.current == entry { webPanel.hide() } else { webPanel.show(entry) }
+    }
+
+    func removeWebPanel(_ entry: WebPanelEntry) {
+        webPanel.remove(entry)
+        SettingsStore.shared.webPanels = SettingsStore.shared.webPanels.filter { $0 != entry }
+    }
+
+    /// A sheet asking for the address of a web app; the suggestions are one click away.
+    func addWebPanel() {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Ajouter un panneau web"
+        alert.informativeText = "Une application web gardée à droite de la page : saisissez son adresse (par exemple web.whatsapp.com)."
+        alert.addButton(withTitle: "Ajouter")
+        alert.addButton(withTitle: "Annuler")
+        let field = NSComboBox(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
+        field.placeholderString = "adresse du site"
+        field.addItems(withObjectValues: WebPanels.suggestions.map(\.url))
+        alert.accessoryView = field
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            let text = field.stringValue
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let url = WebPanels.normalize(text) else { self.presentNotice("Cette adresse n’est pas une page web."); return }
+                let entry = WebPanelEntry(name: WebPanels.suggestions.first { $0.url == url.absoluteString }?.name ?? WebPanels.defaultName(for: url), url: url.absoluteString)
+                SettingsStore.shared.webPanels = WebPanels.adding(entry, to: SettingsStore.shared.webPanels)
+                self.webPanel.show(entry)
+            }
+        }
     }
 
     /// Shows `url` in the preview card over the page.

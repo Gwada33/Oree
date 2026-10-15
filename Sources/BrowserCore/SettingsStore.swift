@@ -358,6 +358,12 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.tabArchiveDays") }
     }
 
+    /// Web apps kept in side panels.
+    public var webPanels: [WebPanelEntry] {
+        get { (defaults.data(forKey: "settings.webPanels").flatMap { try? JSONDecoder().decode([WebPanelEntry].self, from: $0) }) ?? [] }
+        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "settings.webPanels") }
+    }
+
     public var energyMode: EnergyMode {
         get {
             if let forced = ProcessInfo.processInfo.environment["HB_ENERGY_MODE"], let mode = EnergyMode(rawValue: forced) { return mode }      // tests
