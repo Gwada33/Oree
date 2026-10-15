@@ -3,6 +3,8 @@
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
 **135 fonctions examinées : 64 absentes (rien trouvé), 71 avec du code présent.**
 
+Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix.
+
 
 - **Absent** : aucun code correspondant trouvé. Probablement absent, mais une fonction peut exister sous un autre nom que celui cherché.
 - **Code présent** : du code correspondant existe. Ça ne dit **rien** de sa qualité ni de sa complétude ; la ligne reste à tester.
