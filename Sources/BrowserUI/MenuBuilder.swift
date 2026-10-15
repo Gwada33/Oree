@@ -32,6 +32,7 @@ public final class MenuBuilder {
         addCommand("newPrivateTab", to: fileMenu, selector: #selector(BrowserWindowController.newPrivateTabAction))
         addCommand("closeTab", to: fileMenu, selector: #selector(BrowserWindowController.closeActiveTabAction))
         addCommand("reopenTab", to: fileMenu, selector: #selector(BrowserWindowController.reopenClosedTab))
+        addCommand("recentTab", to: fileMenu, selector: #selector(BrowserWindowController.selectRecentTab))
         for number in 1...9 {
             let item = NSMenuItem(title: "Espace \(number)", action: #selector(BrowserWindowController.selectSpaceByNumber(_:)), keyEquivalent: String(number))
             item.keyEquivalentModifierMask = [.control]
@@ -50,6 +51,7 @@ public final class MenuBuilder {
         addCommand("savePDF", to: fileMenu, selector: #selector(BrowserWindowController.savePageAsPDF))
         addCommand("print", to: fileMenu, selector: #selector(BrowserWindowController.printPage))
         addCommand("viewSource", to: fileMenu, selector: #selector(BrowserWindowController.viewPageSource))
+        addCommand("qrCode", to: fileMenu, selector: #selector(BrowserWindowController.showPageQRCode))
         addCommand("reader", to: fileMenu, selector: #selector(BrowserWindowController.toggleReaderMode))
         fileMenu.addItem(.separator())
         addCommand("moveTabUp", to: fileMenu, selector: #selector(BrowserWindowController.moveActiveTabUp))

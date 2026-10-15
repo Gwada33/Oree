@@ -117,14 +117,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var isQuitting = false
+    private var forgetAtQuit = false
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         isQuitting = true
         BrowserWindowController.saveExtraWindows()       // one last time, with every window still open
-        return .terminateNow
+        let settings = SettingsStore.shared
+        guard settings.clearHistoryOnQuit || settings.clearSiteDataOnQuit else { return .terminateNow }
+        // The user asked to forget history and/or site data at quit: do it, then quit (and keep no picture of the pages either).
+        forgetAtQuit = true
+        Task { @MainActor in
+            await BrowserWindowController.clearAtQuit()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        browserController?.persistSleepSnapshots()  // encrypted, only for tabs that are still open (see SnapshotVault)
+        if !forgetAtQuit { browserController?.persistSleepSnapshots() }  // encrypted, only for tabs that are still open (see SnapshotVault)
         BrowserWindowController.purgeSnapshots()   // the plain pictures never outlive the app
     }
 

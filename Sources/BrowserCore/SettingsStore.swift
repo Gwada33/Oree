@@ -89,6 +89,10 @@ public final class SettingsStore: @unchecked Sendable {
         static let httpsOnly = "settings.httpsOnly"
         static let urlCleaning = "settings.urlCleaning"
         static let fingerprintProtection = "settings.fingerprintProtection"
+        static let sendGPC = "settings.sendGlobalPrivacyControl"
+        static let minimumFontSize = "settings.minimumFontSize"
+        static let clearHistoryOnQuit = "settings.clearHistoryOnQuit"
+        static let clearSiteDataOnQuit = "settings.clearSiteDataOnQuit"
         static let safeBrowsingEnabled = "settings.safeBrowsingEnabled"
         static let safeBrowsingAPIKey = "settings.safeBrowsingAPIKey"
         static let webInspectorEnabled = "settings.webInspectorEnabled"
@@ -147,6 +151,7 @@ public final class SettingsStore: @unchecked Sendable {
             Key.httpsOnly: true,
             Key.urlCleaning: true,
             Key.fingerprintProtection: true,
+            Key.sendGPC: true,
             // Opt-in: Safe Browsing sends hash prefixes of visited URLs to Google.
             Key.safeBrowsingEnabled: false,
             Key.safeBrowsingAPIKey: "",
@@ -333,6 +338,28 @@ public final class SettingsStore: @unchecked Sendable {
     public var urlCleaning: Bool {
         get { defaults.bool(forKey: Key.urlCleaning) }
         set { defaults.set(newValue, forKey: Key.urlCleaning) }
+    }
+
+    /// Tell sites not to sell or share what the user does (Global Privacy Control: `navigator.globalPrivacyControl`).
+    public var sendGlobalPrivacyControl: Bool {
+        get { defaults.bool(forKey: Key.sendGPC) }
+        set { defaults.set(newValue, forKey: Key.sendGPC) }
+    }
+
+    /// Smallest text size a page may show, in points (0 = the page decides).
+    public var minimumFontSize: Int {
+        get { max(0, min(defaults.integer(forKey: Key.minimumFontSize), 36)) }
+        set { defaults.set(max(0, min(newValue, 36)), forKey: Key.minimumFontSize) }
+    }
+
+    /// When Orée quits: forget the browsing history / the cookies and the other data sites keep.
+    public var clearHistoryOnQuit: Bool {
+        get { defaults.bool(forKey: Key.clearHistoryOnQuit) }
+        set { defaults.set(newValue, forKey: Key.clearHistoryOnQuit) }
+    }
+    public var clearSiteDataOnQuit: Bool {
+        get { defaults.bool(forKey: Key.clearSiteDataOnQuit) }
+        set { defaults.set(newValue, forKey: Key.clearSiteDataOnQuit) }
     }
 
     public var fingerprintProtection: Bool {

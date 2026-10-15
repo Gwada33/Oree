@@ -1,9 +1,9 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
-**140 fonctions examinées : 52 absentes (rien trouvé), 88 avec du code présent.**
+**140 fonctions examinées : 46 absentes (rien trouvé), 94 avec du code présent.**
 
-Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R), nouvelle fenêtre (⌘N) et déplacer un onglet vers une nouvelle fenêtre. Réparé : un plantage au téléchargement d’un fichier créé par la page (blob), le message d’une fenêtre de connexion qui se ferme (perdu), zoom de la page (⌘+ ⌘− ⌘0, mémorisé par site) et pincer pour zoomer (ils manquaient), mot de passe demandé par un site, liens mailto:/tel:/applications externes, choisir un fichier à envoyer (il ne faisait rien) et les fenêtres alert / confirm / prompt des pages (confirm répondait toujours non). Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
+Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R), nouvelle fenêtre (⌘N) et déplacer un onglet vers une nouvelle fenêtre. Ajoutés (lot des fonctions simples) : vitesse de lecture et touches multimédia, signal Global Privacy Control, effacer l’historique et les données à la fermeture, code QR de la page, taille de texte minimale, calculatrice dans la barre, ⌃Tab entre onglets récents. Réparé : un plantage au téléchargement d’un fichier créé par la page (blob), le message d’une fenêtre de connexion qui se ferme (perdu), zoom de la page (⌘+ ⌘− ⌘0, mémorisé par site) et pincer pour zoomer (ils manquaient), mot de passe demandé par un site, liens mailto:/tel:/applications externes, choisir un fichier à envoyer (il ne faisait rien) et les fenêtres alert / confirm / prompt des pages (confirm répondait toujours non). Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
 
 
 - **Absent** : aucun code correspondant trouvé. Probablement absent, mais une fonction peut exister sous un autre nom que celui cherché.
@@ -30,7 +30,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Fermer les autres onglets / ceux à droite | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Aperçu de l’onglet au survol | ❌ absent | Chrome, Safari, Edge, Arc, Vivaldi, Brave |
 | Vue d’ensemble en grille de tous les onglets | ◐ code présent (à tester) | Safari, Chrome, Firefox, Vivaldi |
-| Ctrl+Tab dans l’ordre d’utilisation récente | ❌ absent | Chrome, Firefox, Vivaldi, Opera, Arc |
+| Ctrl+Tab dans l’ordre d’utilisation récente | ◐ code présent (à tester) | Chrome, Firefox, Vivaldi, Opera, Arc |
 | Ajouter tous les onglets aux favoris | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Vivaldi, Opera |
 | Archivage automatique des onglets inutilisés | ❌ absent | Arc |
 | Aperçu d’un lien sans quitter la page (Peek) | ❌ absent | Arc, Safari |
@@ -55,7 +55,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Liste de lecture | ◐ code présent (à tester) | Safari, Chrome, Firefox, Edge, Vivaldi |
 | Capture d’écran de la page (zone, page entière) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Vivaldi, Opera |
 | Mode sombre forcé sur tous les sites | ◐ code présent (à tester) | Chrome, Firefox, Edge, Opera, Vivaldi, Safari |
-| Taille de police minimale / police par défaut réglables | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
+| Taille de police minimale / police par défaut réglables | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Navigation au clavier dans la page (caret browsing) | ❌ absent | Chrome, Firefox, Edge |
 | Résumé de page par IA | ◐ code présent (à tester) | Edge, Arc, Brave, Opera, Safari |
 | Informations sur le site (certificat, permissions, cookies) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
@@ -70,10 +70,10 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Moteurs et mots-clés personnalisés (« w » + Tab) | ◐ code présent (à tester) | Chrome, Firefox, Edge, Vivaldi, Opera, Brave |
 | Suggestions de recherche en ligne | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Recherche dans les onglets, favoris et historique depuis la barre | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Vivaldi, Opera |
-| Calculatrice et conversions dans la barre | ❌ absent | Chrome, Edge, Vivaldi, Arc |
+| Calculatrice et conversions dans la barre | ◐ code présent (à tester) | Chrome, Edge, Vivaldi, Arc |
 | Complétion en ligne de l’adresse | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Vivaldi, Opera |
 | Palette de commandes (⌘K) | ◐ code présent (à tester) | Arc, Vivaldi, Edge, Opera |
-| QR code pour partager la page | ❌ absent | Chrome, Edge, Brave |
+| QR code pour partager la page | ◐ code présent (à tester) | Chrome, Edge, Brave |
 | Menu Partager (AirDrop, Messages…) | ❌ absent | Safari, Chrome, Arc, Edge |
 
 ## Vie privée et sécurité
@@ -89,7 +89,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Fenêtre privée avec Tor | ❌ absent | Brave |
 | VPN intégré | ❌ absent | Opera, Brave, Firefox |
 | DNS sécurisé (DoH) réglable | ❌ absent | Chrome, Firefox, Edge, Brave, Vivaldi, Opera |
-| Signal Global Privacy Control / Do Not Track | ❌ absent | Firefox, Brave, Chrome, Safari, Edge |
+| Signal Global Privacy Control / Do Not Track | ◐ code présent (à tester) | Firefox, Brave, Chrome, Safari, Edge |
 | Gestionnaire de mots de passe | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Verrouillage du coffre par Touch ID | ◐ code présent (à tester) | Chrome, Safari, Edge |
 | Vérification de mots de passe compromis | ❌ absent | Chrome, Safari, Firefox, Edge, Brave |
@@ -100,7 +100,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Apple Pay / Google Pay sur les sites | ❌ absent | Safari, Chrome |
 | Permissions de site (caméra, micro, position…) | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Gestion des cookies et données du site | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
-| Effacer les données à la fermeture | ❌ absent | Firefox, Chrome, Brave, Vivaldi |
+| Effacer les données à la fermeture | ◐ code présent (à tester) | Firefox, Chrome, Brave, Vivaldi |
 | Notifications web (push) | ❌ absent | Chrome, Firefox, Edge, Brave, Vivaldi, Opera, Safari |
 | Bloqueur de fenêtres intempestives | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 | Visionneuse de certificats | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge |

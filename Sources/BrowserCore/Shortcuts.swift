@@ -62,6 +62,8 @@ public enum ShortcutRegistry {
         c("newPrivateTab", "Nouvel onglet privé", "Onglets", "n", [.command, .shift]),
         c("closeTab", "Fermer l’onglet", "Onglets", "w"),
         c("reopenTab", "Rouvrir l’onglet fermé", "Onglets", "t", [.command, .shift]),
+        c("recentTab", "Onglet précédemment utilisé", "Onglets", "\t", [.control]),
+        c("qrCode", "Code QR de la page", "Page", nil),
         c("sleepTab", "Mettre l’onglet en veille", "Onglets", "e", [.command, .option]),
         c("moveTabUp", "Déplacer l’onglet vers le haut", "Onglets", KeyBinding.upArrow, [.command, .shift]),
         c("moveTabDown", "Déplacer l’onglet vers le bas", "Onglets", KeyBinding.downArrow, [.command, .shift]),

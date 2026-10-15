@@ -70,6 +70,10 @@ final class SettingsViewModel: ObservableObject {
     @Published var newShortcutTemplate = ""
     @Published var shortcutMessage: String?
     @Published var downloadDirectory = ""
+    @Published var sendGPC = true { didSet { settings.sendGlobalPrivacyControl = sendGPC } }
+    @Published var minimumFontSize = 0 { didSet { settings.minimumFontSize = minimumFontSize } }
+    @Published var clearHistoryOnQuit = false { didSet { settings.clearHistoryOnQuit = clearHistoryOnQuit } }
+    @Published var clearSiteDataOnQuit = false { didSet { settings.clearSiteDataOnQuit = clearSiteDataOnQuit } }
     @Published var userAgentMode: UserAgentMode = .safari { didSet { settings.userAgentMode = userAgentMode } }
     @Published var customUserAgent = "" { didSet { settings.customUserAgent = customUserAgent } }
     @Published var chromeAgentHosts: [String] = []
@@ -183,6 +187,10 @@ final class SettingsViewModel: ObservableObject {
         searchEngine = current.searchEngine
         customShortcuts = current.customSearchShortcuts
         downloadDirectory = current.downloadDirectoryPath
+        sendGPC = current.sendGlobalPrivacyControl
+        minimumFontSize = current.minimumFontSize
+        clearHistoryOnQuit = current.clearHistoryOnQuit
+        clearSiteDataOnQuit = current.clearSiteDataOnQuit
         userAgentMode = current.userAgentMode
         customUserAgent = current.customUserAgent
         chromeAgentHosts = current.chromeUserAgentHosts
@@ -588,6 +596,23 @@ public struct SettingsView: View {
                     }
                 }
                 Text("Safari convient presque partout. Certains sites refusent un navigateur qu’ils ne connaissent pas : présente-toi comme Chrome pour eux seulement (aussi dans la palette ⌘K, « Se présenter comme Chrome sur ce site »).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Confidentialité") {
+                Toggle("Demander aux sites de ne pas vendre ni partager mes données (Global Privacy Control)", isOn: $model.sendGPC)
+                Text("Les sites peuvent lire ce signal ; ceux qui le respectent (c’est une obligation légale dans plusieurs régions) cessent de te suivre. Il n’est pas ajouté aux requêtes elles-mêmes.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Effacer l’historique en quittant Orée", isOn: $model.clearHistoryOnQuit)
+                Toggle("Effacer les cookies et les données des sites en quittant Orée", isOn: $model.clearSiteDataOnQuit)
+                Text("Les favoris, les mots de passe enregistrés et les onglets ouverts ne sont jamais effacés. Effacer les cookies te déconnecte des sites.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Texte des pages") {
+                Picker("Taille de texte minimale", selection: $model.minimumFontSize) {
+                    Text("Celle de la page").tag(0)
+                    ForEach([9, 10, 12, 14, 16, 18, 20], id: \.self) { Text("\($0) points").tag($0) }
+                }
+                Text("Agrandit les textes que des sites écrivent trop petits. S’applique aux pages ouvertes comme aux suivantes.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Téléchargements") {

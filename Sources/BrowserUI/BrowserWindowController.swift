@@ -69,6 +69,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     var siteInfoPopover: NSPopover?
     /// The window of a page's alert / confirm / prompt while it is open (kept so that a test can see and answer it).
     var activeWebDialog: NSAlert?
+    /// Tabs in the order they were last in front (most recent first): ⌃Tab goes back to the previous one, like Alt-Tab does for apps.
+    var recentTabIDs: [UUID] = []
+    private var qrPopover: NSPopover?
     private var artworkCache: [String: NSImage] = [:]
     private var artworkRequested: Set<String> = []
     private var shownArtwork: String?
@@ -552,6 +555,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 self?.applyRuleListsIfSettingsChanged()
+                let font = CGFloat(SettingsStore.shared.minimumFontSize)
+                for tab in self?.tabs ?? [] where tab.webView?.configuration.preferences.minimumFontSize != font { tab.webView?.configuration.preferences.minimumFontSize = font }
                 self?.settingsChanged()
             }
         }
@@ -580,6 +585,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// when ad blocking is on, the cosmetic CSS matching this URL.
     private func userScripts(for url: URL?) -> [WKUserScript] {
         var scripts: [WKUserScript] = [CredentialScript.makeUserScript(), MediaScript.makeUserScript()]
+        if SettingsStore.shared.sendGlobalPrivacyControl { scripts.append(PrivacyTools.gpcUserScript()) }
         if SettingsStore.shared.resumeEnabled { scripts.append(ResumeScript.makeUserScript()) }
         scripts.append(BoostScript.makeUserScript(boostConfig()))
         if SettingsStore.shared.nightMode != .off { scripts.append(NightScript.makeUserScript(nightConfig())) }
@@ -2131,6 +2137,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         var sections: [PaletteSection] = []
 
+        if filter == .all, let value = Calculator.evaluate(q) {
+            let answer = Calculator.format(value)
+            sections.append(PaletteSection(title: "Calcul", items: [
+                PaletteItem(icon: .symbol("equal.square"), title: "= \(answer)", subtitle: q, trailing: "↵ copier", perform: { [weak self] _ in
+                    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(answer, forType: .string)
+                    self?.presentNotice("« \(answer) » copié.")
+                }),
+            ]))
+        }
+
         if filter == .all, !q.isEmpty {
             let resolution = AddressResolver.resolve(q, defaultEngine: SettingsStore.shared.searchEngine, custom: SettingsStore.shared.customSearchShortcuts)
             var siteName: String?
@@ -2319,6 +2335,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         config.userContentController.addUserScript(CredentialScript.makeUserScript())
         config.userContentController.addUserScript(MediaScript.makeUserScript())
+        if SettingsStore.shared.sendGlobalPrivacyControl { config.userContentController.addUserScript(PrivacyTools.gpcUserScript()) }
+        config.preferences.minimumFontSize = CGFloat(SettingsStore.shared.minimumFontSize)
         if SettingsStore.shared.resumeEnabled { config.userContentController.addUserScript(ResumeScript.makeUserScript()) }
         config.userContentController.addUserScript(BoostScript.makeUserScript(boostConfig()))
         if SettingsStore.shared.lightLongPages {
@@ -2461,7 +2479,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
+    /// ⌃Tab — back to the tab used before this one (again: back to this one).
+    @objc func selectRecentTab() {
+        guard let previous = recentTabIDs.dropFirst().compactMap({ id in tabs.first { $0.id == id } }).first else { NSSound.beep(); return }
+        selectTab(previous)
+    }
+
     func selectTab(_ tab: Tab) {
+        recentTabIDs.removeAll { $0 == tab.id }
+        recentTabIDs.insert(tab.id, at: 0)
+        if recentTabIDs.count > 50 { recentTabIDs.removeLast() }
         aiBarController?.tabChanged(id: tab.id, title: tab.displayTitle)
         if digestPanel.state != "closed" { digestPanel.close() }     // the essentials belong to the page they were made from
         // Picking a tab that isn't one of the two sides leaves the split screen.
@@ -3104,6 +3131,31 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case "media":
             return "\(nowPlaying.summary) | tab=\(mediaTabID == tab.id ? "this" : "other") | out=\(audioRoute.output.name) bt=\(audioRoute.output.bluetooth)"
         case "mediatoggle": mediaCommand(tab, "toggle"); return "ok"
+        case "qr":
+            guard let url = tab.webView?.url, let image = PrivacyTools.qrImage(for: url.absoluteString) else { return "no qr" }
+            return "qr decodes to: \(PrivacyTools.decodeQR(image) ?? "(unreadable)") | size=\(Int(image.size.width))"
+        case "minfont":
+            // Sets the minimum text size on this tab only (not in the saved settings) and reports the height of the page's #t element.
+            let size = Int((try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0
+            tab.webView?.configuration.preferences.minimumFontSize = CGFloat(size)
+            return "minimumFontSize=\(tab.webView?.configuration.preferences.minimumFontSize ?? -1)"
+        case "recent": return recentTabIDs.compactMap { id in tabs.firstIndex { $0.id == id } }.map(String.init).joined(separator: ",")
+        case "recentgo": selectRecentTab(); return "active=\(tabs.firstIndex { $0.id == activeTabID } ?? -1)"
+        case "calc":
+            let text = (try? String(contentsOfFile: "/tmp/oree-address.txt", encoding: .utf8)) ?? ""
+            return Calculator.evaluate(text).map(Calculator.format) ?? "(not a calculation)"
+        case "clearcheck":
+            // Clears a throw-away store (never the real one) to prove that the function empties cookies and storage.
+            Task { @MainActor in
+                let store = WKWebsiteDataStore.nonPersistent()
+                let cookie = HTTPCookie(properties: [.domain: "exemple.test", .path: "/", .name: "k", .value: "v", .expires: Date().addingTimeInterval(3600)])!
+                await store.httpCookieStore.setCookie(cookie)
+                let before = await store.httpCookieStore.allCookies().count
+                await PrivacyTools.clearSiteData(in: store)
+                let after = await store.httpCookieStore.allCookies().count
+                try? "before=\(before) after=\(after)".write(toFile: "/tmp/oree-clearcheck.txt", atomically: true, encoding: .utf8)
+            }
+            return "started"
         case "mediakey":
             // Presses a media key's action (toggle by default), and reports what Control Center would show.
             MediaKeys.shared.perform(.toggle)
@@ -3717,6 +3769,28 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if OreeShowPopover(popover, target.bounds, target, .maxY, &reason) { return true }
         Log.tabs.error("Popover refused by AppKit: \((reason as String?) ?? "?", privacy: .public)")
         return false
+    }
+
+    /// The QR code of the page's address, to scan with a phone, with copy and save.
+    @objc func showPageQRCode() {
+        guard let url = activeTab?.webView?.url, url.scheme == "http" || url.scheme == "https",
+              let image = PrivacyTools.qrImage(for: url.absoluteString) else { presentNotice("Cette page n’a pas d’adresse à partager."); return }
+        if let popover = qrPopover, popover.isShown { popover.close(); return }
+        let view = NSImageView(image: image)
+        view.frame = NSRect(x: 0, y: 0, width: 220, height: 220)
+        let host = url.host ?? url.absoluteString
+        let caption = oreeLabel(host, font: Theme.sans(12), color: Theme.muted)
+        caption.alignment = .center
+        let copy = TextButton("Copier l’image", style: .secondary, height: 28) {
+            NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([image])
+        }
+        let stack = NSStackView(views: [view, caption, copy])
+        stack.orientation = .vertical; stack.spacing = 10; stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        stack.frame = NSRect(x: 0, y: 0, width: 252, height: 306)
+        let controller = NSViewController(); controller.view = stack
+        let popover = NSPopover(); popover.behavior = .transient; popover.contentViewController = controller
+        guard showPopoverSafely(popover, relativeTo: addressPill) else { return }
+        qrPopover = popover
     }
 
     func presentNotice(_ message: String) { noticePill.show(message: message, button: "OK", seconds: 6) { } }
