@@ -16,7 +16,7 @@ BUILD_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
 # Version shown in « À propos » and compared by the updater: edit the VERSION file before a release.
 APP_VERSION="$(tr -d '[:space:]' < VERSION)"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
-APP_DIR="${APP_NAME}.app"
+APP_DIR="${OREE_APP_DIR:-${APP_NAME}.app}"   # OREE_APP_DIR : construire ailleurs (essais pendant que l'app tourne)
 
 echo "==> Building release binary..."
 swift build -c "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"} --product "$EXECUTABLE_NAME"
