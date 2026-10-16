@@ -48,6 +48,29 @@ def main():
         ui("tab", "otpseed", "0"); ui("tab", "otpfill", "0"); time.sleep(2.5)
         boxes = ui("eval", "[...document.querySelectorAll('input.d')].map(i => i.value).join('')")
         check(f"un code en six cases est réparti case par case ({boxes})", boxes in (before, totp()) and len(boxes) == 6)
+        print("\nAdresses et cartes")
+        print("  ", ui("tab", "afseed", "0"), ui("tab", "afcount", "0"))
+        def val(expr): return ui("eval", expr)
+        def fill(kind):
+            open("/tmp/oree-af-kind.txt", "w").write(kind); ui("tab", "affill", "0"); time.sleep(1.5)
+        ui("load", f"http://127.0.0.1:{PORT}/address.html"); time.sleep(3); fill("address")
+        got = [val(f"document.getElementById('{i}').value") for i in ("fn", "ln", "em", "tel", "org", "a1", "a2", "zip", "city", "country")]
+        check("champs marqués par autocomplete : tout est rempli " + str(got), got == ["Ana", "Dupont", "ana@exemple.fr", "0612345678", "Exemple SA", "12 rue des Lilas", "Bât. B", "75011", "Paris", "FR"])
+        ui("load", f"http://127.0.0.1:{PORT}/french.html"); time.sleep(3); fill("address")
+        got = [val(f"document.getElementById('{i}').value") for i in ("p", "n", "mail", "mob", "adr", "cplt", "cp", "vil", "pays", "soc")]
+        check("formulaire en français sans autocomplete : champs reconnus par leur nom, leur forme et leur étiquette " + str(got), got == ["Ana", "Dupont", "ana@exemple.fr", "0612345678", "12 rue des Lilas", "Bât. B", "75011", "Paris", "France", "Exemple SA"])
+        ui("load", f"http://127.0.0.1:{PORT}/card.html"); time.sleep(3); fill("card")
+        got = [val(f"document.getElementById('{i}').value") for i in ("holder", "num", "mm", "yy", "cvc")]
+        check("carte : titulaire, numéro, mois et année (listes) remplis, code de sécurité JAMAIS " + str(got), got == ["ANA DUPONT", "4242424242424242", "08", "2031", ""])
+        ui("load", f"http://127.0.0.1:{PORT}/card2.html"); time.sleep(3); fill("card")
+        got = [val(f"document.getElementById('{i}').value") for i in ("num", "exp", "cvc")]
+        check("carte : date en un seul champ « MM/AA » de 5 caractères " + str(got), got == ["4242424242424242", "08/31", ""])
+        ui("load", f"http://127.0.0.1:{PORT}/otp.html"); time.sleep(3); fill("address")
+        check("un formulaire sans champ d'adresse n'est pas touché", val("document.getElementById('otp').value") in ("", "null"))
+        open("/tmp/oree-af-values.json", "w").write('{"name": "Bob Martin", "address-line1": "3 avenue Foch", "postal-code": "69006", "address-level2": "Lyon"}')
+        check("l'adresse d'un formulaire envoyé est reconnue comme nouvelle (nom coupé en prénom et nom)", "street=3 avenue Foch city=Lyon first=Bob last=Martin known=false" in ui("tab", "afsubmit", "0"))
+        open("/tmp/oree-af-values.json", "w").write('{"given-name": "Ana", "address-line1": "12 RUE des lilas", "postal-code": "75011", "address-level2": "Paris"}')
+        check("une adresse déjà enregistrée (écrite autrement) n'est pas reproposée", "known=true" in ui("tab", "afsubmit", "0"))
     finally:
         proc.terminate(); proc.wait(timeout=10); server.shutdown()
     print(f"\n{sum(results)}/{len(results)} vérifications passent")

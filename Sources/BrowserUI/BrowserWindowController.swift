@@ -47,6 +47,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     var settingsWindow: NSWindow?
     var sessionSaveWork: DispatchWorkItem?
     // Journal d'événements : le contexte du prochain événement (comment l'onglet s'ouvre, comment il est choisi, pourquoi il se ferme), et la saisie en cours dans la barre d'adresse.
+    let autofillStore = AutofillStore()
     var journalOpenHow = "other"
     var journalSelectVia = "other"
     var journalCloseWhy = "user"
@@ -651,7 +652,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Scripts injected into a page: fingerprint protection (all pages) and,
     /// when ad blocking is on, the cosmetic CSS matching this URL.
     func userScripts(for url: URL?, isPrivate: Bool = false) -> [WKUserScript] {
-        var scripts: [WKUserScript] = [CredentialScript.makeUserScript(), MediaScript.makeUserScript()]
+        var scripts: [WKUserScript] = [CredentialScript.makeUserScript(), AutofillScript.makeUserScript(), MediaScript.makeUserScript()]
         if SettingsStore.shared.eventJournalEnabled, !isPrivate { scripts.append(JournalScript.makeUserScript()) }      // le journal : jamais dans un onglet privé
         if SettingsStore.shared.sendGlobalPrivacyControl { scripts.append(PrivacyTools.gpcUserScript()) }
         if SettingsStore.shared.resumeEnabled { scripts.append(ResumeScript.makeUserScript()) }

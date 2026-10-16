@@ -559,6 +559,11 @@ extension BrowserWindowController {
         switch type {
         case "focus":
             Task { await offerAutofill(in: tab, webView: webView, origin: origin) }
+        case "address", "card":
+            Task { await offerAutofillMenu(kind: type, body: body, tab: tab, webView: webView) }
+        case "addressSubmit", "cardSubmit":
+            guard !tab.isPrivate, let values = body["values"] as? [String: String] else { return }
+            Task { await (type == "cardSubmit" ? offerToSaveCard(values) : offerToSaveAddress(values)) }
         case "otp":
             guard !tab.isPrivate else { return }
             Task { await offerOneTimeCode(in: tab, webView: webView, origin: origin) }

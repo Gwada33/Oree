@@ -30,6 +30,7 @@ extension BrowserWindowController {
             config.userContentController.addUserScript(FingerprintProtection.makeUserScript(sessionSeed: fingerprintSeed))
         }
         config.userContentController.addUserScript(CredentialScript.makeUserScript())
+        config.userContentController.addUserScript(AutofillScript.makeUserScript())
         config.userContentController.addUserScript(MediaScript.makeUserScript())
         if SettingsStore.shared.eventJournalEnabled, !isPrivate { config.userContentController.addUserScript(JournalScript.makeUserScript()) }
         if SettingsStore.shared.sendGlobalPrivacyControl { config.userContentController.addUserScript(PrivacyTools.gpcUserScript()) }

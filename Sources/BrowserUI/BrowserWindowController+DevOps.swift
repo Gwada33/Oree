@@ -218,6 +218,27 @@ extension BrowserWindowController {
             try? vault.saveTOTP(TOTPConfig(secret: Base32.decode("JBSWY3DPEHPK3PXP")!), origin: origin, username: "ana")
             return "seeded \(origin)"
         case "otpfill": fillOneTimeCodeAction(); return "asked"
+        case "afseed":
+            var home = AddressProfile(label: "Maison"); home.firstName = "Ana"; home.lastName = "Dupont"; home.email = "ana@exemple.fr"; home.phone = "0612345678"
+            home.street = "12 rue des Lilas"; home.street2 = "Bât. B"; home.postalCode = "75011"; home.city = "Paris"; home.region = "Île-de-France"; home.country = "France"; home.organization = "Exemple SA"
+            var card = CardProfile(label: "Perso"); card.holder = "ANA DUPONT"; card.number = "4242 4242 4242 4242"; card.expMonth = 8; card.expYear = 2031
+            try? autofillStore.save(home); try? autofillStore.save(card)
+            return "seeded"
+        case "affill":
+            // Remplit l'adresse (ou la carte, sans Touch ID : build de développement) dans le formulaire de la page affichée.
+            guard let web = tab.webView else { return "no page" }
+            let kind = (try? String(contentsOfFile: "/tmp/oree-af-kind.txt", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "address"
+            let tokens = kind == "card" ? ((try? autofillStore.cards().first?.tokens) ?? nil) : ((try? autofillStore.addresses().first?.tokens) ?? nil)
+            guard let tokens else { return "nothing saved" }
+            Task { @MainActor in await self.fill(kind: kind, tokens: tokens, in: web) }
+            return "asked \(kind)"
+        case "afcount": return "addresses=\((try? autofillStore.addresses().count) ?? -1) cards=\((try? autofillStore.cards().count) ?? -1)"
+        case "afsubmit":
+            // Simule le message de la page à l'envoi d'un formulaire (les envois d'essai ne sont pas « de confiance » pour le script) : l'app compare, puis propose.
+            guard let raw = try? String(contentsOfFile: "/tmp/oree-af-values.json", encoding: .utf8), let values = (try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: String] else { return "no values" }
+            let candidate = Self.addressProfile(from: values)
+            let known = ((try? autofillStore.addresses()) ?? []).contains { Self.sameAddress($0, candidate) }
+            return "candidate street=\(candidate.street) city=\(candidate.city) first=\(candidate.firstName) last=\(candidate.lastName) known=\(known)"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"

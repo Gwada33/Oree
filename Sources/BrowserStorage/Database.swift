@@ -227,6 +227,17 @@ public final class AppDatabase: @unchecked Sendable {
             }
         }
 
+        // Adresses et cartes pour le remplissage automatique : un enregistrement chiffré par ligne.
+        migrator.registerMigration("v15_autofill") { db in
+            try db.create(table: "autofill") { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("kind", .text).notNull()
+                t.column("label", .text).notNull().defaults(to: "")
+                t.column("sealed", .blob).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }

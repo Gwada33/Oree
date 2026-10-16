@@ -163,6 +163,11 @@ final class SettingsViewModel: ObservableObject {
     @Published var newLoginPassword = ""
     @Published var passwordMessage: String?
     @Published var passwordReport: [String] = []
+    @Published var addresses: [AddressProfile] = []
+    @Published var cards: [CardProfile] = []
+    @Published var editingAddress: AddressProfile?
+    @Published var editingCard: CardProfile?
+    let autofill = AutofillStore()
     @Published var importResultMessage: String?
     @Published var cookieImportMessage: String?
     @Published var cookieImportRunning = false
@@ -219,7 +224,7 @@ final class SettingsViewModel: ObservableObject {
         autoSuspendMinutes = current.autoSuspendMinutes
         freezeAfterSeconds = current.freezeAfterSeconds
         reloadPermissions()
-        reloadLogins()
+        reloadLogins(); reloadAutofill()
         refreshDefaultBrowser()
         reloadExtensions()
         reloadHeaviestSites()
@@ -525,6 +530,8 @@ public struct SettingsView: View {
             if let raw = note.object as? String, let c = SettingsCategory(rawValue: raw) { model.category = c }
         }
         .frame(minWidth: 760, minHeight: 560)
+        .sheet(item: $model.editingAddress) { address in AddressEditor(address: address, onSave: { model.saveAddress($0) }, onCancel: { model.editingAddress = nil }) }
+        .sheet(item: $model.editingCard) { card in CardEditor(card: card, onSave: { model.saveCard($0) }, onCancel: { model.editingCard = nil }) }
         .confirmationDialog(
             "Cette action est irréversible.",
             isPresented: Binding(
@@ -805,6 +812,39 @@ public struct SettingsView: View {
     }
 
     @ViewBuilder private var passwordSections: some View {
+            Section("Adresses et cartes (remplissage automatique)") {
+                if model.addresses.isEmpty && model.cards.isEmpty {
+                    Text("Aucune adresse ni carte. Orée proposera de les enregistrer quand vous remplirez un formulaire, ou ajoutez-les ici.").font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach(model.addresses) { address in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(address.label.isEmpty ? address.fullName : address.label)
+                            Text([address.fullName, address.summary].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Modifier") { model.editingAddress = address }
+                        Button("Supprimer", role: .destructive) { model.deleteAutofill(address.id) }
+                    }
+                }
+                ForEach(model.cards) { card in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(card.label.isEmpty ? card.brand : card.label)
+                            Text(card.summary).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Modifier") { model.editCard(card) }
+                        Button("Supprimer", role: .destructive) { model.deleteAutofill(card.id) }
+                    }
+                }
+                HStack {
+                    Button("Ajouter une adresse…") { model.editingAddress = AddressProfile() }
+                    Button("Ajouter une carte…") { model.editingCard = CardProfile() }
+                }
+                Text("Chiffrées sur ce Mac (clé dans le Trousseau). Les cartes ne se remplissent qu'après Touch ID, et leur code de sécurité n'est jamais enregistré.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Mots de passe") {
                 if model.savedLogins.isEmpty {
                     Text("Aucun mot de passe enregistré. Orée proposera d'en enregistrer à la connexion.")
@@ -1570,5 +1610,126 @@ extension SettingsViewModel {
             passwordReport = lines
             passwordMessage = "Vérification terminée."
         }
+    }
+}
+
+// MARK: - Adresses et cartes
+extension SettingsViewModel {
+    func reloadAutofill() {
+        addresses = (try? autofill.addresses()) ?? []
+        cards = (try? autofill.cards()) ?? []
+    }
+
+    func saveAddress(_ address: AddressProfile) {
+        var saved = address
+        if saved.label.trimmingCharacters(in: .whitespaces).isEmpty { saved.label = saved.city.isEmpty ? (saved.fullName.isEmpty ? "Adresse" : saved.fullName) : saved.city }
+        try? autofill.save(saved); editingAddress = nil; reloadAutofill()
+    }
+
+    func saveCard(_ card: CardProfile) {
+        var saved = card
+        saved.number = CardTools.digits(saved.number)
+        if saved.label.trimmingCharacters(in: .whitespaces).isEmpty { saved.label = saved.brand }
+        try? autofill.save(saved); editingCard = nil; reloadAutofill()
+    }
+
+    /// Modifier une carte montre son numéro en clair : Touch ID d'abord.
+    func editCard(_ card: CardProfile) {
+        Task {
+            guard await VaultUnlocker.shared.authenticate(reason: "Modifier la carte \(card.masked)") else { passwordMessage = "Authentification refusée."; return }
+            editingCard = card
+        }
+    }
+
+    func deleteAutofill(_ id: UUID) { try? autofill.delete(id: id); reloadAutofill() }
+}
+
+final class AddressDraft: ObservableObject {
+    @Published var address: AddressProfile
+    init(_ address: AddressProfile) { self.address = address }
+}
+
+struct AddressEditor: View {
+    @StateObject private var draft: AddressDraft
+    let onSave: (AddressProfile) -> Void
+    let onCancel: () -> Void
+    init(address: AddressProfile, onSave: @escaping (AddressProfile) -> Void, onCancel: @escaping () -> Void) {
+        _draft = StateObject(wrappedValue: AddressDraft(address)); self.onSave = onSave; self.onCancel = onCancel
+    }
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                TextField("Nom de l'adresse", text: $draft.address.label, prompt: Text("Maison, Travail…"))
+                Section {
+                    TextField("Prénom", text: $draft.address.firstName); TextField("Nom", text: $draft.address.lastName)
+                    TextField("Société", text: $draft.address.organization)
+                    TextField("E-mail", text: $draft.address.email); TextField("Téléphone", text: $draft.address.phone)
+                }
+                Section {
+                    TextField("Adresse", text: $draft.address.street); TextField("Complément", text: $draft.address.street2)
+                    TextField("Code postal", text: $draft.address.postalCode); TextField("Ville", text: $draft.address.city)
+                    TextField("Région", text: $draft.address.region); TextField("Pays", text: $draft.address.country)
+                }
+            }
+            .formStyle(.grouped)
+            HStack {
+                Spacer()
+                Button("Annuler", action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Enregistrer") { onSave(draft.address) }.keyboardShortcut(.defaultAction).disabled(draft.address.isEmpty)
+            }.padding()
+        }
+        .frame(width: 440, height: 560)
+    }
+}
+
+final class CardDraft: ObservableObject {
+    @Published var card: CardProfile
+    @Published var number: String
+    @Published var expiry: String
+    init(_ card: CardProfile) {
+        self.card = card
+        number = CardTools.grouped(card.number)
+        expiry = card.expMonth > 0 ? String(format: "%02d/%02d", card.expMonth, card.expYear % 100) : ""
+    }
+    var parsedExpiry: (month: Int, year: Int)? { CardTools.parseExpiry(expiry) }
+    var problem: String? {
+        if !number.isEmpty, !CardTools.isValid(number) { return "Ce numéro ne passe pas le contrôle (faute de frappe ?)." }
+        if !expiry.isEmpty, parsedExpiry == nil { return "Date d'expiration illisible (08/27)." }
+        if let e = parsedExpiry, CardTools.isExpired(month: e.month, year: e.year) { return "Cette carte est expirée." }
+        return nil
+    }
+}
+
+struct CardEditor: View {
+    @StateObject private var draft: CardDraft
+    let onSave: (CardProfile) -> Void
+    let onCancel: () -> Void
+    init(card: CardProfile, onSave: @escaping (CardProfile) -> Void, onCancel: @escaping () -> Void) {
+        _draft = StateObject(wrappedValue: CardDraft(card)); self.onSave = onSave; self.onCancel = onCancel
+    }
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                TextField("Nom de la carte", text: $draft.card.label, prompt: Text("Perso, Pro…"))
+                TextField("Titulaire", text: $draft.card.holder)
+                TextField("Numéro", text: $draft.number).onChange(of: draft.number) { _, new in
+                    let grouped = CardTools.grouped(new); if grouped != new { draft.number = grouped }
+                }
+                TextField("Expiration", text: $draft.expiry, prompt: Text("MM/AA"))
+                if let problem = draft.problem { Text(problem).font(.caption).foregroundStyle(.red) }
+                Text("Le code de sécurité (CVC) n'est jamais enregistré : vous le tapez à chaque achat.").font(.caption).foregroundStyle(.secondary)
+            }
+            .formStyle(.grouped)
+            HStack {
+                Spacer()
+                Button("Annuler", action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Enregistrer") {
+                    var saved = draft.card; saved.number = draft.number
+                    if let e = draft.parsedExpiry { saved.expMonth = e.month; saved.expYear = e.year }
+                    onSave(saved)
+                }.keyboardShortcut(.defaultAction).disabled(!CardTools.isValid(draft.number) || draft.problem != nil)
+            }.padding()
+        }
+        .frame(width: 440, height: 360)
     }
 }
