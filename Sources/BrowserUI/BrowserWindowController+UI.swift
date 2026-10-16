@@ -144,11 +144,15 @@ extension BrowserWindowController {
         translateButton.onClick = { [weak self] in self?.translatePageAction() }
         downloadsButton.onClick = { [weak self] in self?.toggleDownloads() }
         downloads.onChange = { [weak self] in self?.downloadsChanged() }
-        downloads.onFinish = { [weak self] in self?.downloadsButton.pulse() }
+        downloads.onFinish = { [weak self] in
+            self?.downloadsButton.pulse()
+            self?.journalDownloadFinished()
+        }
         downloads.onFinishedFile = { [weak self] file in self?.offerExtensionInstall(fromFile: file) }
         downloads.onStart = { [weak self] in
             guard let self else { return }
             self.downloadsButton.pulse()
+            self.journalDownloadStarted()
             // Show the list (once, if it isn't open yet) so the user sees the download begin.
             if self.downloadsPopover?.isShown != true { self.toggleDownloads() }
         }

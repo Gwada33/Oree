@@ -24,6 +24,8 @@ final class AIPanelController {
     private let hooks: Hooks
     /// Appelé quand le panneau s'ouvre ou se ferme (le bouton de la barre d'outils suit).
     var onVisibilityChange: ((Bool) -> Void)?
+    /// Une tâche vient de finir : route, durée, réussite et coût (journal d'événements ; jamais la question ni la réponse).
+    var onTaskFinished: ((_ route: String, _ ms: Int, _ ok: Bool, _ usage: AIUsageMeter.Snapshot) -> Void)?
     private var widthConstraint: NSLayoutConstraint!
     private let search = SearchTab()
     private let cursor = AgentCursor()
@@ -233,6 +235,7 @@ final class AIPanelController {
             return again ? resumable.loop : nil
         }()
         if resuming != nil { currentTask = resumable?.task ?? text } else { resumable = nil }
+        let usageBefore = AIUsageMeter.shared.snapshot, startedAt = Date()
         agentTask = Task { [weak self] in
             guard let self else { return }
             let loop = resuming ?? AgentLoop(environment: self)
@@ -242,6 +245,13 @@ final class AIPanelController {
                 outcome = await loop.run(task: text, context: context, memory: recalled)
             }
             self.resumable = loop.canResume ? (loop, self.currentTask) : nil
+            if !self.hooks.isPrivate(), case .cancelled = outcome.reason {} else if !self.hooks.isPrivate() {
+                var used = AIUsageMeter.Snapshot(), now = AIUsageMeter.shared.snapshot
+                used.requests = now.requests - usageBefore.requests; used.retries = now.retries - usageBefore.retries
+                used.promptTokens = now.promptTokens - usageBefore.promptTokens; used.completionTokens = now.completionTokens - usageBefore.completionTokens
+                used.searches = now.searches - usageBefore.searches
+                self.onTaskFinished?(loop.route?.rawValue ?? "direct", Int(Date().timeIntervalSince(startedAt) * 1000), outcome.reason == .done, used)
+            }
             if self.runID == run { self.finish(outcome, in: tab) }
         }
         refresh()

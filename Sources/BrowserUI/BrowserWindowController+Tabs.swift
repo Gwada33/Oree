@@ -31,6 +31,7 @@ extension BrowserWindowController {
         }
         config.userContentController.addUserScript(CredentialScript.makeUserScript())
         config.userContentController.addUserScript(MediaScript.makeUserScript())
+        if SettingsStore.shared.eventJournalEnabled, !isPrivate { config.userContentController.addUserScript(JournalScript.makeUserScript()) }
         if SettingsStore.shared.sendGlobalPrivacyControl { config.userContentController.addUserScript(PrivacyTools.gpcUserScript()) }
         config.preferences.minimumFontSize = CGFloat(SettingsStore.shared.minimumFontSize)
         if SettingsStore.shared.resumeEnabled { config.userContentController.addUserScript(ResumeScript.makeUserScript()) }
@@ -51,7 +52,8 @@ extension BrowserWindowController {
         tab.webView?.uiDelegate = self
         // Weak: Tab owns its button, so a strong capture here is a retain cycle that
         // keeps every closed tab (and its playing video) alive forever.
-        tab.tabButton.onSelect = { [weak self, weak tab] in if let tab { self?.selectTab(tab) } }
+        tab.tabButton.onSelect = { [weak self, weak tab] in if let tab { self?.journalSelectVia = "click"; self?.selectTab(tab) } }
+        tab.tabButton.onHoverEnd = { [weak self, weak tab] dwell, previewed, clicked in if let tab { self?.journalTabHover(tab, dwell: dwell, preview: previewed, clicked: clicked) } }
         tab.tabButton.onClose = { [weak self, weak tab] in if let tab { self?.closeTab(tab) } }
         tab.tabButton.onReorder = { [weak self, weak tab] steps in
             guard let self, let tab else { return }
@@ -68,6 +70,7 @@ extension BrowserWindowController {
         tab.tabButton.setTitle(tab.displayTitle, host: tab.badgeHost)
 
         tabs.append(tab)
+        journalTabOpened(tab)
         contentContainer.addSubview(tab.contentSlot, positioned: .below, relativeTo: loadingBar)
         tab.onTitleChange = { [weak self, weak tab] in
             guard let tab else { return }
@@ -245,6 +248,7 @@ extension BrowserWindowController {
         activeTabID = tab.id
         tab.contentSlot.isHidden = false
         tab.tabButton.isActive = true
+        journalTabSelected(tab, previous: previouslyActive)
         if SettingsStore.shared.tabLayout == .horizontal, tab.tabButton.superview === tabStrip.tabsStack { tabStrip.activeTabView = tab.tabButton; tabStrip.needsLayout = true }
         if switching {
             tab.contentSlot.alphaValue = 0
@@ -270,6 +274,7 @@ extension BrowserWindowController {
         if let pair = splitPair, tab.id == pair.left || tab.id == pair.right {
             endSplit(keeping: tab.id == pair.left ? pair.right : pair.left)
         }
+        journalTabClosed(tab)
         extensionManager.tabClosed(tab)
         if remember, !tab.isPrivate, let url = tab.currentURL {
             closedTabs.append((url, tab.currentInteractionState, tab.displayTitle, tab.spaceIndex))
@@ -300,6 +305,7 @@ extension BrowserWindowController {
         if activeTabID == tab.id {
             // The closest tab in the same space; if that space is now empty, open a fresh one in it.
             if let next = TabSelection.neighbor(afterRemovingIndex: idx, spaces: tabs.map(\.spaceIndex), space: tab.spaceIndex) {
+                journalSelectVia = "close"
                 selectTab(tabs[next])
             } else {
                 newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault)
@@ -326,6 +332,7 @@ extension BrowserWindowController {
         let before = TabMotion.visualFrames(of: container?.arrangedSubviews ?? [])
         tabs.remove(at: idx)
         tabs.insert(tab, at: newIndex)
+        journalTabMoved(tab, steps: offset)
         rebuildTabList()
         tabBarStack.superview?.layoutSubtreeIfNeeded()
         tabStrip.layoutSubtreeIfNeeded()
@@ -528,6 +535,8 @@ extension BrowserWindowController {
     /// User picked a space: show its tabs and go to the one you were last on there.
     func selectSpace(_ index: Int) {
         guard index != currentSpace, spaces.indices.contains(index) else { return }
+        journal.emit("space.switch", ["from": .int(currentSpace), "to": .int(index)])
+        journalSelectVia = "space"
         setCurrentSpace(index, animated: true)
         let remembered = lastActiveTabInSpace[index].flatMap { id in tabs.first { $0.id == id && $0.spaceIndex == index } }
         if let target = remembered ?? visibleTabs().first {

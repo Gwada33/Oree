@@ -60,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 pendingURLs.forEach { controller.openExternal($0) }
                 pendingURLs.removeAll()
                 controller.ensureTabExists()
+                controller.journalStart()
                 controller.showOnboardingIfNeeded()
                 restoreExtraWindows()
             }
@@ -138,6 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         browserController?.flushSession()
+        BrowserWindowController.endJournalSession()
         if !forgetAtQuit { browserController?.persistSleepSnapshots() }  // encrypted, only for tabs that are still open (see SnapshotVault)
         BrowserWindowController.purgeSnapshots()   // the plain pictures never outlive the app
     }

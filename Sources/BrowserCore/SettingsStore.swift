@@ -358,6 +358,17 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.tabArchiveDays") }
     }
 
+    /// Le journal d'événements (`Docs/journal.md`) : désactivé tant que la personne ne l'a pas choisi. `HB_JOURNAL=1` / `0` : essais seulement.
+    public var eventJournalEnabled: Bool {
+        get { ProcessInfo.processInfo.environment["HB_JOURNAL"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.eventJournal") as? Bool ?? false) }
+        set { defaults.set(newValue, forKey: "settings.eventJournal") }
+    }
+    /// Combien de jours le journal est gardé (7, 30 ou 90).
+    public var eventJournalDays: Int {
+        get { [7, 30, 90].contains(defaults.integer(forKey: "settings.eventJournalDays")) ? defaults.integer(forKey: "settings.eventJournalDays") : 30 }
+        set { defaults.set(newValue, forKey: "settings.eventJournalDays") }
+    }
+
     /// Web apps kept in side panels.
     public var webPanels: [WebPanelEntry] {
         get { (defaults.data(forKey: "settings.webPanels").flatMap { try? JSONDecoder().decode([WebPanelEntry].self, from: $0) }) ?? [] }

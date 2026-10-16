@@ -51,7 +51,7 @@ final class OreeWebView: WKWebView {
         let owner = tab?.owner
 
         if let raw = hit.link, let url = URL(string: raw) {
-            add("Ouvrir le lien dans un nouvel onglet") { owner?.newTab(urlString: raw, isPrivate: isPrivate) }
+            add("Ouvrir le lien dans un nouvel onglet") { owner?.journalOpenHow = "link"; owner?.newTab(urlString: raw, isPrivate: isPrivate) }
             if let tab { add("Aperçu du lien") { owner?.peek(url, from: tab) } }
             add("Ouvrir le lien dans une mini-fenêtre") { owner?.openMiniWindow(url: url) }
             add("Copier le lien") { Self.copy(raw) }

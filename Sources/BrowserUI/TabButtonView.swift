@@ -182,11 +182,16 @@ final class TabButtonView: NSView {
 
     /// The pointer has rested on the tab for a moment (true), or left it (false): the window shows or hides the preview card.
     var onHoverPreview: ((Bool) -> Void)?
+    /// Le pointeur quitte l'onglet après l'avoir survolé : combien de temps, si la carte d'aperçu s'est affichée, si l'on a cliqué (journal d'événements).
+    var onHoverEnd: ((_ dwellMs: Int, _ previewed: Bool, _ clicked: Bool) -> Void)?
+    private var hoverStart: Date?
+    private var hoverPreviewed = false
+    private var hoverClicked = false
     private var previewWork: DispatchWorkItem?
 
     private func startPreview() {
         previewWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { if self?.isHovered == true { self?.onHoverPreview?(true) } } }
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { if self?.isHovered == true { self?.hoverPreviewed = true; self?.onHoverPreview?(true) } } }
         previewWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: work)
     }
@@ -251,6 +256,7 @@ final class TabButtonView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         previewWork?.cancel(); onHoverPreview?(false)
+        hoverClicked = true
         dragStart = isHorizontal ? event.locationInWindow.x : event.locationInWindow.y
         isDragging = false
         onSelect?()
@@ -369,8 +375,15 @@ final class TabButtonView: NSView {
         guide.backgroundColor = Theme.cg(Theme.line, in: self)
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovered = true; updateAppearance(animated: true); startDwell(); startPreview() }
-    override func mouseExited(with event: NSEvent) { isHovered = false; dwellWork?.cancel(); previewWork?.cancel(); onHoverPreview?(false); updateAppearance(animated: true) }
+    override func mouseEntered(with event: NSEvent) { isHovered = true; hoverStart = Date(); hoverPreviewed = false; hoverClicked = false; updateAppearance(animated: true); startDwell(); startPreview() }
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false; dwellWork?.cancel(); previewWork?.cancel(); onHoverPreview?(false); updateAppearance(animated: true)
+        if let start = hoverStart {
+            hoverStart = nil
+            let dwell = Int(Date().timeIntervalSince(start) * 1000)
+            if dwell >= 150 { onHoverEnd?(dwell, hoverPreviewed, hoverClicked) }
+        }
+    }
 
     private func updateAppearance(animated: Bool) {
         let target: (color: NSColor, opacity: Float) = isActive

@@ -53,6 +53,10 @@ final class CommandPaletteView: NSView, NSTextFieldDelegate {
     private var filter: PaletteFilter = .all
     private var rows: [PaletteRowView] = []
     private var items: [PaletteItem] = []
+    private var itemSections: [String] = []
+    private var presentedAt = Date()
+    /// Une ligne vient d'être choisie : sa section, la longueur de ce qui était tapé, le nombre de résultats, le temps passé (journal d'événements ; jamais le texte).
+    var onUse: ((_ section: String, _ queryLength: Int, _ results: Int, _ ms: Int) -> Void)?
     private var selected = 0
     private var opensInNewTab = false
     private var chipButtons: [NSButton] = []
@@ -210,6 +214,7 @@ final class CommandPaletteView: NSView, NSTextFieldDelegate {
 
     func present(initialText: String, selectAll: Bool, opensInNewTab: Bool, in window: NSWindow?) {
         self.opensInNewTab = opensInNewTab
+        presentedAt = Date()
         filter = .all
         updateChips(animated: false)
         field.stringValue = initialText
@@ -280,6 +285,7 @@ final class CommandPaletteView: NSView, NSTextFieldDelegate {
                 row.widthAnchor.constraint(equalTo: resultsStack.widthAnchor).isActive = true
                 rows.append(row)
                 items.append(item)
+                itemSections.append(section.title)
             }
         }
         if items.isEmpty {
@@ -311,6 +317,7 @@ final class CommandPaletteView: NSView, NSTextFieldDelegate {
     private func activateSelected(forceNewTab: Bool) {
         guard items.indices.contains(selected) else { return }
         let item = items[selected]
+        onUse?(itemSections.indices.contains(selected) ? itemSections[selected] : "", field.stringValue.count, items.count, Int(Date().timeIntervalSince(presentedAt) * 1000))
         onDismiss?()
         item.perform(opensInNewTab || forceNewTab)
     }

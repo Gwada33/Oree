@@ -46,6 +46,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public weak var menuBuilder: MenuBuilder?
     var settingsWindow: NSWindow?
     var sessionSaveWork: DispatchWorkItem?
+    // Journal d'événements : le contexte du prochain événement (comment l'onglet s'ouvre, comment il est choisi, pourquoi il se ferme), et la saisie en cours dans la barre d'adresse.
+    var journalOpenHow = "other"
+    var journalSelectVia = "other"
+    var journalCloseWhy = "user"
+    var journalAddress: (focusedAt: Date, keys: Int, deletes: Int, longest: Int, last: Int, shown: [String: Int], committed: Bool)?
+    var journalAIStart: (date: Date, usage: AIUsageMeter.Snapshot, task: String)?
+    nonisolated(unsafe) var journalTimer: Timer?
+    var journalWasEnabled = false
+    var journalDownloadStart: Date?
+    var journalLayoutWork: DispatchWorkItem?
 
     let contentBlocker: ContentBlockerManager
     nonisolated(unsafe) var settingsObserver: NSObjectProtocol?
@@ -227,6 +237,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         installOverlay(view)
         view.provider = { [weak self] query, filter in self?.paletteSections(query: query, filter: filter) ?? [] }
         view.onDismiss = { [weak self] in self?.closePalette() }
+        view.onUse = { [weak self] section, length, results, ms in
+            let action: String
+            switch section {
+            case "Onglets ouverts": action = "tab"
+            case "Espaces": action = "space"
+            case "Actions": action = "tool"
+            case "Rechercher", "Ouvrir": action = "search"
+            default: action = "other"
+            }
+            self?.journal.emit("palette.use", ["action": .string(action), "q": .int(JournalBucket.log2(length)), "ms": .int(ms), "results": .int(results)])
+        }
         return view
     }()
 
@@ -629,8 +650,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// Scripts injected into a page: fingerprint protection (all pages) and,
     /// when ad blocking is on, the cosmetic CSS matching this URL.
-    func userScripts(for url: URL?) -> [WKUserScript] {
+    func userScripts(for url: URL?, isPrivate: Bool = false) -> [WKUserScript] {
         var scripts: [WKUserScript] = [CredentialScript.makeUserScript(), MediaScript.makeUserScript()]
+        if SettingsStore.shared.eventJournalEnabled, !isPrivate { scripts.append(JournalScript.makeUserScript()) }      // le journal : jamais dans un onglet privé
         if SettingsStore.shared.sendGlobalPrivacyControl { scripts.append(PrivacyTools.gpcUserScript()) }
         if SettingsStore.shared.resumeEnabled { scripts.append(ResumeScript.makeUserScript()) }
         scripts.append(BoostScript.makeUserScript(boostConfig()))
@@ -650,6 +672,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
 
     func settingsChanged() {
+        journalSettingsChanged()
         if SettingsStore.shared.chromeLayout != appliedChromeLayout { applyChromeLayout() }
         // Look settings edited elsewhere (Réglages, a configuration) apply live.
         let look = LookProfile.capture(named: "", from: SettingsStore.shared)
@@ -670,7 +693,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             lastFingerprintSetting = fingerprint
             lastLongPagesSetting = longPages
             lastCopySettings = copySettings
-            for tab in tabs { tab.setUserScripts(userScripts(for: tab.currentURL)) }
+            for tab in tabs { tab.setUserScripts(userScripts(for: tab.currentURL, isPrivate: tab.isPrivate)) }
         }
         refreshSafeBrowsing()
         let inspectable = SettingsStore.shared.webInspectorEnabled

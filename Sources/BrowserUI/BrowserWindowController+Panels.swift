@@ -13,7 +13,9 @@ extension BrowserWindowController {
     // MARK: - Side panels
 
     func togglePanel(_ kind: PanelKind?) {
+        let before = activePanel
         activePanel = (kind == activePanel) ? nil : kind
+        if let now = activePanel { journalPanel(String(describing: now), open: true) } else if let old = before { journalPanel(String(describing: old), open: false) }
         refreshPanel()
     }
 
@@ -73,7 +75,7 @@ extension BrowserWindowController {
         if activePanel == .reading { refreshPanel() }
     }
 
-    @objc func openHistoryPanel() { activePanel = .history; refreshPanel() }
+    @objc func openHistoryPanel() { activePanel = .history; journalPanel("history", open: true); refreshPanel() }
 
     // MARK: - Downloads
 
@@ -91,6 +93,7 @@ extension BrowserWindowController {
     }
 
     func toggleDownloads() {
+        journalPanel("downloads", open: !(downloadsPopover?.isShown ?? false))
         if let popover = downloadsPopover, popover.isShown { popover.close(); return }
         let popover = NSPopover()
         popover.behavior = .transient
@@ -301,6 +304,7 @@ extension BrowserWindowController {
 
     /// ⌃↑
     @objc func openOverview() {
+        journalPanel("overview", open: true)
         palette.isHidden = true
         overview.present()
     }
@@ -350,6 +354,7 @@ extension BrowserWindowController {
 
     /// ⌘,
     @objc func openCustomize() {
+        journalPanel("customize", open: true)
         palette.isHidden = true
         drawer.present()
         window?.makeFirstResponder(drawer)
@@ -526,7 +531,11 @@ extension BrowserWindowController {
             isPrivate: { [weak self] in self?.activeTab?.isPrivate ?? false },
             onLayout: { [weak self] pushed in self?.pushPage(by: pushed) })
         let created = AIPanelController(contentView: contentView, top: contentContainer.topAnchor, hooks: hooks)
-        created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open }
+        created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open; self?.journalPanel("ai", open: open) }
+        created.onTaskFinished = { [weak self] route, ms, ok, usage in
+            self?.journal.emit("ai.task", ["route": .string(route), "req": .int(usage.requests), "tin": .int(usage.promptTokens), "tout": .int(usage.completionTokens), "ms": .int(ms),
+                                           "ok": .bool(ok), "retries": .int(usage.retries), "searches": .int(usage.searches)])
+        }
         aiBarController = created
         created.tabChanged(id: activeTab?.id, title: activeTab?.displayTitle)
         return created

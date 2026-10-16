@@ -132,6 +132,19 @@ final class Tab: NSObject {
     private var wakeStartedAt: Date?
 
     var lastActiveDate = Date()
+
+    // Journal d'événements (voir BrowserWindowController+Journal.swift) : de quoi mesurer sans rien garder de la page.
+    var journalID = SiteHash.randomTabID()
+    let journalCreated = Date()
+    var journalForegroundSince: Date?
+    var journalForegroundTotal: TimeInterval = 0
+    var journalLastForeground: Date?
+    var journalNavStart: Date?
+    var journalNavKind = "other"
+    var journalNavSite: String?          // le site de la page affichée, en empreinte (pour les liens du même site et les événements de la page)
+    var journalMuted = false             // une page à mot de passe : plus rien n'en est enregistré
+    var journalWakeTrigger = "select"
+    var journalWakeGhost = false
     /// When this tab's JavaScript memory was last cleaned while hidden.
     var lastCleanup: Date?
 
@@ -316,6 +329,7 @@ final class Tab: NSObject {
         controller.add(NightMessageHandler(), contentWorld: NightScript.world, name: NightScript.handlerName)
         controller.add(ResumeMessageHandler(), contentWorld: ResumeScript.world, name: ResumeScript.handlerName)
         controller.add(MediaMessageHandler(), contentWorld: MediaScript.world, name: MediaScript.handlerName)
+        controller.add(JournalMessageHandler(), contentWorld: JournalScript.world, name: JournalScript.handlerName)
         // Ghost hibernation: the page-side capture needs hooks installed before the page's own scripts run, so it is only
         // added to tabs created while the flag is on.
         if SettingsStore.shared.hibernationGhost {
@@ -782,6 +796,7 @@ final class Tab: NSObject {
         CATransaction.commit()
         if let started = wakeStartedAt {
             Log.tabs.notice("Wake: live page visible after \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            owner?.journalWake(self, ms: Int(Date().timeIntervalSince(started) * 1000))
             wakeStartedAt = nil
         }
         refreshHover()
@@ -958,6 +973,7 @@ final class Tab: NSObject {
 
         removeGhostView()      // keep the stored file: it is what we are about to show
         let ghost = makeGhostView()
+        journalWakeGhost = ghost != nil
         if ghost != nil {
             // The page under the ghost must be drawn at full opacity: WebKit stops producing frames for a view at alpha 0, so
             // it could not be ready, nor painted, when the swap comes. An opaque layer (the snapshot, or at least the page
@@ -1002,6 +1018,7 @@ final class Tab: NSObject {
         snapshotData = nil
         if let started = wakeStartedAt {
             Log.tabs.notice("Wake: live page visible after \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            owner?.journalWake(self, ms: Int(Date().timeIntervalSince(started) * 1000))
             wakeStartedAt = nil
         }
         // Dissolve instead of cutting, so the swap reads as the page "coming alive", not as a refresh.

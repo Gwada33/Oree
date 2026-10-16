@@ -72,6 +72,9 @@ final class SettingsViewModel: ObservableObject {
     @Published var downloadDirectory = ""
     @Published var tabPreviews = true { didSet { settings.tabPreviews = tabPreviews } }
     @Published var tabArchiveDays = 0 { didSet { settings.tabArchiveDays = tabArchiveDays } }
+    @Published var eventJournal = false { didSet { settings.eventJournalEnabled = eventJournal; refreshJournalStatus() } }
+    @Published var eventJournalDays = 30 { didSet { settings.eventJournalDays = eventJournalDays } }
+    @Published var journalStatus = ""
     @Published var energyMode: EnergyMode = .automatic { didSet { settings.energyMode = energyMode } }
     @Published var sendGPC = true { didSet { settings.sendGlobalPrivacyControl = sendGPC } }
     @Published var minimumFontSize = 0 { didSet { settings.minimumFontSize = minimumFontSize } }
@@ -192,6 +195,8 @@ final class SettingsViewModel: ObservableObject {
         downloadDirectory = current.downloadDirectoryPath
         tabPreviews = current.tabPreviews
         tabArchiveDays = current.tabArchiveDays
+        eventJournal = current.eventJournalEnabled
+        eventJournalDays = current.eventJournalDays
         energyMode = current.energyMode
         sendGPC = current.sendGlobalPrivacyControl
         minimumFontSize = current.minimumFontSize
@@ -721,6 +726,22 @@ public struct SettingsView: View {
     }
 
     @ViewBuilder private var privacySections: some View {
+            Section("Journal d’événements") {
+                Toggle("Garder un journal de la façon dont j’utilise Orée, sur ce Mac", isOn: $model.eventJournal)
+                Text("Pour mesurer et régler la vitesse d’Orée avec des chiffres réels : onglets ouverts, choisis ou mis en veille, temps de chargement, liens survolés et cliqués, déplacements du pointeur et défilement (résumés par petites fenêtres), barre d’adresse (nombre de touches, suggestion choisie). Jamais l’adresse ni le titre d’une page, jamais ce que vous tapez ou les touches, jamais rien en navigation privée ni sur une page de mot de passe : les sites ne sont que des empreintes propres à ce Mac. Chiffré, jamais envoyé. S’applique aux pages (re)chargées après l’activation.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if model.eventJournal {
+                    Picker("Durée de garde", selection: $model.eventJournalDays) {
+                        Text("7 jours").tag(7); Text("30 jours").tag(30); Text("90 jours").tag(90)
+                    }
+                }
+                if !model.journalStatus.isEmpty { Text(model.journalStatus).font(.caption).foregroundStyle(.secondary) }
+                HStack {
+                    Button("Exporter…") { model.exportJournal() }
+                    Button("Effacer le journal", role: .destructive) { model.clearJournal() }
+                    Button("Actualiser") { model.refreshJournalStatus() }
+                }
+            }
             Section("Confidentialité") {
                 Toggle("Bloquer les publicités et traqueurs", isOn: $model.adBlockEnabled)
                 Toggle("Ouvrir les nouveaux onglets en navigation privée par défaut", isOn: $model.privateByDefault)
@@ -1406,5 +1427,37 @@ struct ChromeLayoutSection: View {
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             if model.layout != SettingsStore.shared.chromeLayout { model.reload() }
         }
+    }
+}
+
+// MARK: - Journal d'événements (statut, export, effacement)
+extension SettingsViewModel {
+    func refreshJournalStatus() {
+        guard eventJournal else { journalStatus = ""; return }
+        let stats = JournalControls.stats()
+        guard stats.events > 0 else { journalStatus = "Rien d’enregistré pour l’instant."; return }
+        let size = ByteCountFormatter.string(fromByteCount: stats.bytes, countStyle: .file)
+        let since = stats.first.map { " depuis le " + $0.formatted(.dateTime.day().month(.wide).hour().minute().locale(Locale(identifier: "fr_FR"))) } ?? ""
+        journalStatus = "\(stats.events) événements · \(size) sur disque\(since)."
+    }
+
+    func exportJournal() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "journal-oree-\(Date().formatted(.iso8601.year().month().day())).jsonl"
+        panel.message = "Le fichier exporté n’est pas chiffré : il contient des empreintes de sites et des durées, mais pas d’adresse ni de texte."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { let count = try JournalControls.export(url); journalStatus = "\(count) événements exportés dans \(url.lastPathComponent)." }
+        catch { journalStatus = "Export impossible : \(error.localizedDescription)" }
+    }
+
+    func clearJournal() {
+        let alert = NSAlert()
+        alert.messageText = "Effacer tout le journal ?"
+        alert.informativeText = "Les événements gardés sur ce Mac seront supprimés. Cela ne touche ni l’historique ni les onglets."
+        alert.addButton(withTitle: "Effacer"); alert.addButton(withTitle: "Annuler")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        JournalControls.clear()
+        refreshJournalStatus()
     }
 }

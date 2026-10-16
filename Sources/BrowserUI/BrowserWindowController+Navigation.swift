@@ -16,11 +16,13 @@ extension BrowserWindowController {
         guard let resolution = AddressResolver.resolve(raw, defaultEngine: SettingsStore.shared.searchEngine,
                                                        custom: SettingsStore.shared.customSearchShortcuts) else { return }
         let url = resolution.url
+        tab.journalNavKind = "typed"
         tab.lastRequestedURL = url
         tab.webView?.load(URLRequest(url: url))
     }
 
     @objc func openSettings() {
+        journalPanel("settings", open: true)
         if settingsWindow == nil {
             let hosting = NSHostingController(
                 rootView: SettingsView(
@@ -49,10 +51,12 @@ extension BrowserWindowController {
     public func openExternal(_ url: URL) {
         let isPrivate = SettingsStore.shared.privateByDefault
         if url.isFileURL {
+            journalOpenHow = "external"
             let tab = newTab(urlString: nil, isPrivate: isPrivate)
             tab.lastRequestedURL = url
             tab.webView?.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else if url.scheme == "http" || url.scheme == "https" {
+            journalOpenHow = "external"
             newTab(urlString: url.absoluteString, isPrivate: isPrivate)
         }
         window?.makeKeyAndOrderFront(nil)
@@ -60,6 +64,7 @@ extension BrowserWindowController {
 
     /// ⌘T — a new tab on the home page with the address field ready to type in.
     @objc func newTabAction() {
+        journalOpenHow = "new"
         newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault)
         addressPill.beginEditing(text: "", selectAll: false)
     }
@@ -146,6 +151,7 @@ extension BrowserWindowController {
             if let append { view.append(append) } else { popover.close() }
             return
         }
+        journalPanel("notes", open: true)
         let url = activeTab?.currentURL.flatMap { $0.scheme == "http" || $0.scheme == "https" ? $0.absoluteString : nil }
         let view = NotesPanelView(repo: noteRepo, pageURL: url, append: append)
         let controller = NSViewController()
@@ -193,6 +199,7 @@ extension BrowserWindowController {
     func presentNotice(_ message: String) { noticePill.show(message: message, button: "OK", seconds: 6) { } }
 
     @objc func findInPage() {
+        journalPanel("find", open: true)
         findBarContainer?.isHidden = false
         window?.makeFirstResponder(findField)
     }
@@ -330,6 +337,9 @@ extension BrowserWindowController {
         // Tracking parameters: only on plain GET loads the user/page started,
         // never on reload / back-forward (those must replay exactly).
         let type = navigationAction.navigationType
+        if tab.journalNavKind == "other" {
+            switch type { case .linkActivated: tab.journalNavKind = "link"; case .formSubmitted: tab.journalNavKind = "form"; case .reload: tab.journalNavKind = "reload"; case .backForward: tab.journalNavKind = "back"; default: break }
+        }
         if settings.urlCleaning, navigationAction.request.httpMethod == "GET", type != .reload, type != .backForward {
             target = urlCleaner.clean(target)
         }
@@ -368,17 +378,18 @@ extension BrowserWindowController {
         // Blocking switched off for sites that break when only partly blocked (see ProtectionPolicy).
         let exempt = ProtectionPolicy.isExempt(host: original.host, list: settings.protectionExemptHosts)
         tab.applyContentRuleLists(ruleLists(for: original))
-        tab.setUserScripts(userScripts(for: original))
+        tab.setUserScripts(userScripts(for: original, isPrivate: tab.isPrivate))
         return .allow
     }
 
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        if let tab = tab(for: webView) { updateLoadingIndicator(for: tab) }
+        if let tab = tab(for: webView) { updateLoadingIndicator(for: tab); journalNavDone(tab, ok: false, code: (error as NSError).code) }
     }
 
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard let tab = tab(for: webView) else { return }
         updateLoadingIndicator(for: tab)
+        journalNavDone(tab, ok: false, code: (error as NSError).code)
         tab.tabButton.setTitle(tab.displayTitle, host: tab.badgeHost)
         let nsError = error as NSError
         Log.network.notice("Provisional navigation failed: \(nsError.domain, privacy: .public) \(nsError.code)")
@@ -454,11 +465,13 @@ extension BrowserWindowController {
         guard let tab = tab(for: webView) else { return }
         noteNavigation("start", webView)
         updateLoadingIndicator(for: tab)
+        if tab.showsLoading { journalNavStart(tab, url: tab.lastRequestedURL ?? webView.url) }
     }
 
     public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard let tab = tab(for: webView) else { return }
         noteNavigation("commit", webView)
+        journalNavCommit(tab)
         applySiteZoom(to: webView)
         tab.interstitial.hide()
         tab.pageDidCommit()
@@ -490,6 +503,7 @@ extension BrowserWindowController {
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard let tab = tab(for: webView) else { return }
+        journalNavDone(tab, ok: true)
         tab.tabButton.setTitle(tab.displayTitle, host: tab.badgeHost)
         clearWakeRevealIfNeeded(for: tab)
         tab.restorePageStateIfNeeded()
@@ -538,6 +552,7 @@ extension BrowserWindowController {
         let isPrivate = tab(for: webView)?.isPrivate ?? false
         let newTab = Tab(configuration: configuration, isPrivate: isPrivate)
         newTab.spaceIndex = tab(for: webView)?.spaceIndex ?? currentSpace
+        journalOpenHow = "link"
         attachTab(newTab)
         selectTab(newTab)
         return newTab.webView

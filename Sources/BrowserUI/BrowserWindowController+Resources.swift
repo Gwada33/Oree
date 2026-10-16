@@ -99,6 +99,7 @@ extension BrowserWindowController {
         var slept = 0
         for id in plan.sleep {
             guard let tab = tabs.first(where: { $0.id == id }), !isOnScreen(tab) else { continue }
+            journalTabSlept(tab, why: "budget")
             await tab.suspend(captureGhost: captureGhost)
             slept += 1
         }
@@ -142,6 +143,10 @@ extension BrowserWindowController {
         guard !tab.isSuspended, tab.webView != nil else { return }
         let info = MediaInfo.parse(json)
         guard tab.media != info else { return }
+        if journal.enabled, !tab.isPrivate, let now = info, let url = tab.webView?.url, JournalPolicy.allowsPage(url: url, isPrivate: false),
+           tab.media == nil || tab.media?.paused != now.paused, let site = journal.site(of: url) {
+            journal.emit("media", ["site": .string(site), "state": .string(now.paused ? "pause" : "play"), "pip": .bool(now.pictureInPicture)], tab: tab)
+        }
         tab.media = info
         refreshNowPlaying()
     }
@@ -272,6 +277,7 @@ extension BrowserWindowController {
             guard let other = visibleTabs().first(where: { $0.id != tab.id }) else { return }
             selectTab(other)
         }
+        journalTabSlept(tab, why: "user")
         Task { await tab.suspend() }
     }
 
@@ -308,6 +314,7 @@ extension BrowserWindowController {
     func prewake(_ tab: Tab) {
         guard tab.isSuspended, !isOverBudget else { return }
         tab.lastActiveDate = Date()   // counts as touched: it must not be put straight back to sleep
+        tab.journalWakeTrigger = "hover"
         ensureAwake(tab)
     }
 

@@ -203,6 +203,14 @@ extension BrowserWindowController {
             for _ in 0..<10 { tabStrip.needsLayout = true; tabStrip.layoutSubtreeIfNeeded(); tabBarStack.superview?.layoutSubtreeIfNeeded() }
             let layout = (CFAbsoluteTimeGetCurrent() - t0) * 100
             return String(format: "tabs=%d rebuildTabList=%.2f ms updateTabCount=%.2f ms layout=%.2f ms", tabs.count, rebuild, count, layout)
+        case "journalflush": journal.journal.flushAndWait(); let st = journal.journal.stats(); return "events=\(st.events) files=\(st.files) bytes=\(st.bytes)"
+        case "journaldump":
+            // Écrit le journal déchiffré dans /tmp/oree-journal-test.jsonl et résume les événements par nom.
+            let url = URL(fileURLWithPath: "/tmp/oree-journal-test.jsonl")
+            _ = try? journal.journal.export(to: url)
+            let counts = Dictionary(grouping: journal.journal.readAll(), by: \.e).mapValues(\.count).sorted { $0.key < $1.key }
+            return counts.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
+        case "journalclear": journal.journal.clear(); return "cleared"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"

@@ -149,6 +149,9 @@ public final class AgentLoop {
     private var stallNoticed = false, quietAfterNotice = 0
     private var callCounter = 0
 
+    /// La route choisie pour la tâche en cours (pour les mesures).
+    public var route: AIRoute? { plan?.route }
+
     /// L'état de la tâche tel qu'il est : une tâche arrêtée par une erreur du fournisseur peut repartir de là (`resume`).
     public private(set) var canResume = false
 

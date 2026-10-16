@@ -297,6 +297,7 @@ extension BrowserWindowController {
 
     public func windowDidResize(_ notification: Notification) {
         applySidebarMode(animated: false)
+        journalLayoutSoon()
         if windowExceedsScreen() { DispatchQueue.main.async { [weak self] in self?.clampWindowToScreen() } }
     }
 

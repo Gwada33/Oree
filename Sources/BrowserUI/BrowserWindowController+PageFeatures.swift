@@ -26,7 +26,7 @@ extension BrowserWindowController {
         let config = boostConfig()
         lastBoostSignature = boostSignature()
         for tab in tabs {
-            tab.setUserScripts(userScripts(for: tab.currentURL))
+            tab.setUserScripts(userScripts(for: tab.currentURL, isPrivate: tab.isPrivate))
             if let web = tab.webView { Task { _ = await web.safeEvaluate(BoostScript.source(config), world: BoostScript.world) } }
         }
     }
@@ -469,7 +469,7 @@ extension BrowserWindowController {
     func refreshNightMode() {
         let config = nightConfig()
         for tab in tabs {
-            tab.setUserScripts(userScripts(for: tab.currentURL))
+            tab.setUserScripts(userScripts(for: tab.currentURL, isPrivate: tab.isPrivate))
             if let web = tab.webView {
                 Task { _ = await web.safeEvaluate(NightScript.source(config), world: NightScript.world) }
             }
@@ -668,6 +668,7 @@ extension BrowserWindowController {
 
     /// ⌥⌘T — the task manager window.
     @objc func showTaskManager() {
+        journalPanel("taskmanager", open: true)
         if taskManager == nil {
             let manager = TaskManagerWindowController()
             manager.provider = { [weak self] in self?.taskManagerSnapshot() ?? (TaskManagerRows.snapshot(tabs: [], bytesByProcess: [:]), nil) }

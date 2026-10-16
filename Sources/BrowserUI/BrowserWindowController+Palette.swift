@@ -35,6 +35,7 @@ extension BrowserWindowController {
     /// ⌘L — edit the address in the toolbar, with suggestions underneath.
     @objc func focusAddressBar() {
         if drawerLoaded, drawer.isPresented { closeCustomize() }
+        journalAddressFocused(how: "shortcut")
         let url = activeTab?.currentURL
         let text = (url?.scheme == "http" || url?.scheme == "https") ? (url?.absoluteString ?? "") : ""
         addressPill.beginEditing(text: text)
@@ -43,6 +44,7 @@ extension BrowserWindowController {
     func refreshAddressSuggestions(_ query: String) {
         let sections = paletteSections(query: query.trimmingCharacters(in: .whitespacesAndNewlines), filter: .all)
             .filter { $0.title != "Actions" && $0.title != "Espaces" && $0.title != "Favoris" }
+        journalAddressTyped(query, sections: sections)
         addressDropdown.show(sections)
     }
 
@@ -56,6 +58,7 @@ extension BrowserWindowController {
     }
 
     func endAddressEditing() {
+        journalAddressEnded()
         addressPill.endEditing()
         addressDropdown.hide()
         if let webView = activeTab?.webView, window?.firstResponder is NSText || window?.firstResponder === window { window?.makeFirstResponder(webView) }
@@ -65,14 +68,17 @@ extension BrowserWindowController {
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // Like the palette: Return runs the highlighted suggestion (the first one unless arrowed).
         if let item = addressDropdown.selectedItem, addressDropdown.hasSelection, !raw.isEmpty {
+            journalAddressCommitted(kind: "suggestion", index: addressDropdown.selectedIndex, newTab: newTab)
             endAddressEditing(); item.perform(newTab); return
         }
+        journalAddressCommitted(kind: addressDropdown.hasSelection ? "other" : (AddressResolver.resolve(raw, defaultEngine: SettingsStore.shared.searchEngine, custom: SettingsStore.shared.customSearchShortcuts) == nil ? "url" : "search"), index: -1, newTab: newTab)
         endAddressEditing()
         guard !raw.isEmpty else { return }
         openFromPalette(raw, inNewTab: newTab)
     }
 
     func openPalette(initialText: String, selectAll: Bool, opensInNewTab: Bool) {
+        journalPanel("palette", open: true)
         palette.present(initialText: initialText, selectAll: selectAll, opensInNewTab: opensInNewTab, in: window)
     }
 
@@ -82,6 +88,7 @@ extension BrowserWindowController {
 
     func openFromPalette(_ raw: String, inNewTab: Bool) {
         if inNewTab || activeTab == nil {
+            journalOpenHow = "palette"
             newTab(urlString: raw, isPrivate: SettingsStore.shared.privateByDefault)
         } else if let tab = activeTab {
             load(urlString: raw, in: tab)

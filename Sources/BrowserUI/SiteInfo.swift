@@ -7,6 +7,7 @@ import BrowserCore
 /// The popover under the address bar's lock.
 extension BrowserWindowController {
     func showSiteInfo() {
+        journalPanel("site", open: true)
         if let popover = siteInfoPopover, popover.isShown { popover.close(); return }
         guard let tab = activeTab, let web = tab.webView, let url = web.url, let host = url.host else { return }
         var content = SiteInfoContent(host: host.hasPrefix("www.") ? String(host.dropFirst(4)) : host, connection: SiteInfoPolicy.connection(for: url))

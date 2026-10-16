@@ -31,12 +31,13 @@ extension BrowserWindowController {
             list = TabArchivePolicy.adding(ArchivedTab(url: url.absoluteString, title: tab.displayTitle, space: tab.spaceIndex, archivedAt: now), to: list)
         }
         Self.archiveStore.save(list)
-        for tab in stale { closeTab(tab, remember: false) }
+        for tab in stale { journalCloseWhy = "archive"; closeTab(tab, remember: false) }
         presentNotice(stale.count == 1 ? "Un onglet inutilisé a été archivé." : "\(stale.count) onglets inutilisés ont été archivés.")
     }
 
     /// The archive as a menu: a click brings a tab back in its space; the last item empties the list.
     func showArchiveMenu() {
+        journalPanel("archive", open: true)
         let list = Self.archiveStore.load()
         let menu = NSMenu()
         if list.isEmpty {
@@ -48,6 +49,7 @@ extension BrowserWindowController {
             let item = ClosureMenuItem(title: entry.title.isEmpty ? host : "\(entry.title) — \(host)") { [weak self] in
                 guard let self else { return }
                 Self.archiveStore.save(Self.archiveStore.load().filter { $0.url != entry.url })
+                self.journalOpenHow = "archive"
                 self.newTab(urlString: entry.url, isPrivate: false)
                 if let tab = self.activeTab { tab.spaceIndex = min(max(entry.space, 0), self.spaces.count - 1) }
             }
@@ -81,6 +83,7 @@ extension BrowserWindowController {
         source.setEventHandler { [weak self] in
             Task { @MainActor in
                 self?.lastMemoryPressure = Date()
+                self?.journal.emitSystemState(memoryPressure: source.data.contains(.critical) ? "critical" : "warning")
                 // Cheap first: drop WebKit's in-memory caches, then sleep background tabs.
                 WKWebsiteDataStore.default().removeData(ofTypes: [WKWebsiteDataTypeMemoryCache], modifiedSince: .distantPast) {}
                 await self?.suspendAllBackgroundTabs()
@@ -121,7 +124,7 @@ extension BrowserWindowController {
     }
 
     func toggleWebPanel(_ entry: WebPanelEntry) {
-        if webPanel.isShown, webPanel.current == entry { webPanel.hide() } else { webPanel.show(entry) }
+        if webPanel.isShown, webPanel.current == entry { webPanel.hide(); journalPanel("webpanel", open: false) } else { webPanel.show(entry); journalPanel("webpanel", open: true) }
     }
 
     func removeWebPanel(_ entry: WebPanelEntry) {
@@ -156,11 +159,13 @@ extension BrowserWindowController {
 
     /// Shows `url` in the preview card over the page.
     func peek(_ url: URL, from tab: Tab) {
+        journalPanel("peek", open: true)
         peekPanel.show(url, configuration: makeConfiguration(isPrivate: tab.isPrivate))
     }
 
     /// Opens `url` in a small floating window (⌥-click on a link, tab menu, palette).
     func openMiniWindow(url: URL) {
+        journalPanel("mini", open: true)
         guard let other = Self.newWindowHandler?(false) else { NSSound.beep(); return }
         other.becomeMini()
         other.newTab(urlString: url.absoluteString, isPrivate: activeTab?.isPrivate ?? false)
