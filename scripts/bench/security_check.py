@@ -71,6 +71,17 @@ def main():
         check("l'adresse d'un formulaire envoyé est reconnue comme nouvelle (nom coupé en prénom et nom)", "street=3 avenue Foch city=Lyon first=Bob last=Martin known=false" in ui("tab", "afsubmit", "0"))
         open("/tmp/oree-af-values.json", "w").write('{"given-name": "Ana", "address-line1": "12 RUE des lilas", "postal-code": "75011", "address-level2": "Paris"}')
         check("une adresse déjà enregistrée (écrite autrement) n'est pas reproposée", "known=true" in ui("tab", "afsubmit", "0"))
+        print("\nBannières de cookies")
+        def page(name, wait=4):
+            ui("load", f"http://127.0.0.1:{PORT}/{name}"); time.sleep(wait)
+        page("cookies_known.html", 5)
+        check("un gestionnaire connu qui arrive après le chargement : « Tout refuser » est cliqué, jamais « Tout accepter »", val("window.__rejected") == "1" and val("window.__accepted") == "0")
+        page("cookies_text.html")
+        check("une bannière maison : « Continuer sans accepter » est cliqué, « J'accepte » jamais", val("window.__rejected") == "1" and val("window.__accepted") == "0")
+        page("cookies_none.html", 6)
+        check("une bannière sans bouton de refus clair reste telle quelle (rien n'est accepté à la place de la personne)", val("window.__accepted") == "0")
+        page("refuse_invite.html")
+        check("un bouton « Refuser » hors d'une bannière de consentement n'est pas touché", val("window.__clicks") == "0")
     finally:
         proc.terminate(); proc.wait(timeout=10); server.shutdown()
     print(f"\n{sum(results)}/{len(results)} vérifications passent")

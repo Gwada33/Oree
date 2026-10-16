@@ -375,6 +375,17 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.spotlight") }
     }
 
+    /// Refuser les bannières de cookies automatiquement (jamais « Accepter »). Activé par défaut ; `HB_COOKIE_BANNERS=0` pour les essais.
+    public var autoRejectCookieBanners: Bool {
+        get { ProcessInfo.processInfo.environment["HB_COOKIE_BANNERS"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.autoRejectCookieBanners") as? Bool ?? true) }
+        set { defaults.set(newValue, forKey: "settings.autoRejectCookieBanners") }
+    }
+    /// Combien de bannières ont été refusées pour la personne (compteur affiché dans les réglages).
+    public var cookieBannersRejected: Int {
+        get { defaults.integer(forKey: "stats.cookieBannersRejected") }
+        set { defaults.set(newValue, forKey: "stats.cookieBannersRejected") }
+    }
+
     /// Web apps kept in side panels.
     public var webPanels: [WebPanelEntry] {
         get { (defaults.data(forKey: "settings.webPanels").flatMap { try? JSONDecoder().decode([WebPanelEntry].self, from: $0) }) ?? [] }

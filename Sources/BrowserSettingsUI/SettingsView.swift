@@ -72,6 +72,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var downloadDirectory = ""
     @Published var tabPreviews = true { didSet { settings.tabPreviews = tabPreviews } }
     @Published var tabArchiveDays = 0 { didSet { settings.tabArchiveDays = tabArchiveDays } }
+    @Published var autoRejectCookies = true { didSet { settings.autoRejectCookieBanners = autoRejectCookies } }
     @Published var spotlight = false { didSet { settings.spotlightIndexing = spotlight; NotificationCenter.default.post(name: Notification.Name("Oree.settingsChanged"), object: nil) } }
     @Published var eventJournal = false { didSet { settings.eventJournalEnabled = eventJournal; refreshJournalStatus() } }
     @Published var eventJournalDays = 30 { didSet { settings.eventJournalDays = eventJournalDays } }
@@ -203,6 +204,7 @@ final class SettingsViewModel: ObservableObject {
         tabPreviews = current.tabPreviews
         tabArchiveDays = current.tabArchiveDays
         spotlight = current.spotlightIndexing
+        autoRejectCookies = current.autoRejectCookieBanners
         eventJournal = current.eventJournalEnabled
         eventJournalDays = current.eventJournalDays
         energyMode = current.energyMode
@@ -762,6 +764,9 @@ public struct SettingsView: View {
                 Toggle("Bloquer les publicités et traqueurs", isOn: $model.adBlockEnabled)
                 Toggle("Ouvrir les nouveaux onglets en navigation privée par défaut", isOn: $model.privateByDefault)
                 Toggle("Autoriser la lecture automatique des vidéos et sons", isOn: $model.autoplayAllowed)
+                Toggle("Refuser automatiquement les bannières de cookies", isOn: $model.autoRejectCookies)
+                Text("Orée clique sur « Tout refuser » (ou « Continuer sans accepter ») des gestionnaires de consentement courants. Jamais sur « Accepter » : s'il n'y a pas de bouton de refus clair, la bannière reste. S'applique aux pages chargées ensuite\(SettingsStore.shared.cookieBannersRejected > 0 ? " · \(SettingsStore.shared.cookieBannersRejected) bannière(s) refusée(s) jusqu'ici" : "").")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Mode calme et personnalisation des sites") {
                 Toggle("Mode calme sur tous les sites (sans lecture automatique, sans animations, sans pastilles de notification)", isOn: $model.calmModeEverywhere)

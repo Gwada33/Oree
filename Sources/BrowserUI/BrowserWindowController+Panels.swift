@@ -554,7 +554,7 @@ extension BrowserWindowController {
     }
 
     func handleCredentialMessage(webView: WKWebView, origin: String, body: [String: Any]) {
-        guard isEligibleForCredentials(origin), let tab = tab(for: webView),
+        guard (isEligibleForCredentials(origin) || (body["type"] as? String) == "cookieBanner"), let tab = tab(for: webView),
               let type = body["type"] as? String else { return }
         switch type {
         case "focus":
@@ -564,6 +564,8 @@ extension BrowserWindowController {
         case "addressSubmit", "cardSubmit":
             guard !tab.isPrivate, let values = body["values"] as? [String: String] else { return }
             Task { await (type == "cardSubmit" ? offerToSaveCard(values) : offerToSaveAddress(values)) }
+        case "cookieBanner":
+            SettingsStore.shared.cookieBannersRejected += 1
         case "otp":
             guard !tab.isPrivate else { return }
             Task { await offerOneTimeCode(in: tab, webView: webView, origin: origin) }
