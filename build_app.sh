@@ -72,6 +72,26 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
             </array>
         </dict>
     </array>
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Ouvrir ou rechercher dans Orée</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>openInOree</string>
+            <key>NSPortName</key>
+            <string>Oree</string>
+            <key>NSSendTypes</key>
+            <array>
+                <string>NSStringPboardType</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict/>
+        </dict>
+    </array>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>

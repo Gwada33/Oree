@@ -515,6 +515,7 @@ extension BrowserWindowController {
         if let url = webView.url, url.absoluteString != "about:blank", url.scheme != "oree", !tab.isPrivate {
             do {
                 try historyRepo.recordVisit(url: url.absoluteString, title: tab.displayTitle)
+                SpotlightIndexer.shared.add(url: url.absoluteString, title: tab.displayTitle)
             } catch {
                 Log.storage.error("Failed to record history visit: \(error.localizedDescription)")
             }

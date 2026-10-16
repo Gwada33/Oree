@@ -415,8 +415,10 @@ extension BrowserWindowController {
             if try bookmarkRepo.contains(url: key) {
                 guard !forceAdd else { return }
                 try bookmarkRepo.remove(url: key)
+                SpotlightIndexer.shared.remove(url: key)
             } else {
                 try bookmarkRepo.add(url: key, title: tab.displayTitle, spaceIndex: currentSpace)
+                SpotlightIndexer.shared.addBookmark(url: key, title: tab.displayTitle)
             }
         } catch {
             Log.storage.error("Failed to toggle bookmark: \(error.localizedDescription)")

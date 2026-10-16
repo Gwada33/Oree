@@ -72,6 +72,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var downloadDirectory = ""
     @Published var tabPreviews = true { didSet { settings.tabPreviews = tabPreviews } }
     @Published var tabArchiveDays = 0 { didSet { settings.tabArchiveDays = tabArchiveDays } }
+    @Published var spotlight = false { didSet { settings.spotlightIndexing = spotlight; NotificationCenter.default.post(name: Notification.Name("Oree.settingsChanged"), object: nil) } }
     @Published var eventJournal = false { didSet { settings.eventJournalEnabled = eventJournal; refreshJournalStatus() } }
     @Published var eventJournalDays = 30 { didSet { settings.eventJournalDays = eventJournalDays } }
     @Published var journalStatus = ""
@@ -201,6 +202,7 @@ final class SettingsViewModel: ObservableObject {
         downloadDirectory = current.downloadDirectoryPath
         tabPreviews = current.tabPreviews
         tabArchiveDays = current.tabArchiveDays
+        spotlight = current.spotlightIndexing
         eventJournal = current.eventJournalEnabled
         eventJournalDays = current.eventJournalDays
         energyMode = current.energyMode
@@ -376,6 +378,7 @@ final class SettingsViewModel: ObservableObject {
 
     func clearHistory() {
         try? historyRepo.clear()
+        NotificationCenter.default.post(name: Notification.Name("Oree.historyCleared"), object: nil)
         try? resumeRepo.clear()          // where the user was in each page is part of what they browsed
         clearSiteMemory()
     }
@@ -734,6 +737,11 @@ public struct SettingsView: View {
     }
 
     @ViewBuilder private var privacySections: some View {
+            Section("Spotlight") {
+                Toggle("Retrouver mes favoris et mon historique récent dans la recherche Spotlight", isOn: $model.spotlight)
+                Text("Seuls le titre et le site (pas le contenu des pages) sont donnés à Spotlight : 300 pages récentes et tous les favoris. Rien en navigation privée. Effacer l'historique les retire aussi, et couper ce réglage vide l'index.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Journal d’événements") {
                 Toggle("Garder un journal de la façon dont j’utilise Orée, sur ce Mac", isOn: $model.eventJournal)
                 Text("Pour mesurer et régler la vitesse d’Orée avec des chiffres réels : onglets ouverts, choisis ou mis en veille, temps de chargement, liens survolés et cliqués, déplacements du pointeur et défilement (résumés par petites fenêtres), barre d’adresse (nombre de touches, suggestion choisie). Jamais l’adresse ni le titre d’une page, jamais ce que vous tapez ou les touches, jamais rien en navigation privée ni sur une page de mot de passe : les sites ne sont que des empreintes propres à ce Mac. Chiffré, jamais envoyé. S’applique aux pages (re)chargées après l’activation.")

@@ -1,4 +1,5 @@
 import AppKit
+import CoreSpotlight
 import WebKit
 import BrowserCore
 import BrowserStorage
@@ -44,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.menuBuilder = builder
         menuBuilder = builder
         NSApp.mainMenu = builder.build()
+        NSApp.servicesProvider = self           // menu Services
+        NSUpdateDynamicServices()
 
         // No forced activation: macOS already brings the app forward when *you* open it
         // (Dock, Finder, Spotlight) and leaves it behind for background launches
@@ -61,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 pendingURLs.removeAll()
                 controller.ensureTabExists()
                 controller.journalStart()
+                controller.reindexSpotlight()
                 controller.showOnboardingIfNeeded()
                 restoreExtraWindows()
             }
@@ -76,6 +80,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         if CommandLine.arguments.contains("--automation") { controller.enableAutomation() }
         #endif
+    }
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? { browserController?.makeDockMenu() }
+
+    /// Menu Services : « Ouvrir ou rechercher dans Orée » (texte sélectionné dans une autre application).
+    @objc func openInOree(_ pasteboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        guard let text = pasteboard.string(forType: .string) else { return }
+        browserController?.openFromService(text: text)
+    }
+
+    /// Un résultat Spotlight de nos favoris ou de notre historique.
+    func application(_ application: NSApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
+        guard userActivity.activityType == CSSearchableItemActionType, let id = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String else { return false }
+        browserController?.openSpotlightResult(identifier: id)
+        return true
     }
 
     /// Links from other apps (when HyperBrowser is the default browser) and .html files.

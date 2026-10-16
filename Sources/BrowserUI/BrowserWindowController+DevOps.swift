@@ -5,6 +5,7 @@ import BrowserCore
 import BrowserStorage
 import DownloadKit
 import OreeObjC
+import CoreSpotlight
 import MediaPlayer
 import SwiftUI
 
@@ -239,6 +240,22 @@ extension BrowserWindowController {
             let candidate = Self.addressProfile(from: values)
             let known = ((try? autofillStore.addresses()) ?? []).contains { Self.sameAddress($0, candidate) }
             return "candidate street=\(candidate.street) city=\(candidate.city) first=\(candidate.firstName) last=\(candidate.lastName) known=\(known)"
+        case "dockmenu": return makeDockMenu().items.map { $0.isSeparatorItem ? "—" : $0.title }.joined(separator: " | ")
+        case "service":
+            // Comme le menu Services : le texte du fichier s'ouvre (adresse) ou se cherche.
+            let text = (try? String(contentsOfFile: "/tmp/oree-service.txt", encoding: .utf8)) ?? ""
+            let before = tabs.count
+            openFromService(text: text)
+            return "tabs \(before)→\(tabs.count) url=\(activeTab?.lastRequestedURL?.absoluteString ?? activeTab?.currentURL?.absoluteString ?? "-")"
+        case "spotlightseed":
+            SpotlightIndexer.shared.reindex(bookmarks: [Bookmark(url: "https://exemple.org/spot", title: "Oree12345 favori de test")], history: [HistoryEntry(url: "https://exemple.net/hist", title: "Oree12345 page d'historique")]) { @Sendable error in
+                try? "indexed error=\(error.map { "\($0)" } ?? "nil")".write(toFile: "/tmp/oree-spot.txt", atomically: true, encoding: .utf8)
+            }
+            return "asked"
+        case "spotlightquery":
+            SpotlightIndexer.find(titleContaining: "Oree12345") { ids in try? ids.joined(separator: ",").write(toFile: "/tmp/oree-spot-found.txt", atomically: true, encoding: .utf8) }
+            return "asked"
+        case "spotlightclear": SpotlightIndexer.shared.removeAll { _ in }; return "cleared"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"

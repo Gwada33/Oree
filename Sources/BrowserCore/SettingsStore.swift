@@ -369,6 +369,12 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.eventJournalDays") }
     }
 
+    /// Retrouver ses favoris et son historique récent dans Spotlight (désactivé par défaut : un historique de navigation est sensible).
+    public var spotlightIndexing: Bool {
+        get { ProcessInfo.processInfo.environment["HB_SPOTLIGHT"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.spotlight") as? Bool ?? false) }
+        set { defaults.set(newValue, forKey: "settings.spotlight") }
+    }
+
     /// Web apps kept in side panels.
     public var webPanels: [WebPanelEntry] {
         get { (defaults.data(forKey: "settings.webPanels").flatMap { try? JSONDecoder().decode([WebPanelEntry].self, from: $0) }) ?? [] }

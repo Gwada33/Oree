@@ -25,7 +25,7 @@ enum PrivacyTools {
 
     /// At quit: what the user asked to forget. Bookmarks, passwords and the open tabs are never touched.
     static func clearAtQuit(settings: SettingsStore) async {
-        if settings.clearHistoryOnQuit { try? HistoryRepository().clear() }
+        if settings.clearHistoryOnQuit { try? HistoryRepository().clear(); await MainActor.run { SpotlightIndexer.shared.removeHistory() } }
         if settings.clearSiteDataOnQuit { await clearSiteData(in: .default()) }
     }
 

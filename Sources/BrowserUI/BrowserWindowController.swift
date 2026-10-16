@@ -55,6 +55,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     var journalAIStart: (date: Date, usage: AIUsageMeter.Snapshot, task: String)?
     nonisolated(unsafe) var journalTimer: Timer?
     var journalWasEnabled = false
+    var spotlightWasEnabled = false
     var journalDownloadStart: Date?
     var journalLayoutWork: DispatchWorkItem?
 
@@ -674,6 +675,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     func settingsChanged() {
         journalSettingsChanged()
+        spotlightSettingsChanged()
         if SettingsStore.shared.chromeLayout != appliedChromeLayout { applyChromeLayout() }
         // Look settings edited elsewhere (Réglages, a configuration) apply live.
         let look = LookProfile.capture(named: "", from: SettingsStore.shared)
