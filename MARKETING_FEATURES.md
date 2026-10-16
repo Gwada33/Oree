@@ -82,6 +82,9 @@
 - Import CSV (export de Mots de passe Apple, Chrome…) avec proposition de supprimer le fichier en clair. ✅
 - Presse-papiers effacé 30 s après une copie. ✅
 - Tout reste sur le Mac. ✅
+- **Codes à usage unique (2FA)** : Orée génère les codes TOTP à la place d'une appli d'authentification et les remplit (champ unique ou cases séparées). ✅ (banc d'essai ; pas essayé sur un vrai site)
+- **Export CSV** de tous les mots de passe, avec leurs codes 2FA. ✅
+- **Audit** : mots de passe faibles, réutilisés ou compromis. ✅ (compromis : 🔶, jamais essayé avec le vrai service)
 - Import des cookies de Brave (rester connecté aux mêmes sites) : lecture du profil Brave du même utilisateur, après autorisation du Trousseau macOS. 🔶 (déchiffrement testé sur des données fabriquées ; jamais essayé sur un vrai profil)
 
 ### 2.5 Mac natif — ⭐
@@ -89,6 +92,20 @@
 - Peut être défini comme navigateur par défaut. 🔶 (déclaré, bouton non testé)
 - Pages d'erreur et messages en français. ✅
 - Inspecteur web activable (option développeur). ✅
+
+### 2.6 Outils du quotidien (ajoutés en octobre 2026) — ⭐
+| Fonction | Ce que ça fait pour l'utilisateur | Statut | Unicité |
+|---|---|---|---|
+| **Remplissage d'adresses** | Remplit nom, adresse, téléphone ; reconnaît les champs français ; propose d'enregistrer. | ✅ (banc d'essai) | ⭐ |
+| **Remplissage de cartes** | Remplit la carte sur demande ; le code de sécurité n'est **jamais** enregistré. | ✅ (banc d'essai) | ⭐ |
+| **Refus automatique des cookies** | Clique « Refuser » sur les bannières de consentement (gestionnaires connus et détection par le texte) ; ne touche à rien s'il n'y a pas de bouton de refus. | ✅ (pages de test ; sites réels : 🔶) | ⭐ |
+| **Profils séparés** | Travail, Maison… : cookies, historique et mots de passe distincts, ouverts en même temps dans leurs propres fenêtres. | ✅ | ⭐ |
+| **Gestes de souris** | Clic droit + glisser : précédent, suivant, nouvel onglet, fermer l'onglet. | ✅ | ⭐⭐ |
+| **Mode responsive** | Voir la page à la taille d'un téléphone ou d'une tablette sans quitter la fenêtre. | ✅ | ⭐ |
+| **Menu du Dock** | Nouvelle fenêtre, navigation privée, autres profils, directement depuis l'icône. | ✅ | ⭐ |
+| **Menu Services** | « Ouvrir dans Orée » depuis n'importe quelle appli sur un lien ou un texte sélectionné. | ✅ | ⭐ |
+| **Spotlight** | Favoris et pages retrouvables depuis la recherche du Mac. | ✅ | ⭐⭐ |
+| **AirPlay** | Envoyer une vidéo vers une Apple TV ou un écran compatible. | 🔶 (activé, jamais essayé avec un appareil) | ⭐ |
 
 ---
 
@@ -131,6 +148,7 @@
 - **Nettoyage de la mémoire JavaScript des onglets cachés** 🔶 : −112 Mo sur un YouTube resté caché dans un essai, 0 sur d'autres. Effet sur la fluidité de l'onglet actif non mesuré. Sert aussi de premier palier du budget mémoire avant la mise en veille.
 
 ## 7. Idées étudiées, pas faites
+- Impossibles sans compte Apple ou serveur : notarisation, passkeys, notifications push, Apple Pay, synchronisation iCloud, VPN, Tor, compte, apps iPhone/Windows. **Ne pas les promettre.**
 - Extensions de navigateur, lien avec Mots de passe Apple, synchronisation chiffrée entre Macs.
 - Décodage des images à la taille affichée, bytecode partagé : demandent de modifier WebKit lui-même (non réalisable ici).
 
