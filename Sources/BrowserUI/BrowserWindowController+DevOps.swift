@@ -266,6 +266,24 @@ extension BrowserWindowController {
             }
             contentContainer.layoutSubtreeIfNeeded()
             return "slot=\(Int(tab.contentSlot.frame.width))x\(Int(tab.contentSlot.frame.height)) container=\(Int(contentContainer.bounds.width))x\(Int(contentContainer.bounds.height)) bar=\(!responsiveBar.isHidden) label=\(responsiveLabel.stringValue) ua=\(tab.webView?.customUserAgent.map { $0.contains("iPhone") ? "iPhone" : ($0.contains("iPad") ? "iPad" : "autre") } ?? "défaut")"
+        case "gesture":
+            // Simule un geste de souris (bouton droit) sur la page : le code (« L », « DR »…) vient de /tmp/oree-gesture.txt ; « click » = clic droit sans bouger.
+            guard let web = tab.webView as? OreeWebView, let number = window?.windowNumber else { return "no page" }
+            let code = ((try? String(contentsOfFile: "/tmp/oree-gesture.txt", encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            var path: [CGPoint] = [CGPoint(x: web.bounds.midX, y: web.bounds.midY)]
+            for character in code where "LRUD".contains(character) {
+                let last = path.last!
+                let up: CGFloat = web.isFlipped ? -1 : 1            // « vers le haut » à l'écran, quel que soit le sens de la vue
+                let step: (CGFloat, CGFloat) = character == "L" ? (-1, 0) : (character == "R" ? (1, 0) : (character == "U" ? (0, up) : (0, -up)))
+                for i in 1...6 { path.append(CGPoint(x: last.x + step.0 * 20 * CGFloat(i), y: last.y + step.1 * 20 * CGFloat(i))) }
+            }
+            func event(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent? {
+                NSEvent.mouseEvent(with: type, location: web.convert(point, to: nil), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: number, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+            }
+            if let down = event(.rightMouseDown, path[0]) { web.rightMouseDown(with: down) }
+            for point in path.dropFirst() { if let drag = event(.rightMouseDragged, point) { web.rightMouseDragged(with: drag) } }
+            if let up = event(.rightMouseUp, path.last!) { web.rightMouseUp(with: up) }
+            return "done code=\(code) tabs=\(tabs.count)"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"

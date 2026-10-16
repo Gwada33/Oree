@@ -1,5 +1,6 @@
 import AppKit
 import WebKit
+import BrowserCore
 
 /// The page view, with Orée's own right-click menu (link, image, selection, editing, navigation).
 /// WebKit's built-in menu isn't relied upon: the hit-test is done in the page, and the menu is ours.
@@ -29,7 +30,46 @@ final class OreeWebView: WKWebView {
     })
     """
 
+    // MARK: Gestes de souris
+
+    private var gestureStart: NSEvent?
+    private var gesturePoints: [CGPoint] = []
+    private var trail: GestureTrailView?
+
+    /// Le point dans un repère où y croît vers le haut, quel que soit le sens de la vue.
+    private func gesturePoint(_ event: NSEvent) -> CGPoint {
+        let p = convert(event.locationInWindow, from: nil)
+        return CGPoint(x: p.x, y: isFlipped ? -p.y : p.y)
+    }
+
     override func rightMouseDown(with event: NSEvent) {
+        guard SettingsStore.shared.mouseGestures else { showContextMenu(for: event); return }
+        // Gestes actifs : le menu attend de savoir si c'est un clic ou un trait.
+        gestureStart = event
+        gesturePoints = [gesturePoint(event)]
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        guard gestureStart != nil else { super.rightMouseDragged(with: event); return }
+        gesturePoints.append(gesturePoint(event))
+        let result = MouseGesture.recognize(gesturePoints)
+        guard result.isGesture else { return }
+        if trail == nil { let view = GestureTrailView(frame: bounds); view.autoresizingMask = [.width, .height]; addSubview(view); trail = view }
+        trail?.update(points: gesturePoints.map { CGPoint(x: $0.x, y: isFlipped ? -$0.y : $0.y) }, label: MouseGesture.action(for: result.code)?.label)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        guard let start = gestureStart else { super.rightMouseUp(with: event); return }
+        gestureStart = nil
+        gesturePoints.append(gesturePoint(event))
+        trail?.removeFromSuperview(); trail = nil
+        let result = MouseGesture.recognize(gesturePoints)
+        gesturePoints = []
+        if !result.isGesture { showContextMenu(for: start); return }              // un simple clic droit : le menu s'ouvre comme d'habitude
+        if let action = MouseGesture.action(for: result.code) { tab?.owner?.performMouseGesture(action) }
+    }
+
+    private func showContextMenu(for event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         let zoom = max(pageZoom, 0.1)
         let call = "\(Self.hitTest)(\(point.x / zoom), \((isFlipped ? point.y : bounds.height - point.y) / zoom))"
@@ -97,5 +137,34 @@ final class OreeWebView: WKWebView {
     private func download(_ url: URL) {
         let owner = tab?.owner
         startDownload(using: URLRequest(url: url)) { download in download.delegate = owner }
+    }
+}
+
+/// Le trait que l'on dessine pendant un geste, et ce qu'il va faire ; ne prend jamais la souris.
+@MainActor
+final class GestureTrailView: NSView {
+    private var points: [CGPoint] = []
+    private var label: String?
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func update(points: [CGPoint], label: String?) { self.points = points; self.label = label; needsDisplay = true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard points.count > 1 else { return }
+        let path = NSBezierPath()
+        path.move(to: points[0])
+        for p in points.dropFirst() { path.line(to: p) }
+        path.lineWidth = 3; path.lineCapStyle = .round; path.lineJoinStyle = .round
+        Theme.accent.withAlphaComponent(0.85).setStroke()
+        path.stroke()
+        guard let label, let end = points.last else { return }
+        let attributes: [NSAttributedString.Key: Any] = [.font: Theme.sans(12.5, .semibold), .foregroundColor: Theme.text]
+        let text = NSAttributedString(string: label, attributes: attributes)
+        let size = text.size()
+        var box = NSRect(x: end.x + 14, y: end.y + 10, width: size.width + 20, height: size.height + 10)
+        box.origin.x = min(box.origin.x, bounds.maxX - box.width - 8); box.origin.y = min(max(box.origin.y, 8), bounds.maxY - box.height - 8)
+        Theme.raised.setFill()
+        NSBezierPath(roundedRect: box, xRadius: box.height / 2, yRadius: box.height / 2).fill()
+        text.draw(at: NSPoint(x: box.minX + 10, y: box.minY + 5))
     }
 }

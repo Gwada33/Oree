@@ -386,6 +386,12 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "stats.cookieBannersRejected") }
     }
 
+    /// Gestes de souris (bouton droit + trait) : désactivés par défaut, ils changent ce que fait le clic droit.
+    public var mouseGestures: Bool {
+        get { ProcessInfo.processInfo.environment["HB_GESTURES"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.mouseGestures") as? Bool ?? false) }
+        set { defaults.set(newValue, forKey: "settings.mouseGestures") }
+    }
+
     /// Web apps kept in side panels.
     public var webPanels: [WebPanelEntry] {
         get { (defaults.data(forKey: "settings.webPanels").flatMap { try? JSONDecoder().decode([WebPanelEntry].self, from: $0) }) ?? [] }

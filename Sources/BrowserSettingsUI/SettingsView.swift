@@ -72,6 +72,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var downloadDirectory = ""
     @Published var tabPreviews = true { didSet { settings.tabPreviews = tabPreviews } }
     @Published var tabArchiveDays = 0 { didSet { settings.tabArchiveDays = tabArchiveDays } }
+    @Published var mouseGestures = false { didSet { settings.mouseGestures = mouseGestures } }
     @Published var autoRejectCookies = true { didSet { settings.autoRejectCookieBanners = autoRejectCookies } }
     @Published var spotlight = false { didSet { settings.spotlightIndexing = spotlight; NotificationCenter.default.post(name: Notification.Name("Oree.settingsChanged"), object: nil) } }
     @Published var eventJournal = false { didSet { settings.eventJournalEnabled = eventJournal; refreshJournalStatus() } }
@@ -205,6 +206,7 @@ final class SettingsViewModel: ObservableObject {
         tabArchiveDays = current.tabArchiveDays
         spotlight = current.spotlightIndexing
         autoRejectCookies = current.autoRejectCookieBanners
+        mouseGestures = current.mouseGestures
         eventJournal = current.eventJournalEnabled
         eventJournalDays = current.eventJournalDays
         energyMode = current.energyMode
@@ -739,6 +741,11 @@ public struct SettingsView: View {
     }
 
     @ViewBuilder private var privacySections: some View {
+            Section("Gestes de souris") {
+                Toggle("Gestes avec le bouton droit (maintenir, tracer, relâcher)", isOn: $model.mouseGestures)
+                Text("← page précédente · → page suivante · ↓ nouvel onglet · ↓→ fermer l'onglet · ↑↓ recharger · ↑ haut de la page · ↓↑ bas de la page · ↑← onglet précédent · ↑→ onglet suivant · ↓← rouvrir l'onglet fermé. Un clic droit sans tracer ouvre le menu comme d'habitude. Désactivé par défaut.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Spotlight") {
                 Toggle("Retrouver mes favoris et mon historique récent dans la recherche Spotlight", isOn: $model.spotlight)
                 Text("Seuls le titre et le site (pas le contenu des pages) sont donnés à Spotlight : 300 pages récentes et tous les favoris. Rien en navigation privée. Effacer l'historique les retire aussi, et couper ce réglage vide l'index.")

@@ -15,7 +15,7 @@ def ui(*a):
 
 def main():
     tmp = tempfile.mkdtemp(prefix="syscheck-"); auto = os.path.join(tmp, "auto"); os.makedirs(auto); os.makedirs(os.path.join(tmp, "ext"))
-    env = dict(os.environ, HB_FRESH_SESSION="1", HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AUTOMATION_DIR=auto, HB_SPOTLIGHT="1")
+    env = dict(os.environ, HB_FRESH_SESSION="1", HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AUTOMATION_DIR=auto, HB_SPOTLIGHT="1", HB_GESTURES="1")
     os.environ["HB_AUTOMATION_DIR"] = auto
     for f in ("/tmp/oree-spot.txt", "/tmp/oree-spot-found.txt"):
         if os.path.exists(f): os.remove(f)
@@ -58,6 +58,19 @@ def main():
         check("un ordinateur garde l'identité de bureau", "ua=défaut" in out or "ua=autre" in out)
         out = responsive("off"); time.sleep(4)
         check("quitter rend toute la place à la page, sans barre", "bar=false" in out and out.split("slot=")[1].split()[0] == out.split("container=")[1].split()[0] and "iPhone" not in ui("eval", "navigator.userAgent"))
+        print("Gestes de souris")
+        def gesture(code):
+            open("/tmp/oree-gesture.txt", "w").write(code); return ui("tab", "gesture", "2")
+        ui("load", "https://example.com/"); time.sleep(3.5); ui("load", "https://www.iana.org/help/example-domains"); time.sleep(4)
+        gesture("L"); time.sleep(3)
+        check("← : page précédente", "example.com" in ui("eval", "location.href") and "iana" not in ui("eval", "location.href"))
+        gesture("R"); time.sleep(3)
+        check("→ : page suivante", "iana.org" in ui("eval", "location.href"))
+        before = ui("tab", "dockmenu", "0").count("|")
+        out = gesture("D"); time.sleep(1.5)
+        check("↓ : nouvel onglet", "tabs=4" in out)
+        out = gesture("DR"); time.sleep(1.5)
+        check("↓→ : l'onglet se ferme", "tabs=3" in out)
     finally:
         proc.terminate(); proc.wait(timeout=10)
     print(f"\n{sum(results)}/{len(results)} vérifications passent")

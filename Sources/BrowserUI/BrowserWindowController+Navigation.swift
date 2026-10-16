@@ -579,3 +579,26 @@ extension BrowserWindowController {
         downloads.webkitFailed(download, error: error, resumeData: resumeData)
     }
 }
+
+// MARK: Gestes de souris
+extension BrowserWindowController {
+    /// Ce que fait chaque geste (voir `MouseGesture.bindings`).
+    func performMouseGesture(_ action: MouseGesture.Action) {
+        guard let tab = activeTab else { return }
+        switch action {
+        case .back: if tab.webView?.canGoBack == true { tab.webView?.goBack() }
+        case .forward: if tab.webView?.canGoForward == true { tab.webView?.goForward() }
+        case .newTab: journalOpenHow = "new"; newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault); addressPill.beginEditing(text: "", selectAll: false)
+        case .closeTab: closeTab(tab)
+        case .reload: tab.webView?.reload()
+        case .scrollTop: Task { _ = await tab.webView?.safeEvaluate("window.scrollTo({ top: 0, behavior: 'smooth' })", world: .page) }
+        case .scrollBottom: Task { _ = await tab.webView?.safeEvaluate("window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })", world: .page) }
+        case .previousTab, .nextTab:
+            let list = visibleTabs()
+            guard let index = list.firstIndex(where: { $0.id == tab.id }), list.count > 1 else { return }
+            journalSelectVia = "keyboard"
+            selectTab(list[(index + (action == .nextTab ? 1 : list.count - 1)) % list.count])
+        case .reopenTab: reopenClosedTab()
+        }
+    }
+}
