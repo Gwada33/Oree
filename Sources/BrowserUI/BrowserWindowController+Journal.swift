@@ -39,22 +39,31 @@ final class JournalRecorder {
         journal.record(JournalEvent(t: time.timeIntervalSince1970, e: name, d: fields))
     }
 
-    /// L'empreinte du site d'une adresse (nil : pas une page web, ou le Trousseau ne répond pas).
+    /// L'empreinte du site d'une adresse (nil : pas une page web, ou la clé n'est pas encore lue). La clé se lit en arrière-plan : si le Trousseau fait attendre, les événements
+    /// partent sans site au lieu de geler l'interface.
     func site(of url: URL?) -> String? {
         guard let host = url?.host, !host.isEmpty else { return nil }
-        if siteKey == nil { siteKey = journal.siteKey() }
+        requestSiteKey()
         return siteKey.map { SiteHash.hash(host: host, key: $0) }
     }
 
     func hashHost(_ host: String) -> String {
-        if siteKey == nil { siteKey = journal.siteKey() }
+        requestSiteKey()
         return siteKey.map { SiteHash.hash(host: host, key: $0) } ?? "0000000000000000"
+    }
+
+    private var keyRequested = false
+    func requestSiteKey() {
+        guard siteKey == nil, !keyRequested else { return }
+        keyRequested = true
+        journal.loadSiteKey { [weak self] key in Task { @MainActor in self?.siteKey = key } }
     }
 
     /// Une seule fois par lancement, quand le journal est actif : la machine, l'état de l'énergie, le temps de démarrage.
     func startSessionIfNeeded(restored: Int) {
         guard enabled, !sessionStarted else { return }
         sessionStarted = true
+        requestSiteKey()
         let info = ProcessInfo.processInfo
         let scale = Int((NSScreen.main?.backingScaleFactor ?? 2).rounded())
         emit("session.start", ["ver": .string(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"), "os": .int(info.operatingSystemVersion.majorVersion),

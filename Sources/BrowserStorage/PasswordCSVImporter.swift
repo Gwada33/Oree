@@ -1,4 +1,5 @@
 import Foundation
+import BrowserCore
 
 /// Imports the CSV that Apple's Passwords app (File > Export All Passwords),
 /// Chrome, Firefox and most password managers can produce.
@@ -10,6 +11,9 @@ public enum PasswordCSVImporter {
         public let origin: String
         public let username: String
         public let password: String
+        /// Le secret 2FA (colonne `OTPAuth` des exports d'Apple, de Chrome, d'Orée…) : une adresse `otpauth://` ou vide.
+        public let otpAuth: String
+        public init(origin: String, username: String, password: String, otpAuth: String = "") { self.origin = origin; self.username = username; self.password = password; self.otpAuth = otpAuth }
     }
 
     public struct Result: Equatable, Sendable {
@@ -33,13 +37,15 @@ public enum PasswordCSVImporter {
             throw ImportError.missingColumns
         }
 
+        let otpColumn = column(["otpauth", "otp", "totp", "one-time code", "login_totp"])
         var entries: [Entry] = []
         var skipped = 0
         for row in rows.dropFirst() where !(row.count == 1 && row[0].isEmpty) {
             guard row.indices.contains(urlColumn), row.indices.contains(passwordColumn),
                   let origin = secureOrigin(row[urlColumn]), !row[passwordColumn].isEmpty else { skipped += 1; continue }
             let username = row.indices.contains(userColumn) ? row[userColumn] : ""
-            entries.append(Entry(origin: origin, username: username, password: row[passwordColumn]))
+            let otp = otpColumn.flatMap { row.indices.contains($0) ? row[$0].trimmingCharacters(in: .whitespacesAndNewlines) : nil } ?? ""
+            entries.append(Entry(origin: origin, username: username, password: row[passwordColumn], otpAuth: otp))
         }
         return Result(entries: entries, skipped: skipped)
     }
@@ -97,6 +103,7 @@ extension CredentialVault {
     public func importEntries(_ entries: [PasswordCSVImporter.Entry]) throws -> Int {
         for entry in entries {
             try save(origin: entry.origin, username: entry.username, password: entry.password)
+            if !entry.otpAuth.isEmpty, let config = TOTPConfig.parse(entry.otpAuth) { try saveTOTP(config, origin: entry.origin, username: entry.username) }
         }
         return entries.count
     }

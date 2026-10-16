@@ -34,8 +34,10 @@ public final class EventJournal: @unchecked Sendable {
     }
 
     /// Le journal de l'app : `Application Support/HyperBrowser/Journal`, clé du Trousseau `com.nolhan.hyperbrowser.journal`.
+    /// Avec `override` (essais seulement : `HB_JOURNAL_DIR`), la clé est un fichier du dossier d'essai : un essai ne touche pas au Trousseau de la personne et n'y déclenche aucune demande d'accès.
     public static func standard(directory override: URL? = nil) -> EventJournal {
-        let base = override ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("HyperBrowser/Journal", isDirectory: true)
+        if let override { return EventJournal(directory: override, keys: FileKeyProvider(file: override.appendingPathComponent(".test-key"))) }
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("HyperBrowser/Journal", isDirectory: true)
         return EventJournal(directory: base, keys: KeychainKeyProvider(service: "com.nolhan.hyperbrowser.journal", account: "journal-key"))
     }
 
@@ -46,7 +48,13 @@ public final class EventJournal: @unchecked Sendable {
         let key = try keys.masterKey(); cachedKey = key; return key
     }
 
-    /// La clé des empreintes de sites (déduite de la clé du journal). nil si le Trousseau ne répond pas : alors on n'écrit rien.
+    /// La clé des empreintes de sites (déduite de la clé du journal), lue HORS du fil appelant : le Trousseau peut attendre une réponse de la personne (demande d'accès
+    /// après une mise à jour de l'app), et l'interface ne doit jamais attendre avec lui. `completion` est appelée sur la file du journal ; rien si le Trousseau refuse.
+    public func loadSiteKey(_ completion: @escaping @Sendable (SymmetricKey) -> Void) {
+        queue.async { [self] in if let key = try? masterKey() { completion(SiteHash.key(from: key)) } }
+    }
+
+    /// Version bloquante, pour les essais et les outils (jamais depuis l'interface).
     public func siteKey() -> SymmetricKey? {
         queue.sync { (try? masterKey()).map(SiteHash.key(from:)) }
     }
@@ -189,5 +197,18 @@ public final class EventJournal: @unchecked Sendable {
             total -= Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
             try? FileManager.default.removeItem(at: url)
         }
+    }
+}
+
+/// Une clé gardée dans un fichier : seulement pour les essais (le vrai journal utilise le Trousseau).
+public struct FileKeyProvider: VaultKeyProvider {
+    private let file: URL
+    public init(file: URL) { self.file = file }
+    public func masterKey() throws -> SymmetricKey {
+        if let data = try? Data(contentsOf: file), data.count == 32 { return SymmetricKey(data: data) }
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let key = SymmetricKey(size: .bits256)
+        try key.withUnsafeBytes { try Data($0).write(to: file, options: .atomic) }
+        return key
     }
 }

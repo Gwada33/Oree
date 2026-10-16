@@ -211,6 +211,13 @@ extension BrowserWindowController {
             let counts = Dictionary(grouping: journal.journal.readAll(), by: \.e).mapValues(\.count).sorted { $0.key < $1.key }
             return counts.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
         case "journalclear": journal.journal.clear(); return "cleared"
+        case "otpseed":
+            // Enregistre un secret 2FA de test (JBSWY3DPEHPK3PXP) pour l'origine de la page affichée.
+            guard let url = tab.webView?.url, let host = url.host else { return "no page" }
+            let origin = url.port.map { "\(url.scheme ?? "http")://\(host):\($0)" } ?? "\(url.scheme ?? "https")://\(host)"
+            try? vault.saveTOTP(TOTPConfig(secret: Base32.decode("JBSWY3DPEHPK3PXP")!), origin: origin, username: "ana")
+            return "seeded \(origin)"
+        case "otpfill": fillOneTimeCodeAction(); return "asked"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"

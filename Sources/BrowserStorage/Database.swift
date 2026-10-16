@@ -216,6 +216,17 @@ public final class AppDatabase: @unchecked Sendable {
             }
         }
 
+        // Secrets de codes à usage unique (2FA), un par compte enregistré ; chiffrés comme les mots de passe.
+        migrator.registerMigration("v14_totp") { db in
+            try db.create(table: "totpSecrets") { t in
+                t.column("origin", .text).notNull()
+                t.column("username", .text).notNull()
+                t.column("sealed", .blob).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.primaryKey(["origin", "username"])
+            }
+        }
+
         return migrator
     }
 }

@@ -559,6 +559,9 @@ extension BrowserWindowController {
         switch type {
         case "focus":
             Task { await offerAutofill(in: tab, webView: webView, origin: origin) }
+        case "otp":
+            guard !tab.isPrivate else { return }
+            Task { await offerOneTimeCode(in: tab, webView: webView, origin: origin) }
         case "submit":
             guard !tab.isPrivate,
                   let username = body["username"] as? String, let password = body["password"] as? String,
@@ -585,6 +588,30 @@ extension BrowserWindowController {
         } catch {
             Log.security.error("Autofill failed: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// Le code 2FA d'un compte de ce site (calculé ici, rempli après Touch ID). `manual` : demandé par la personne (palette), donc dit pourquoi s'il n'y a rien à remplir.
+    func offerOneTimeCode(in tab: Tab, webView: WKWebView, origin: String, manual: Bool = false) async {
+        guard !credentialPromptInFlight else { return }
+        let usernames = (try? vault.usernamesWithTOTP(origin: origin)) ?? []
+        guard !usernames.isEmpty else { if manual { presentNotice("Aucun code 2FA enregistré pour ce site (Réglages › Mots de passe › 2FA).") }; return }
+        credentialPromptInFlight = true
+        defer { credentialPromptInFlight = false }
+        let host = URL(string: origin)?.host ?? origin
+        let logins = usernames.map { SavedLogin(id: 0, origin: origin, username: $0, updatedAt: Date()) }
+        guard let login = logins.count == 1 ? logins[0] : await chooseLogin(logins, host: host) else { return }
+        guard await VaultUnlocker.shared.authenticate(reason: "Remplir le code 2FA de \(login.username.isEmpty ? host : login.username)") else { return }
+        guard let config = try? vault.totp(origin: origin, username: login.username) else { return }
+        let ok = await webView.safeCall("return window.__hbFillOTP(c);", arguments: ["c": config.code()], world: .page) as? Bool
+        if manual, ok != true { presentNotice("Aucun champ de code à remplir sur cette page.") }
+    }
+
+    /// ⌘K › « Remplir le code 2FA ».
+    @objc func fillOneTimeCodeAction() {
+        guard let tab = activeTab, let webView = tab.webView, !tab.isPrivate, let url = webView.url, url.scheme == "https" || url.scheme == "http" else { return }
+        let origin = url.port.map { "\(url.scheme ?? "https")://\(url.host ?? ""):\($0)" } ?? "\(url.scheme ?? "https")://\(url.host ?? "")"
+        guard isEligibleForCredentials(origin) else { return }
+        Task { await offerOneTimeCode(in: tab, webView: webView, origin: origin, manual: true) }
     }
 
     func chooseLogin(_ logins: [SavedLogin], host: String) async -> SavedLogin? {

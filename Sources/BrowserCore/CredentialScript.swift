@@ -70,9 +70,30 @@ public enum CredentialScript {
       document.addEventListener('pointerdown', markGesture, true);
       document.addEventListener('keydown', markGesture, true);
 
+      // Champs de code à usage unique (2FA) : par l'attribut standard, ou par le nom du champ et sa forme (4 à 8 chiffres).
+      const OTP_NAME = /otp|totp|2fa|mfa|one.?time|verif|security.?code|auth.?code|code.?(sms|secur)|token|passcode/i;
+      function isOtpField(el) {
+        if (!el || el.tagName !== 'INPUT' || el.disabled || !isVisible(el)) return false;
+        const t = typeOf(el);
+        if (['text', 'tel', 'number'].indexOf(t) === -1) return false;
+        if ((el.getAttribute('autocomplete') || '').toLowerCase().indexOf('one-time-code') !== -1) return true;
+        const hint = [el.name, el.id, el.placeholder, el.getAttribute('aria-label')].join(' ');
+        const len = el.maxLength > 0 ? el.maxLength : 0;
+        const numeric = (el.inputMode || '') === 'numeric' || /\\d/.test(el.getAttribute('pattern') || '') || t === 'number' || t === 'tel';
+        return OTP_NAME.test(hint) && ((len >= 4 && len <= 8) || numeric || len === 1);
+      }
+      // Un code coupé en plusieurs cases d'un chiffre : le groupe de cases voisines.
+      function otpGroup(el) {
+        if (el.maxLength !== 1) return [el];
+        const scope = el.closest('form') || el.parentElement && el.parentElement.parentElement || document;
+        const boxes = Array.prototype.slice.call(scope.querySelectorAll('input')).filter((i) => i.maxLength === 1 && isVisible(i) && !i.disabled);
+        return boxes.length >= 4 && boxes.length <= 8 ? boxes : [el];
+      }
+
       document.addEventListener('focusin', (e) => {
         if (!e.isTrusted || Date.now() - lastGesture > 1500) return;
         if (isLoginField(e.target)) post({ type: 'focus' });
+        else if (isOtpField(e.target)) post({ type: 'otp' });
       }, true);
 
       let lastSubmit = 0;
@@ -97,6 +118,18 @@ public enum CredentialScript {
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
       }
+      Object.defineProperty(window, '__hbFillOTP', {
+        value: function (code) {
+          const focused = isOtpField(document.activeElement) ? document.activeElement : null;
+          const field = focused || Array.prototype.slice.call(document.querySelectorAll('input')).find(isOtpField);
+          if (!field) return false;
+          const group = otpGroup(field);
+          if (group.length > 1) { group.forEach((box, i) => { if (code[i]) setValue(box, code[i]); }); }
+          else setValue(field, code);
+          return true;
+        },
+        enumerable: false, configurable: false, writable: false,
+      });
       Object.defineProperty(window, '__hbFill', {
         value: function (username, password) {
           const pw = passwordIn(document, false);

@@ -37,6 +37,7 @@ enum JournalScript {
       function closePointer() {
         if (!win) return;
         const w = win; win = null;
+        if (w.dist < 3) return;                                  // un seul mouvement : rien à résumer
         emit('ptr.window', { dur: Math.round(now() - w.t0), dist: Math.round(w.dist), vmean: w.n ? Math.round(w.vsum / w.n) : 0, vmax: Math.round(w.vmax), pauses: w.pauses, turns: w.turns, dx: Math.round(w.dx), dy: Math.round(w.dy) });
       }
       addEventListener('mousemove', e => {

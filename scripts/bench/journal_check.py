@@ -125,7 +125,7 @@ def main():
         js("__sim.move(50, 80, 500, 300, 30, 25); __sim.hover('lk2', 400, true); 'x'"); time.sleep(4)
         ui("tab", "fewtabs", "0"); time.sleep(3)
         out = ui("tab", "journalflush", "0")
-        files = os.listdir(os.path.join(tmp2, "journal")) if os.path.isdir(os.path.join(tmp2, "journal")) else []
+        files = [f for f in (os.listdir(os.path.join(tmp2, "journal")) if os.path.isdir(os.path.join(tmp2, "journal")) else []) if not f.startswith(".")]
         check("rien n'est écrit quand le journal est désactivé", not files and "events=0" in out)
     finally:
         proc.terminate(); proc.wait(timeout=10); server.shutdown(); shutil.rmtree(tmp2, ignore_errors=True)

@@ -162,6 +162,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var newLoginUser = ""
     @Published var newLoginPassword = ""
     @Published var passwordMessage: String?
+    @Published var passwordReport: [String] = []
     @Published var importResultMessage: String?
     @Published var cookieImportMessage: String?
     @Published var cookieImportRunning = false
@@ -817,6 +818,15 @@ public struct SettingsView: View {
                             Text(login.origin).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
+                        Menu("2FA") {
+                            if model.hasTOTP(login) {
+                                Button("Copier le code") { model.copyCode(of: login) }
+                                Button("Retirer le code 2FA", role: .destructive) { model.removeTOTP(of: login) }
+                            } else {
+                                Button("Ajouter un code 2FA…") { model.addTOTP(to: login) }
+                            }
+                        }
+                        .fixedSize()
                         Button("Copier") { model.copyPassword(of: login) }
                         Button("Supprimer", role: .destructive) { model.deleteLogin(login) }
                     }
@@ -826,6 +836,9 @@ public struct SettingsView: View {
                 SecureField("Mot de passe", text: $model.newLoginPassword, prompt: Text("mot de passe"))
                 Button("Ajouter") { model.addLogin() }
                 Button("Importer un fichier CSV (Mots de passe Apple, Chrome…)") { model.importPasswordCSV() }
+                Button("Exporter en CSV…") { model.exportPasswordCSV() }
+                Button("Vérifier mes mots de passe (fuites, réutilisation, faiblesse)") { model.auditPasswords() }
+                ForEach(model.passwordReport, id: \.self) { Text($0).font(.caption) }
                 if let message = model.passwordMessage {
                     Text(message).font(.caption)
                 }
@@ -1459,5 +1472,103 @@ extension SettingsViewModel {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         JournalControls.clear()
         refreshJournalStatus()
+    }
+}
+
+// MARK: - Mots de passe : 2FA, export, santé
+extension SettingsViewModel {
+    func hasTOTP(_ login: SavedLogin) -> Bool { vault.hasTOTP(origin: login.origin, username: login.username) }
+
+    func addTOTP(to login: SavedLogin) {
+        let alert = NSAlert()
+        alert.messageText = "Code 2FA pour « \(login.username.isEmpty ? login.origin : login.username) »"
+        alert.informativeText = "Collez la clé secrète que le site vous a montrée (« JBSW Y3DP… ») ou l'adresse otpauth:// du code QR. Orée calcule alors les codes à 6 chiffres, sur ce Mac."
+        alert.addButton(withTitle: "Enregistrer"); alert.addButton(withTitle: "Annuler")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); field.placeholderString = "clé secrète ou otpauth://…"
+        alert.accessoryView = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard let config = TOTPConfig.parse(field.stringValue) else { passwordMessage = "Cette clé n'est pas lisible (base32 ou adresse otpauth://totp attendue)."; return }
+        do { try vault.saveTOTP(config, origin: login.origin, username: login.username); passwordMessage = "Code 2FA enregistré : par exemple \(config.code()) en ce moment."; objectWillChange.send() }
+        catch { passwordMessage = "Enregistrement impossible : \(error.localizedDescription)" }
+    }
+
+    func removeTOTP(of login: SavedLogin) {
+        try? vault.deleteTOTP(origin: login.origin, username: login.username)
+        passwordMessage = "Code 2FA retiré."; objectWillChange.send()
+    }
+
+    func copyCode(of login: SavedLogin) {
+        Task {
+            guard await VaultUnlocker.shared.authenticate(reason: "Copier le code 2FA de \(login.username)"),
+                  let config = try? vault.totp(origin: login.origin, username: login.username) else { passwordMessage = "Authentification refusée ou code illisible."; return }
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents(); pasteboard.setString(config.code(), forType: .string)
+            let count = pasteboard.changeCount
+            passwordMessage = "Code copié (valable encore \(config.secondsRemaining()) s)."
+            try? await Task.sleep(for: .seconds(30))
+            if pasteboard.changeCount == count { pasteboard.clearContents() }
+        }
+    }
+
+    /// Exporte tous les mots de passe (et leurs codes 2FA) en CSV, EN CLAIR : après Touch ID, et un avertissement.
+    func exportPasswordCSV() {
+        Task {
+            guard await VaultUnlocker.shared.authenticate(reason: "Exporter tous les mots de passe") else { passwordMessage = "Authentification refusée."; return }
+            let alert = NSAlert()
+            alert.messageText = "Exporter les mots de passe en clair ?"
+            alert.informativeText = "Le fichier contiendra tous vos mots de passe sans chiffrement. Gardez-le le moins longtemps possible et supprimez-le après usage."
+            alert.addButton(withTitle: "Exporter…"); alert.addButton(withTitle: "Annuler")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.commaSeparatedText]
+            panel.nameFieldStringValue = "mots-de-passe-oree.csv"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            do {
+                let rows = try vault.everything().map { PasswordCSVExporter.Row(url: $0.origin, username: $0.username, password: $0.password, otpAuth: $0.totp.map(Self.otpURI) ?? "") }
+                try PasswordCSVExporter.csv(rows).write(to: url, atomically: true, encoding: .utf8)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                passwordMessage = "\(rows.count) mot(s) de passe exporté(s) dans \(url.lastPathComponent)."
+            } catch { passwordMessage = "Export impossible : \(error.localizedDescription)" }
+        }
+    }
+
+    static func otpURI(_ config: TOTPConfig) -> String {
+        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+        var out = "", buffer = 0, bits = 0
+        for byte in config.secret { buffer = (buffer << 8) | Int(byte); bits += 8; while bits >= 5 { bits -= 5; out.append(alphabet[(buffer >> bits) & 31]) } }
+        if bits > 0 { out.append(alphabet[(buffer << (5 - bits)) & 31]) }
+        var uri = "otpauth://totp/\(config.account ?? "compte")?secret=\(out)&digits=\(config.digits)&period=\(config.period)&algorithm=\(config.algorithm.rawValue)"
+        if let issuer = config.issuer { uri += "&issuer=\(issuer.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? issuer)" }
+        return uri
+    }
+
+    /// Fuites (5 caractères d'empreinte envoyés par mot de passe, jamais le mot de passe), réutilisation, faiblesse. Touch ID d'abord.
+    func auditPasswords() {
+        Task {
+            guard await VaultUnlocker.shared.authenticate(reason: "Vérifier la santé des mots de passe") else { passwordMessage = "Authentification refusée."; return }
+            passwordMessage = "Vérification en cours…"; passwordReport = []
+            let items = ((try? vault.everything()) ?? []).map { PasswordAudit.Item(origin: $0.origin, username: $0.username, password: $0.password) }
+            var breaches: [String: Int] = [:], networkFailed = false
+            var ranges: [String: String] = [:]      // un seul appel par préfixe
+            for password in Set(items.map(\.password)) where !password.isEmpty {
+                let parts = PasswordAudit.pwnedParts(of: password)
+                if ranges[parts.prefix] == nil, let url = PasswordAudit.pwnedURL(prefix: parts.prefix) {
+                    var request = URLRequest(url: url, timeoutInterval: 10)
+                    request.setValue("true", forHTTPHeaderField: "Add-Padding")      // la taille de la réponse ne renseigne pas sur la fuite
+                    if let (data, response) = try? await URLSession.shared.data(for: request), (response as? HTTPURLResponse)?.statusCode == 200 { ranges[parts.prefix] = String(decoding: data, as: UTF8.self) }
+                    else { networkFailed = true }
+                }
+                if let body = ranges[parts.prefix] { breaches[password] = PasswordAudit.pwnedCount(in: body, suffix: parts.suffix) }
+            }
+            let report = PasswordAudit.analyze(items, breaches: breaches)
+            var lines: [String] = []
+            if report.isClean && !networkFailed { lines.append("Rien à signaler sur \(report.checked) compte(s).") }
+            for (account, count) in report.breached.sorted(by: { $0.key < $1.key }) { lines.append("⚠︎ Mot de passe vu \(count) fois dans des fuites : \(account)") }
+            for group in report.reused { lines.append("Même mot de passe sur plusieurs comptes : " + group.joined(separator: " · ")) }
+            for account in report.weak { lines.append("Mot de passe faible : \(account)") }
+            if networkFailed { lines.append("Les fuites n'ont pas pu être vérifiées (pas de réseau ?) : le reste est calculé sur ce Mac.") }
+            passwordReport = lines
+            passwordMessage = "Vérification terminée."
+        }
     }
 }

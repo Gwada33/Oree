@@ -196,6 +196,7 @@ extension BrowserWindowController {
                 ("Rouvrir l'onglet fermé", "arrow.uturn.backward", { $0.reopenClosedTab() }),
                 ("Onglets archivés…", "archivebox", { $0.showArchiveMenu() }),
                 ("Notes", "note.text", { $0.showNotes() }),
+                ("Remplir le code 2FA", "lock.rotation", { $0.fillOneTimeCodeAction() }),
                 ("Aller à l'espace suivant", "square.stack", { $0.selectNextSpace() }),
                 ("Recharger la page", "arrow.clockwise", { $0.reloadAction() }),
                 ("Ajouter ou retirer des favoris", "star", { if let tab = $0.activeTab { $0.toggleBookmark(for: tab) } }),

@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import BrowserCore
 import GRDB
 import Security
 
@@ -65,6 +66,7 @@ public struct SavedLogin: Equatable, Sendable, Identifiable {
     public let origin: String
     public let username: String
     public let updatedAt: Date
+    public init(id: Int64, origin: String, username: String, updatedAt: Date) { self.id = id; self.origin = origin; self.username = username; self.updatedAt = updatedAt }
 }
 
 private struct CredentialRow: Codable, FetchableRecord, MutablePersistableRecord {
@@ -139,11 +141,62 @@ public struct CredentialVault: Sendable {
     }
 
     public func delete(id: Int64) throws {
-        try dbPool.write { db in _ = try CredentialRow.deleteOne(db, key: id) }
+        try dbPool.write { db in
+            if let row = try CredentialRow.fetchOne(db, key: id) {
+                _ = try db.execute(sql: "DELETE FROM totpSecrets WHERE origin = ? AND username = ?", arguments: [row.origin, row.username])
+            }
+            _ = try CredentialRow.deleteOne(db, key: id)
+        }
     }
 
     public func deleteAll() throws {
-        try dbPool.write { db in _ = try CredentialRow.deleteAll(db) }
+        try dbPool.write { db in
+            _ = try db.execute(sql: "DELETE FROM totpSecrets")
+            _ = try CredentialRow.deleteAll(db)
+        }
+    }
+
+    // MARK: Codes à usage unique (2FA)
+
+    private static func totpAAD(origin: String, username: String) -> Data { Data("totp\u{0}\(origin)\u{0}\(username)".utf8) }
+
+    /// Enregistre (ou remplace) le secret 2FA d'un compte. Chiffré comme un mot de passe ; le compte n'a pas besoin d'avoir un mot de passe enregistré.
+    public func saveTOTP(_ config: TOTPConfig, origin: String, username: String) throws {
+        let json = try JSONEncoder().encode(config)
+        let sealed = try ChaChaPoly.seal(json, using: keys.masterKey(), authenticating: Self.totpAAD(origin: origin, username: username))
+        try dbPool.write { db in
+            try db.execute(sql: "INSERT OR REPLACE INTO totpSecrets (origin, username, sealed, updatedAt) VALUES (?, ?, ?, ?)", arguments: [origin, username, sealed.combined, Date()])
+        }
+    }
+
+    public func totp(origin: String, username: String) throws -> TOTPConfig? {
+        guard let blob = try dbPool.read({ db in try Data.fetchOne(db, sql: "SELECT sealed FROM totpSecrets WHERE origin = ? AND username = ?", arguments: [origin, username]) }) else { return nil }
+        do {
+            let box = try ChaChaPoly.SealedBox(combined: blob)
+            let data = try ChaChaPoly.open(box, using: keys.masterKey(), authenticating: Self.totpAAD(origin: origin, username: username))
+            return try JSONDecoder().decode(TOTPConfig.self, from: data)
+        } catch is CryptoKitError { throw VaultError.corrupted }
+    }
+
+    /// Les comptes d'une origine qui ont un secret 2FA (sans les secrets).
+    public func usernamesWithTOTP(origin: String) throws -> [String] {
+        try dbPool.read { db in try String.fetchAll(db, sql: "SELECT username FROM totpSecrets WHERE origin = ? ORDER BY username", arguments: [origin]) }
+    }
+
+    public func hasTOTP(origin: String, username: String) -> Bool {
+        ((try? dbPool.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM totpSecrets WHERE origin = ? AND username = ?", arguments: [origin, username]) }) ?? 0) ?? 0 > 0
+    }
+
+    public func deleteTOTP(origin: String, username: String) throws {
+        try dbPool.write { db in try db.execute(sql: "DELETE FROM totpSecrets WHERE origin = ? AND username = ?", arguments: [origin, username]) }
+    }
+
+    /// Tout en clair, pour l'export et le contrôle de santé : l'appelant doit avoir fait authentifier la personne juste avant.
+    public func everything() throws -> [(origin: String, username: String, password: String, totp: TOTPConfig?)] {
+        try allLogins().compactMap { login in
+            guard let password = try? password(origin: login.origin, username: login.username) else { return nil }
+            return (login.origin, login.username, password, try? totp(origin: login.origin, username: login.username))
+        }
     }
 
     private static func model(_ row: CredentialRow) -> SavedLogin {

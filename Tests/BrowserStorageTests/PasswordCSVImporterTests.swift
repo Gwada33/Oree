@@ -12,7 +12,7 @@ struct PasswordCSVImporterTests {
         let result = try PasswordCSVImporter.parse(csv)
         #expect(result.entries == [
             .init(origin: "https://github.com", username: "octo", password: "p@ss"),
-            .init(origin: "https://example.com", username: "me@x.fr", password: "pw,with \"quotes\""),
+            .init(origin: "https://example.com", username: "me@x.fr", password: "pw,with \"quotes\"", otpAuth: "otpauth://totp/x"),
         ])
         #expect(result.skipped == 0)
     }
