@@ -50,8 +50,8 @@ def main():
         pages = ui("eval", "document.documentElement.scrollHeight")
         print("   hauteur de la page :", pages)
         print("Inspecteur")
-        out = ui("tab", "inspect", "0"); print("  ", out)
-        check("l'inspecteur s'ouvre sans message d'erreur", "inspectable=true" in out and "pas disponible" not in out)
+        ui("tab", "inspect", "0"); time.sleep(3); out = ui("tab", "inspect", "0"); print("  ", out)
+        check("l'inspecteur s'ouvre sans message d'erreur", "inspectable=true" in out and "pas disponible" not in out and ("Web Inspector" in out or "Inspecteur" in out or "Inspector" in out))
     finally:
         proc.terminate(); time.sleep(1)
         if proc.poll() is None: proc.kill()

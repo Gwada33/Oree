@@ -103,11 +103,16 @@ extension OreeWebView {
     /// Ouvre l'inspecteur web de WebKit. Il ne s'attache qu'à une page « inspectable » : on l'autorise pour cet onglet au moment du clic.
     func showInspector() {
         isInspectable = true
+        // Sans cette préférence, WebKit n'ouvre aucune fenêtre d'inspecteur dans l'app elle-même (isInspectable ne sert qu'à Safari).
+        configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         let getter = NSSelectorFromString("_inspector"), show = NSSelectorFromString("show")
         guard responds(to: getter), let inspector = perform(getter)?.takeUnretainedValue() as? NSObject, inspector.responds(to: show) else {
             tab?.owner?.noticePill.show(message: "L'inspecteur n'est pas disponible dans cette version de macOS", button: "OK", seconds: 5) {}
             return
         }
         inspector.perform(show)
+        // Attaché, WebKit glisse l'inspecteur dans le conteneur de la page, où la mise en page d'Orée le recouvre : on le sépare en fenêtre.
+        let detach = NSSelectorFromString("detach")
+        if inspector.responds(to: detach) { inspector.perform(detach) }
     }
 }

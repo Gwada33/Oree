@@ -261,7 +261,7 @@ extension BrowserWindowController {
         case "mediacopy": (tab.webView as? OreeWebView)?.copyAllMedia(); return "started"
         case "mediaurls": (tab.webView as? OreeWebView)?.copyMediaAddresses(); return "started"
         case "pagecopy": (tab.webView as? OreeWebView)?.copyWholePage(); return "started"
-        case "inspect": (tab.webView as? OreeWebView)?.showInspector(); return "inspectable=\(tab.webView?.isInspectable ?? false) notice=\(noticePill.visibleMessage ?? "-")"
+        case "inspect": (tab.webView as? OreeWebView)?.showInspector(); return "inspectable=\(tab.webView?.isInspectable ?? false) notice=\(noticePill.visibleMessage ?? "-") web=\(tab.webView?.frame.debugDescription ?? "-") siblings=\(tab.webView?.superview?.subviews.map { String(describing: type(of: $0)) } ?? []) inner=\(tab.webView?.subviews.map { String(describing: type(of: $0)) } ?? []) windows=\(NSApp.windows.map { "\(type(of: $0))|\($0.title)|\($0.isVisible)" })"
         case "spotlightclear": SpotlightIndexer.shared.removeAll { _ in }; return "cleared"
         case "responsive":
             // « 1 » : le 2e appareil de la liste, « rotate », « off » (fichier /tmp/oree-responsive.txt) ; renvoie la taille de la page et l'identité.
