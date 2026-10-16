@@ -1,7 +1,7 @@
 # Fonctionnalités des autres navigateurs, et où en est Orée
 
 Généré le 14 octobre 2026 par un inventaire du code (`Sources/`), **pas par un test d’usage**. Deux lectures possibles de chaque ligne :
-**140 fonctions examinées : 41 absentes (rien trouvé), 99 avec du code présent.**
+**140 fonctions examinées : 38 absentes (rien trouvé), 102 avec du code présent.**
 
 Ajoutées depuis la première version de cette liste (14 octobre 2026) : impression (⌘P), PDF (⇧⌘S), code source (⌥⌘U), huit moteurs de recherche, mots-clés de recherche (w, yt, gh… et personnels), dossier de téléchargement au choix, user-agent au choix (Safari, Chrome, Firefox, personnalisé, ou Chrome pour certains sites), exporter les favoris (HTML), ajouter tous les onglets aux favoris, fermer les onglets à droite / en dessous, informations sur le site (cadenas, certificat, cookies, autorisations), complétion en ligne de l’adresse, mode lecture (⇧⌘R), nouvelle fenêtre (⌘N) et déplacer un onglet vers une nouvelle fenêtre. Ajoutés (lot des fonctions simples) : vitesse de lecture et touches multimédia, signal Global Privacy Control, effacer l’historique et les données à la fermeture, code QR de la page, taille de texte minimale, calculatrice dans la barre, ⌃Tab entre onglets récents, gestionnaire de tâches (⌥⌘T), version mobile d’un site, partager la page, lire à voix haute, mode économie d’énergie. Réparé : un plantage au téléchargement d’un fichier créé par la page (blob), le message d’une fenêtre de connexion qui se ferme (perdu), zoom de la page (⌘+ ⌘− ⌘0, mémorisé par site) et pincer pour zoomer (ils manquaient), mot de passe demandé par un site, liens mailto:/tel:/applications externes, choisir un fichier à envoyer (il ne faisait rien) et les fenêtres alert / confirm / prompt des pages (confirm répondait toujours non). Corrigé : le glisser-déposer des onglets existait déjà (l’inventaire l’avait raté).
 
@@ -28,7 +28,7 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Plusieurs fenêtres | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Dupliquer l’onglet | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Arc, Brave, Vivaldi, Opera |
 | Fermer les autres onglets / ceux à droite | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
-| Aperçu de l’onglet au survol | ❌ absent | Chrome, Safari, Edge, Arc, Vivaldi, Brave |
+| Aperçu de l’onglet au survol | ◐ code présent (à tester) | Chrome, Safari, Edge, Arc, Vivaldi, Brave |
 | Vue d’ensemble en grille de tous les onglets | ◐ code présent (à tester) | Safari, Chrome, Firefox, Vivaldi |
 | Ctrl+Tab dans l’ordre d’utilisation récente | ◐ code présent (à tester) | Chrome, Firefox, Vivaldi, Opera, Arc |
 | Ajouter tous les onglets aux favoris | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Vivaldi, Opera |
@@ -147,8 +147,8 @@ Les navigateurs cités sont ceux qui, à ma connaissance (non revérifiée ligne
 | Barre d’outils personnalisable | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Vivaldi, Opera |
 | Espaces / profils de travail | ◐ code présent (à tester) | Arc, Edge, Chrome, Firefox, Vivaldi |
 | Profils séparés (cookies, historique, mots de passe) | ❌ absent | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
-| Panneaux latéraux d’applications web (messageries, musique) | ❌ absent | Vivaldi, Opera, Edge, Chrome |
-| Prise de notes intégrée | ❌ absent | Vivaldi, Opera |
+| Panneaux latéraux d’applications web (messageries, musique) | ◐ code présent (à tester) | Vivaldi, Opera, Edge, Chrome |
+| Prise de notes intégrée | ◐ code présent (à tester) | Vivaldi, Opera |
 | Langue de l’interface et du correcteur réglables | ◐ code présent (à tester) | Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera |
 
 ## Média
