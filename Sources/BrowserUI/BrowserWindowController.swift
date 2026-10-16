@@ -48,6 +48,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     var sessionSaveWork: DispatchWorkItem?
     // Journal d'événements : le contexte du prochain événement (comment l'onglet s'ouvre, comment il est choisi, pourquoi il se ferme), et la saisie en cours dans la barre d'adresse.
     let autofillStore = AutofillStore()
+    let responsiveBar = SurfaceView(fill: Theme.raised, cornerRadius: Theme.pill)
+    let responsiveLabel = NSTextField(labelWithString: "")
     var journalOpenHow = "other"
     var journalSelectVia = "other"
     var journalCloseWhy = "user"

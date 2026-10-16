@@ -256,6 +256,16 @@ extension BrowserWindowController {
             SpotlightIndexer.find(titleContaining: "Oree12345") { ids in try? ids.joined(separator: ",").write(toFile: "/tmp/oree-spot-found.txt", atomically: true, encoding: .utf8) }
             return "asked"
         case "spotlightclear": SpotlightIndexer.shared.removeAll { _ in }; return "cleared"
+        case "responsive":
+            // « 1 » : le 2e appareil de la liste, « rotate », « off » (fichier /tmp/oree-responsive.txt) ; renvoie la taille de la page et l'identité.
+            let command = ((try? String(contentsOfFile: "/tmp/oree-responsive.txt", encoding: .utf8)) ?? "off").trimmingCharacters(in: .whitespacesAndNewlines)
+            switch command {
+            case "off": applyResponsive(nil, to: tab)
+            case "rotate": rotateResponsive()
+            default: if let i = Int(command), ResponsiveDevice.presets.indices.contains(i) { applyResponsive(ResponsiveDevice.presets[i], to: tab) }
+            }
+            contentContainer.layoutSubtreeIfNeeded()
+            return "slot=\(Int(tab.contentSlot.frame.width))x\(Int(tab.contentSlot.frame.height)) container=\(Int(contentContainer.bounds.width))x\(Int(contentContainer.bounds.height)) bar=\(!responsiveBar.isHidden) label=\(responsiveLabel.stringValue) ua=\(tab.webView?.customUserAgent.map { $0.contains("iPhone") ? "iPhone" : ($0.contains("iPad") ? "iPad" : "autre") } ?? "défaut")"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"

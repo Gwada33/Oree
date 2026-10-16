@@ -101,6 +101,11 @@ extension BrowserWindowController {
     /// The user agent for the page about to load: WebKit's own (Safari's) unless the user chose another identity, globally or for this site.
     func applyUserAgent(to webView: WKWebView, for url: URL?) {
         let settings = SettingsStore.shared
+        // Le mode responsive impose l'identité de l'appareil montré, quoi que dise le réglage du site.
+        if let device = tab(for: webView)?.responsive {
+            if webView.customUserAgent != device.userAgent { webView.customUserAgent = device.userAgent }
+            if device.userAgent != nil { return }
+        }
         let agent = UserAgent.override(mode: settings.userAgentMode, custom: settings.customUserAgent, host: url?.host, chromeHosts: settings.chromeUserAgentHosts,
                                        mobileHosts: settings.mobileSiteHosts)
         if webView.customUserAgent != agent { webView.customUserAgent = agent }

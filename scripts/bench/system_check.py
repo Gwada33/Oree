@@ -45,6 +45,19 @@ def main():
             if found: break
         check("le favori et la page d'historique sont retrouvés par une recherche du système", "oree:https://exemple.org/spot" in found and "oree:https://exemple.net/hist" in found)
         ui("tab", "spotlightclear", "0")
+        print("Mode responsive")
+        ui("load", "https://example.com/"); time.sleep(4)
+        def responsive(cmd):
+            open("/tmp/oree-responsive.txt", "w").write(cmd); return ui("tab", "responsive", "2")      # le dernier onglet ouvert est l'onglet affiché
+        out = responsive("1"); time.sleep(4); print("  ", out)
+        check("l'appareil (iPhone 15) a sa largeur, avec sa barre, et se présente comme un iPhone", "slot=393x" in out and "bar=true" in out and "ua=iPhone" in out and "iPhone 15 · 393 × 852" in out)
+        check("la page voit cette largeur et une identité d'iPhone", ui("eval", "innerWidth").strip() == "393" and "iPhone" in ui("eval", "navigator.userAgent"))
+        out = responsive("rotate"); time.sleep(1)
+        check("pivoter donne le paysage (réduit pour tenir si besoin)", "label=iPhone 15 · 852 × 393" in out and "slot=852x" in out)
+        out = responsive("5"); time.sleep(3)
+        check("un ordinateur garde l'identité de bureau", "ua=défaut" in out or "ua=autre" in out)
+        out = responsive("off"); time.sleep(4)
+        check("quitter rend toute la place à la page, sans barre", "bar=false" in out and out.split("slot=")[1].split()[0] == out.split("container=")[1].split()[0] and "iPhone" not in ui("eval", "navigator.userAgent"))
     finally:
         proc.terminate(); proc.wait(timeout=10)
     print(f"\n{sum(results)}/{len(results)} vérifications passent")

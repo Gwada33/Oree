@@ -158,6 +158,11 @@ final class Tab: NSObject {
     var slotLeading: NSLayoutConstraint?
     var slotTrailing: NSLayoutConstraint?
     var slotBottom: NSLayoutConstraint?
+    // Mode responsive : la page dans la taille d'un autre appareil.
+    var responsive: ResponsiveDevice?
+    var slotWidth: NSLayoutConstraint?
+    var slotHeight: NSLayoutConstraint?
+    var slotCenterX: NSLayoutConstraint?
     /// The tab group this tab sits in (nil = loose page).
     var groupID: UUID?
 

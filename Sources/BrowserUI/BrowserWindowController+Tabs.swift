@@ -250,6 +250,7 @@ extension BrowserWindowController {
         tab.contentSlot.isHidden = false
         tab.tabButton.isActive = true
         journalTabSelected(tab, previous: previouslyActive)
+        syncResponsiveBar()
         if SettingsStore.shared.tabLayout == .horizontal, tab.tabButton.superview === tabStrip.tabsStack { tabStrip.activeTabView = tab.tabButton; tabStrip.needsLayout = true }
         if switching {
             tab.contentSlot.alphaValue = 0

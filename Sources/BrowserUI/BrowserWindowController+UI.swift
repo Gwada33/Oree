@@ -182,6 +182,7 @@ extension BrowserWindowController {
             self.digestKey = nil
             if let tab = self.activeTab { self.updateDigestButton(for: tab) }
         }
+        buildResponsiveBar()
         contentContainer.addSubview(webPanel)
         NSLayoutConstraint.activate([
             webPanel.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: 10), webPanel.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor, constant: -10),
