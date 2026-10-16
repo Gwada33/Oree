@@ -75,7 +75,7 @@ Cinq questions, une instance d'essai, Groq. « Avant » : `Docs/ia-mesures-avant
 | « météo à Lyon » (requêtes / jetons d'entrée) | 22 (expirée) | **2 / 1 557** |
 
 **Honnêteté sur la variance** : la série « après » a été rejouée trois fois. Deux fois : 6 requêtes, 0 relance. Une fois (quota Groq gratuit déjà entamé par les séries précédentes) : la question météo a fait 7 requêtes
-avec 3 relances puis s'est arrêtée proprement avec « reprends » ; les quatre autres questions sont restées identiques (1 requête chacune). Une série « avant » d'un autre jour avait donné 19 requêtes et 9 relances pour la même
+avec 3 relances puis s'est arrêtée proprement avec « reprends » ; les quatre autres questions sont restées identiques (1 requête chacune). Une première série « avant » avait donné 19 requêtes et 9 relances pour la même
 question. Ces chiffres dépendent du quota du fournisseur : ils montrent l'ordre de grandeur, pas une garantie. Je n'ai pas mesuré de qualité de réponse sur un jeu d'évaluation : sur ces cinq questions, les réponses sont justes et complètes.
 
 ## 5. Vérifications automatiques
