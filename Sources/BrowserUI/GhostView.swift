@@ -120,7 +120,7 @@ final class GhostView: NSObject, WKNavigationDelegate {
 enum GhostStorage {
     static let directory: URL = {
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Orée/Ghosts", isDirectory: true)
+            .appendingPathComponent("\(ProfileContext.cachesFolderName)/Ghosts", isDirectory: true)
         try? FileManager.default.removeItem(at: dir)
         return dir
     }()

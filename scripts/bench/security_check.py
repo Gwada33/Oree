@@ -28,7 +28,7 @@ def main():
     server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), functools.partial(Quiet, directory=FIXTURE))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     tmp = tempfile.mkdtemp(prefix="seccheck-"); auto = os.path.join(tmp, "auto"); os.makedirs(auto); os.makedirs(os.path.join(tmp, "ext"))
-    env = dict(os.environ, HB_FRESH_SESSION="1", HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AUTOMATION_DIR=auto, HB_TAB_LAYOUT="vertical")
+    env = dict(os.environ, HB_FRESH_SESSION="1", HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AUTOMATION_DIR=auto, HB_TAB_LAYOUT="vertical", HB_TEST_KEYS_DIR=os.path.join(tmp, "keys"))
     os.environ["HB_AUTOMATION_DIR"] = auto
     proc = subprocess.Popen([os.path.join(APP, "Contents/MacOS/Oree"), "--automation"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     results = []

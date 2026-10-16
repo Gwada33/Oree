@@ -15,7 +15,7 @@ def ui(*a):
 
 def main():
     tmp = tempfile.mkdtemp(prefix="syscheck-"); auto = os.path.join(tmp, "auto"); os.makedirs(auto); os.makedirs(os.path.join(tmp, "ext"))
-    env = dict(os.environ, HB_FRESH_SESSION="1", HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AUTOMATION_DIR=auto, HB_SPOTLIGHT="1", HB_GESTURES="1")
+    env = dict(os.environ, HB_FRESH_SESSION="1", HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AUTOMATION_DIR=auto, HB_SPOTLIGHT="1", HB_GESTURES="1", HB_TEST_KEYS_DIR=os.path.join(tmp, "keys"))
     os.environ["HB_AUTOMATION_DIR"] = auto
     for f in ("/tmp/oree-spot.txt", "/tmp/oree-spot-found.txt"):
         if os.path.exists(f): os.remove(f)

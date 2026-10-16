@@ -15,7 +15,7 @@ extension BrowserWindowController {
     func makeConfiguration(isPrivate: Bool) -> WKWebViewConfiguration {
         let config = WKWebViewConfiguration()
         config.processPool = isPrivate ? privateProcessPool : processPool
-        config.websiteDataStore = isPrivate ? .nonPersistent() : .default()
+        config.websiteDataStore = isPrivate ? .nonPersistent() : ProfileContext.dataStore
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
         config.applicationNameForUserAgent = UserAgent.applicationName   // announce as Safari: sites serve their current pages
         WebKitTuning.applyFeatures(to: config.preferences)
@@ -352,7 +352,7 @@ extension BrowserWindowController {
         refreshNowPlaying()
         let mine = visibleTabs()
         let count = mine.count
-        spaceMetaLabel.stringValue = "\(count) onglet\(count > 1 ? "s" : "")"
+        spaceMetaLabel.stringValue = "\(count) onglet\(count > 1 ? "s" : "")" + (profileName.map { " · \($0)" } ?? "")
         sleepMetaLabel.stringValue = ""
         spaceRail.setTabs(mine.map { tab in
             (tab.displayTitle, tab.badgeHost, tab.id == activeTabID, tab.isSuspended,

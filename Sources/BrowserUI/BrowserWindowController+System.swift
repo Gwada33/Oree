@@ -17,6 +17,11 @@ extension BrowserWindowController {
             self.addressPill.beginEditing(text: "", selectAll: false)
         })
         menu.addItem(ClosureMenuItem(title: "Nouvel onglet privé") { [weak self] in self?.window?.makeKeyAndOrderFront(nil); self?.newPrivateTabAction() })
+        let profiles = otherProfiles()
+        if !profiles.isEmpty {
+            menu.addItem(.separator())
+            for profile in profiles { menu.addItem(ClosureMenuItem(title: "Ouvrir le profil « \(profile.name) »") { BrowserWindowController.openProfile(id: profile.id) }) }
+        }
         let recent = tabs.filter { !$0.isPrivate && $0.currentURL != nil }.sorted { $0.lastActiveDate > $1.lastActiveDate }.prefix(8)
         if !recent.isEmpty {
             menu.addItem(.separator())

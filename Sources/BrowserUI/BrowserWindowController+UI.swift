@@ -56,6 +56,7 @@ extension BrowserWindowController {
     /// Window → [sidebar: rail + tab column] | [toolbar over (lisière + page sheet)].
     func buildUI() {
         guard let window else { return }
+        applyProfileTitle()
         let contentView = configureWindow(window)
         let sidebar = wireSidebar()
         let bar = wireToolbar()

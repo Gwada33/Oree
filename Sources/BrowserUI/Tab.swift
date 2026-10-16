@@ -32,7 +32,7 @@ final class Tab: NSObject {
     }
     static let snapshotDirectory: URL = {
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Orée/Snapshots", isDirectory: true)
+            .appendingPathComponent("\(ProfileContext.cachesFolderName)/Snapshots", isDirectory: true)
         // Images left by a previous run (quit or crash) are page screenshots nobody needs: remove them.
         try? FileManager.default.removeItem(at: dir)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

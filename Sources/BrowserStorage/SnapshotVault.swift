@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import BrowserCore
 
 /// Picture of a sleeping tab, kept between two launches so a restored tab does not come back as a blank page while it loads.
 ///
@@ -29,7 +30,7 @@ public struct SnapshotVault: Sendable {
 
     /// The app's vault: `Caches/Orée/SleepSnapshots`, Keychain key `com.nolhan.hyperbrowser.snapshots`.
     public static let shared: SnapshotVault = {
-        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Orée/SleepSnapshots", isDirectory: true)
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("\(ProfileContext.cachesFolderName)/SleepSnapshots", isDirectory: true)
         return SnapshotVault(directory: base, keys: KeychainKeyProvider(service: "com.nolhan.hyperbrowser.snapshots", account: "snapshot-key"))
     }()
 

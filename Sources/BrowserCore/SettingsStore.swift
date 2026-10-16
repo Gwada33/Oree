@@ -212,7 +212,7 @@ public final class SettingsStore: @unchecked Sendable {
         get { defaults.dictionary(forKey: Self.siteZoomKey) as? [String: Double] ?? [:] }
         set { defaults.set(newValue, forKey: Self.siteZoomKey) }
     }
-    private static let siteZoomKey = "settings.siteZoom" + (ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "" : ".bench")
+    private static let siteZoomKey = "settings.siteZoom" + ProfileContext.keySuffix
 
     /// Search shortcuts added by the user ("wk" + space + words).
     public var customSearchShortcuts: [SearchShortcut] {

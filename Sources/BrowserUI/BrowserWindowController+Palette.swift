@@ -228,6 +228,7 @@ extension BrowserWindowController {
             actions.append(("Demander à l'IA", "sparkles", { $0.askAIAction() }))
             actions.append(contentsOf: webPanelActions())
             actions.append(contentsOf: responsiveActions())
+            actions.append(contentsOf: profileActions())
             if TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
                 actions.append(("Ajouter au Calendrier", "calendar.badge.plus", { $0.addToCalendarAction() }))
                 actions.append(("Personnaliser ce site…", "wand.and.stars", { $0.customizeSiteAction() }))

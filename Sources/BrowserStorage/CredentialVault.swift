@@ -25,6 +25,13 @@ public struct KeychainKeyProvider: VaultKeyProvider {
     }
 
     public func masterKey() throws -> SymmetricKey {
+        #if DEBUG
+        // Essais (build de développement seulement) : les clés vont dans un dossier jetable. Un essai ne touche pas au Trousseau de la personne, et un build fraîchement signé
+        // ne déclenche pas la fenêtre « Orée veut utiliser des informations confidentielles du trousseau » (qui bloque l'app tant que personne ne clique).
+        if let dir = ProcessInfo.processInfo.environment["HB_TEST_KEYS_DIR"] {
+            return try FileKeyProvider(file: URL(fileURLWithPath: dir, isDirectory: true).appendingPathComponent("\(service).\(account).key")).masterKey()
+        }
+        #endif
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

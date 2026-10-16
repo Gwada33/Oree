@@ -400,7 +400,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     var lastGarbageCollection = Date.distantPast
     let siteMemoryRepo = SiteMemoryRepository()
     var siteProfileCache: [String: SiteProfile?] = [:]
-    static let benchSuffix = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "" : ".bench"
+    static let benchSuffix = ProfileContext.keySuffix
     static let spaceNamesKey = "spaces.names" + benchSuffix
     static let spaceStylesKey = "spaces.styles" + benchSuffix
     static let activeSpaceKey = "session.activeSpace" + benchSuffix

@@ -288,7 +288,7 @@ extension BrowserWindowController {
         addressPill.show(url: (url?.scheme == "http" || url?.scheme == "https") ? url : nil)
         backButton.isEnabled = tab.webView?.canGoBack ?? false
         forwardButton.isEnabled = tab.webView?.canGoForward ?? false
-        window?.title = tab.displayTitle
+        window?.title = tab.displayTitle + (profileName.map { " — \($0)" } ?? "")
         updateLoadingIndicator(for: tab)
         bindTranslator(of: tab)
     }

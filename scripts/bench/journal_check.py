@@ -29,7 +29,7 @@ def serve():
 def launch(tmp, journal_env):
     auto = os.path.join(tmp, "auto"); os.makedirs(auto, exist_ok=True); os.makedirs(os.path.join(tmp, "ext"), exist_ok=True)
     env = dict(os.environ, HB_FRESH_SESSION="1", HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AUTOMATION_DIR=auto,
-               HB_JOURNAL=journal_env, HB_JOURNAL_DIR=os.path.join(tmp, "journal"), HB_TAB_LAYOUT="vertical")
+               HB_JOURNAL=journal_env, HB_JOURNAL_DIR=os.path.join(tmp, "journal"), HB_TAB_LAYOUT="vertical", HB_TEST_KEYS_DIR=os.path.join(tmp, "keys"))
     os.environ["HB_AUTOMATION_DIR"] = auto
     proc = subprocess.Popen([os.path.join(APP, "Contents/MacOS/Oree"), "--automation"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(9); return proc

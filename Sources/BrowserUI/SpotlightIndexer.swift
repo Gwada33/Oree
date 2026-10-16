@@ -38,6 +38,7 @@ final class SpotlightIndexer {
 
     /// Reconstruit l'index : tous les favoris et les derniers sites visités. Appelé au lancement et quand le réglage s'allume.
     func reindex(bookmarks: [Bookmark], history: [HistoryEntry], completion: (@Sendable (Error?) -> Void)? = nil) {
+        guard ProfileContext.id == nil else { completion?(nil); return }       // un seul index pour toute l'app : celui du profil principal
         let items = bookmarks.compactMap { item(url: $0.url, title: $0.title, domain: Self.bookmarkDomain) }
             + history.prefix(Self.historyLimit).filter { URL(string: $0.url)?.scheme != "oree" }.compactMap { item(url: $0.url, title: $0.title, domain: Self.historyDomain) }
         // Les rappels de CoreSpotlight arrivent sur une file à eux : `@Sendable`, jamais isolés à l'interface.
@@ -48,18 +49,18 @@ final class SpotlightIndexer {
 
     /// Une page vient d'être visitée.
     func add(url: String, title: String) {
-        guard SettingsStore.shared.spotlightIndexing, let item = item(url: url, title: title, domain: Self.historyDomain) else { return }
+        guard ProfileContext.id == nil, SettingsStore.shared.spotlightIndexing, let item = item(url: url, title: title, domain: Self.historyDomain) else { return }
         index.indexSearchableItems([item]) { @Sendable _ in }
     }
 
     func addBookmark(url: String, title: String) {
-        guard SettingsStore.shared.spotlightIndexing, let item = item(url: url, title: title, domain: Self.bookmarkDomain) else { return }
+        guard ProfileContext.id == nil, SettingsStore.shared.spotlightIndexing, let item = item(url: url, title: title, domain: Self.bookmarkDomain) else { return }
         index.indexSearchableItems([item]) { @Sendable _ in }
     }
 
-    func remove(url: String) { index.deleteSearchableItems(withIdentifiers: [Self.identifier(for: url)]) { @Sendable _ in } }
-    func removeHistory() { index.deleteSearchableItems(withDomainIdentifiers: [Self.historyDomain]) { @Sendable _ in } }
-    func removeAll(completion: (@Sendable (Error?) -> Void)? = nil) { index.deleteAllSearchableItems { @Sendable error in completion?(error) } }
+    func remove(url: String) { guard ProfileContext.id == nil else { return }; index.deleteSearchableItems(withIdentifiers: [Self.identifier(for: url)]) { @Sendable _ in } }
+    func removeHistory() { guard ProfileContext.id == nil else { return }; index.deleteSearchableItems(withDomainIdentifiers: [Self.historyDomain]) { @Sendable _ in } }
+    func removeAll(completion: (@Sendable (Error?) -> Void)? = nil) { guard ProfileContext.id == nil else { completion?(nil); return }; index.deleteAllSearchableItems { @Sendable error in completion?(error) } }
 
     /// Essais : les identifiants des résultats Spotlight dont le titre contient `text`.
     nonisolated static func find(titleContaining text: String, completion: @escaping @Sendable ([String]) -> Void) {

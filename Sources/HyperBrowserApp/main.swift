@@ -5,6 +5,9 @@ import BrowserCore
 import BrowserStorage
 import BrowserUI
 
+// Un profil par lancement : ses emplacements (base, extensions) se branchent avant que quoi que ce soit les lise ; si ce profil est déjà ouvert, on le ramène devant et on quitte.
+guard ProfileContext.bootstrap() else { exit(0) }
+
 LaunchTrace.mark("main.swift entered")
 // First WebContent process starts now, in parallel with building the window.
 ProcessPoolFactory.warmUpFirstProcess()
@@ -159,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         browserController?.flushSession()
         BrowserWindowController.endJournalSession()
+        ProfileContext.release()
         if !forgetAtQuit { browserController?.persistSleepSnapshots() }  // encrypted, only for tabs that are still open (see SnapshotVault)
         BrowserWindowController.purgeSnapshots()   // the plain pictures never outlive the app
     }

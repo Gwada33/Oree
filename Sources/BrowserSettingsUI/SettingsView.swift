@@ -72,6 +72,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var downloadDirectory = ""
     @Published var tabPreviews = true { didSet { settings.tabPreviews = tabPreviews } }
     @Published var tabArchiveDays = 0 { didSet { settings.tabArchiveDays = tabArchiveDays } }
+    @Published var profiles: [ProfileInfo] = []
     @Published var mouseGestures = false { didSet { settings.mouseGestures = mouseGestures } }
     @Published var autoRejectCookies = true { didSet { settings.autoRejectCookieBanners = autoRejectCookies } }
     @Published var spotlight = false { didSet { settings.spotlightIndexing = spotlight; NotificationCenter.default.post(name: Notification.Name("Oree.settingsChanged"), object: nil) } }
@@ -230,7 +231,7 @@ final class SettingsViewModel: ObservableObject {
         autoSuspendMinutes = current.autoSuspendMinutes
         freezeAfterSeconds = current.freezeAfterSeconds
         reloadPermissions()
-        reloadLogins(); reloadAutofill()
+        reloadLogins(); reloadAutofill(); profiles = ProfileRegistry().list()
         refreshDefaultBrowser()
         reloadExtensions()
         reloadHeaviestSites()
@@ -395,7 +396,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func clearCookies() {
-        WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
+        ProfileContext.dataStore.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
     }
 
     /// Offered whenever Brave is installed (its data folder may be unreadable until the user allows it).
@@ -448,7 +449,7 @@ final class SettingsViewModel: ObservableObject {
             case .failure:
                 cookieImportMessage = "Impossible de lire les cookies de Brave (fermez Brave et réessayez)."
             case .success(let cookies):
-                let store = WKWebsiteDataStore.default().httpCookieStore
+                let store = ProfileContext.dataStore.httpCookieStore
                 var added = 0
                 for imported in cookies {
                     guard let cookie = Self.httpCookie(from: imported) else { continue }
@@ -566,6 +567,25 @@ public struct SettingsView: View {
                 }
             }
 
+            Section("Profils") {
+                Text("Profil actuel : \(ProfileContext.name ?? "Principal")").font(.callout)
+                ForEach(model.profiles) { profile in
+                    HStack {
+                        Text(profile.name)
+                        if profile.id == ProfileContext.id { Text("(ouvert ici)").font(.caption).foregroundStyle(.secondary) }
+                        Spacer()
+                        Button("Ouvrir") { model.openProfile(profile.id) }.disabled(profile.id == ProfileContext.id)
+                        Button("Renommer…") { model.renameProfile(profile) }
+                        Button("Supprimer…", role: .destructive) { model.deleteProfile(profile) }.disabled(profile.id == ProfileContext.id)
+                    }
+                }
+                HStack {
+                    Button("Nouveau profil…") { model.createProfile() }
+                    if ProfileContext.id != nil { Button("Ouvrir le profil principal") { model.openProfile(nil) } }
+                }
+                Text("Un profil a ses propres cookies, son historique, ses favoris, ses mots de passe, ses notes et ses extensions, et s'ouvre dans sa propre fenêtre : par exemple un pour le travail, un pour la maison. Les réglages d'apparence sont communs.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Mises à jour") {
                 Toggle("Rechercher automatiquement les mises à jour (une fois par jour)", isOn: $model.autoUpdateCheck)
                 Text("Contacte github.com pour lire la dernière version publiée ; rien d'autre n'est envoyé. Vous pouvez aussi vérifier à la main : menu Orée → Rechercher des mises à jour…")
@@ -1751,5 +1771,47 @@ struct CardEditor: View {
             }.padding()
         }
         .frame(width: 440, height: 360)
+    }
+}
+
+// MARK: - Profils
+extension SettingsViewModel {
+    func reloadProfiles() { profiles = ProfileRegistry().list() }
+    func openProfile(_ id: String?) { ProfileControls.open(id) }
+
+    private func prompt(title: String, message: String, button: String, initial: String = "") -> String? {
+        let alert = NSAlert()
+        alert.messageText = title; alert.informativeText = message
+        alert.addButton(withTitle: button); alert.addButton(withTitle: "Annuler")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24)); field.stringValue = initial
+        alert.accessoryView = field
+        return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
+    }
+
+    func createProfile() {
+        guard let name = prompt(title: "Nouveau profil", message: "Un nom pour ce profil (par exemple Travail). Il s'ouvre dans sa propre fenêtre.", button: "Créer"),
+              let profile = try? ProfileRegistry().add(name: name) else { return }
+        reloadProfiles(); ProfileControls.open(profile.id)
+    }
+
+    func renameProfile(_ profile: ProfileInfo) {
+        guard let name = prompt(title: "Renommer le profil", message: "Le nouveau nom de « \(profile.name) ».", button: "Renommer", initial: profile.name) else { return }
+        try? ProfileRegistry().rename(id: profile.id, to: name); reloadProfiles()
+    }
+
+    /// Supprime le profil et TOUTES ses données (cookies, historique, mots de passe…) ; refusé s'il est ouvert.
+    func deleteProfile(_ profile: ProfileInfo) {
+        if ProfileLock.holder(in: ProfileRegistry().folder(of: profile.id)) != nil {
+            let alert = NSAlert(); alert.messageText = "Ce profil est ouvert."; alert.informativeText = "Fermez sa fenêtre (⌘Q dans ce profil) avant de le supprimer."; alert.runModal(); return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Supprimer le profil « \(profile.name) » ?"
+        alert.informativeText = "Ses cookies, son historique, ses favoris, ses mots de passe et ses notes seront effacés. Cette action est irréversible."
+        alert.addButton(withTitle: "Supprimer"); alert.addButton(withTitle: "Annuler")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        try? ProfileRegistry().delete(id: profile.id)
+        if let uuid = UUID(uuidString: ProfileContext.uuidString(for: profile.id)) { Task { try? await WKWebsiteDataStore.remove(forIdentifier: uuid) } }
+        reloadProfiles()
     }
 }

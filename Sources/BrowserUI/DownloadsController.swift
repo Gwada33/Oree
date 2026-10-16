@@ -149,7 +149,7 @@ final class DownloadsController {
         if let engine, !isPrivate, let request = download.originalRequest, let url = request.url,
            ["http", "https"].contains(url.scheme?.lowercased() ?? ""), (request.httpMethod ?? "GET") == "GET", request.httpBody == nil {
             let settings = SettingsStore.shared
-            let cookies = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
+            let cookies = await ProfileContext.dataStore.httpCookieStore.allCookies()
             var headers = request.allHTTPHeaderFields ?? [:]
             for key in headers.keys where ["cookie", "authorization"].contains(key.lowercased()) { headers[key] = nil }
             if !headers.keys.contains(where: { $0.lowercased() == "user-agent" }) {

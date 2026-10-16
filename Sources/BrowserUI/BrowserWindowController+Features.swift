@@ -85,7 +85,7 @@ extension BrowserWindowController {
                 self?.lastMemoryPressure = Date()
                 self?.journal.emitSystemState(memoryPressure: source.data.contains(.critical) ? "critical" : "warning")
                 // Cheap first: drop WebKit's in-memory caches, then sleep background tabs.
-                WKWebsiteDataStore.default().removeData(ofTypes: [WKWebsiteDataTypeMemoryCache], modifiedSince: .distantPast) {}
+                ProfileContext.dataStore.removeData(ofTypes: [WKWebsiteDataTypeMemoryCache], modifiedSince: .distantPast) {}
                 await self?.suspendAllBackgroundTabs()
             }
         }
@@ -276,9 +276,9 @@ extension BrowserWindowController {
     }
 
     /// Benchmarks (`HB_DB_PATH` set) use their own key so they never overwrite the real one.
-    static let splitKey = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "session.split" : "session.split.bench"
+    static let splitKey = "session.split" + ProfileContext.keySuffix
     static let splitRatioKey = splitKey + ".ratio"
-    static let activeIndexKey = ProcessInfo.processInfo.environment["HB_DB_PATH"] == nil ? "session.activeIndex" : "session.activeIndex.bench"
+    static let activeIndexKey = "session.activeIndex" + ProfileContext.keySuffix
 
     /// Asks for a save: bursts of changes (a page loading, several tabs opening, a drag) cost one write, half a second after the last one.
     /// The state of every page is serialised on the main thread, so doing it at each change was the price of every navigation.

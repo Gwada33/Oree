@@ -284,6 +284,12 @@ extension BrowserWindowController {
             for point in path.dropFirst() { if let drag = event(.rightMouseDragged, point) { web.rightMouseDragged(with: drag) } }
             if let up = event(.rightMouseUp, path.last!) { web.rightMouseUp(with: up) }
             return "done code=\(code) tabs=\(tabs.count)"
+        case "profile": return "title=\(window?.title ?? "-") name=\(profileName ?? "-") id=\(ProfileContext.id ?? "-") db=\(ProcessInfo.processInfo.environment["HB_DB_PATH"] ?? "-") meta=\(spaceMetaLabel.stringValue) dock=\(makeDockMenu().items.map(\.title).filter { $0.contains("profil") }.joined(separator: ","))"
+        case "profileopen":
+            // Ouvre le profil dont l'identifiant est dans /tmp/oree-profile.txt (« main » : le principal), sans voler le focus.
+            let raw = ((try? String(contentsOfFile: "/tmp/oree-profile.txt", encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            BrowserWindowController.openProfile(id: raw == "main" ? nil : raw, activates: false)
+            return "asked \(raw)"
         case "manytabs":
             for i in 0..<30 { newTab(urlString: "https://example.com/?n=\(i)", isPrivate: false) }
             return "tabs=\(tabs.count)"

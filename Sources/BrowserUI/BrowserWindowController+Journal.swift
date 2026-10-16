@@ -287,6 +287,7 @@ extension BrowserWindowController {
 extension BrowserWindowController {
     /// Une fois la session restaurée : la session commence dans le journal (si actif), et les observateurs de l'état du système se mettent en place.
     public func journalStart() {
+        ProfileControls.open = { BrowserWindowController.openProfile(id: $0) }
         JournalControls.stats = { [journal] in
             let stats = journal.journal.stats()
             return JournalControls.Stats(events: stats.events, files: stats.files, bytes: stats.bytes, first: stats.first)

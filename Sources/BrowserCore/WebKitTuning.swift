@@ -80,7 +80,7 @@ public enum WebKitTuning {
 
     /// Drops WebKit's in-memory caches (decoded resources) for the default data store.
     public static func purgeMemoryCaches() {
-        WKWebsiteDataStore.default().removeData(ofTypes: [WKWebsiteDataTypeMemoryCache], modifiedSince: .distantPast) {}
+        ProfileContext.dataStore.removeData(ofTypes: [WKWebsiteDataTypeMemoryCache], modifiedSince: .distantPast) {}
     }
 
     /// Asks WebKit's network process to open a connection to `url`'s host ahead of the real request.
