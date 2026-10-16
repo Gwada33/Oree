@@ -23,6 +23,7 @@ extension BrowserWindowController {
         // videos (YouTube, etc.) and the Fullscreen API do nothing.
         config.preferences.isElementFullscreenEnabled = true
         config.mediaTypesRequiringUserActionForPlayback = SettingsStore.shared.autoplayMediaAllowed ? [] : .all
+        config.allowsAirPlayForMediaPlayback = true
         if SettingsStore.shared.adBlockEnabled {
             contentBlocker.ruleLists.forEach { config.userContentController.add($0) }
         }
