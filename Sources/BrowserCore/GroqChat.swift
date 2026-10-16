@@ -119,7 +119,7 @@ public enum GroqChat {
             }
             switch status {
             case 401, 403: return .failure(message: "\(name) a refusé la clé (\(status)). Vérifiez-la dans Réglages › Assistant IA.", retryAfter: nil)
-            case 429: return .failure(message: "\(name) limite le débit pour l'instant : \(detail)", retryAfter: retryAfterHeader.flatMap(Double.init) ?? 6)
+            case 429: return .failure(message: "\(name) limite le débit pour l'instant : \(detail)", retryAfter: retryAfterHeader.flatMap(Double.init) ?? RetryAfter.fromMessage(detail) ?? 6)
             default: return .failure(message: "\(name) : \(detail)", retryAfter: nil)
             }
         }

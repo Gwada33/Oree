@@ -12,6 +12,8 @@ UI, APP = os.path.join(ROOT, "scripts", "ui.sh"), os.path.join(ROOT, "Oree.app")
 PORT = 8795
 requests = []
 
+def call(index, name, args, first=True): return {"choices": [{"delta": {"tool_calls": [{"index": index, "function": ({"name": name, "arguments": ""} if first else {"arguments": args})}]}}]}
+
 class Fake(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def _send(self, obj):
@@ -29,11 +31,22 @@ class Fake(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
-        prompt = body["messages"][-1]["content"]
+        prompt = next((m["content"] for m in body["messages"] if m["role"] == "user" and "TÂCHE :" in (m.get("content") or "")), "")
         requests.append({"path": self.path, "auth": self.headers.get("Authorization"), "model": body.get("model"), "stream": body.get("stream"), "task": prompt.split("TÂCHE :")[-1].split("\n")[0].strip(),
-                         "tools": [t["function"]["name"] for t in body.get("tools", [])]})
+                         "tools": [t["function"]["name"] for t in body.get("tools", [])], "max_tokens": body.get("max_tokens"), "messages": len(body["messages"])})
         task = requests[-1]["task"]
-        def call(index, name, args, first=True): return {"choices": [{"delta": {"tool_calls": [{"index": index, "function": ({"name": name, "arguments": ""} if first else {"arguments": args})}]}}]}
+        if "Limite" in task:        # le fournisseur limite le débit deux fois (avec Retry-After), puis répond
+            seen = sum(1 for r in requests if "Limite" in r["task"])
+            if seen <= 2:
+                data = json.dumps({"error": {"message": "Rate limit reached"}}).encode(); self.send_response(429); self.send_header("Retry-After", "1"); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data); return
+            self._sse([call(0, "done", ""), call(0, "", '{"answer": "Passé après deux attentes."}', False)]); return
+        if "Refus" in task:         # une clé refusée : jamais relancée
+            data = json.dumps({"error": {"message": "Invalid API key"}}).encode(); self.send_response(401); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data); return
+        if "Panne" in task:         # une panne passagère (503), puis la réponse
+            seen = sum(1 for r in requests if "Panne" in r["task"])
+            if seen <= 1:
+                self.send_response(503); self.send_header("Content-Length", "0"); self.end_headers(); return
+            self._sse([call(0, "done", ""), call(0, "", '{"answer": "Revenu après la panne."}', False)]); return
         if "Défile" in task:       # deux appels dans une seule réponse (défiler, puis répondre), arguments fragmentés
             self._sse([call(0, "scroll", ""), call(0, "", '{"direction":', False), call(0, "", '"down"}', False), call(1, "done", ""), call(1, "", '{"answer":"Deux appels, un seul tour."}', False)])
         elif "Pense" in task:     # un modèle qui réfléchit : d'abord des « pensées », puis la réponse
@@ -58,7 +71,7 @@ def wait_for(pred, timeout):
 
 def launch(url):
     before = pids(); tmp = tempfile.mkdtemp(prefix="lmcheck-"); ext = os.path.join(tmp, "ext"); os.makedirs(ext)
-    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_AI_NO_AGENT=1", "HB_AI_PROVIDER=lmstudio", f"HB_LMSTUDIO_URL={url}"]
+    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_AI_PROVIDER=lmstudio", f"HB_LMSTUDIO_URL={url}"]
     subprocess.run(["open", "-g", "-n", *[x for e in env for x in ("--env", e)], APP, "--args", "--automation"]); time.sleep(5)
     return pids() - before
 
@@ -75,7 +88,8 @@ def main():
         check("la réponse du serveur arrive dans le panneau", wait_for(lambda: "Réponse du faux LM Studio." in state(), 30))
         r = requests[-1] if requests else {}
         check("la question part au premier modèle de conversation (pas l'embedding)", r.get("model") == "fake-model")
-        check("avec les outils du contrat", r.get("tools") == ["search_web", "open_url", "read_page", "click", "type", "select", "scroll", "fill_form", "ask_user", "done"])
+        check("avec seulement les outils utiles à une question simple (pas de clic, pas de formulaire)", "done" in r.get("tools", []) and "click" not in r.get("tools", []) and "fill_form" not in r.get("tools", []))
+        check("et une limite de sortie", isinstance(r.get("max_tokens"), int) and r["max_tokens"] <= 1100)
         check("en demandant le flux", r.get("stream") is True)
         check("sans aucune clé", r.get("auth") is None)
         check("à l'adresse locale de conversation", r.get("path") == "/v1/chat/completions")
@@ -107,17 +121,21 @@ def main():
         check("et finit complète", bool(seen2) and seen2[-1].strip() == "Ceci est écrit par morceaux dans l'outil.")
 
         print("\nModèle qui réfléchit")
-        thought = 0
+        thought = 0; presence = []
         open("/tmp/oree-ai-query.txt", "w").write("Pense un peu"); ui("tab", "aiquery", "0")
         end = time.time() + 20
         while time.time() < end:
             st = state()
+            if "cursor=[at=" in st: presence.append(st.split("cursor=[")[1].split("]")[0])
             if "think=" in st:
                 try: thought = max(thought, int(st.split("think=")[1].split()[0]))
                 except ValueError: pass
             if "running=false" in st and "Réponse après réflexion." in st: break
             time.sleep(0.2)
         check("les pensées s'affichent pendant l'attente", thought > 10)
+        print("   Luciole pendant l'attente :", presence[:2])
+        check("Luciole est visible dans la page pendant que le modèle réfléchit, sans cadre figé", bool(presence) and all("ring=off" in p and "atElement=false" in p for p in presence))
+        check("et sa pose est « réflexion »", any("pose=think" in p for p in presence))
         check("puis la réponse remplace les pensées", "Réponse après réflexion." in state() and "think=0" in state())
 
         print("\nPlusieurs appels d'un coup")
@@ -127,6 +145,28 @@ def main():
         check("la réponse arrive", wait_for(lambda: "Deux appels, un seul tour." in state(), 30))
         check("un seul appel au serveur pour les deux outils", len(requests) - before == 1)
         check("l'action a bien été faite (trace)", "done:Défilement de la page" in state())
+
+        print("\nLimite de débit (429)")
+        before = len(requests)
+        open("/tmp/oree-ai-query.txt", "w").write("Limite de débit"); ui("tab", "aiquery", "0")
+        start = time.time()
+        waiting = wait_for(lambda: "pose=wait wait=" in ui("tab", "aistate", "0") and "wait=-" not in ui("tab", "aistate", "0"), 6)
+        check("Luciole le dit et attend (pose « attente »), au lieu d'échouer", waiting)
+        check("la tâche aboutit après les attentes", wait_for(lambda: "Passé après deux attentes." in state(), 30))
+        took = time.time() - start
+        check("trois requêtes en tout (deux refusées, une réussie), pas une rafale", len(requests) - before == 3)
+        check("en respectant Retry-After (au moins 2 s d'attente au total)", took >= 2.0)
+        print("\nClé refusée (401)")
+        before = len(requests)
+        open("/tmp/oree-ai-query.txt", "w").write("Refus de la clé"); ui("tab", "aiquery", "0")
+        check("l'erreur est dite", wait_for(lambda: "running=false" in state() and "refusé la clé" in state(), 20))
+        time.sleep(3)
+        check("une seule requête : une clé refusée n'est jamais relancée", len(requests) - before == 1)
+        print("\nPanne passagère (503)")
+        before = len(requests)
+        open("/tmp/oree-ai-query.txt", "w").write("Panne du serveur"); ui("tab", "aiquery", "0")
+        check("la tâche aboutit après un nouvel essai", wait_for(lambda: "Revenu après la panne." in state(), 25))
+        check("deux requêtes en tout", len(requests) - before == 2)
     finally:
         for p in mine: subprocess.run(["kill", p])
     time.sleep(1)

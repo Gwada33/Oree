@@ -187,7 +187,15 @@ final class AgentCursor: NSView, AgentPresence {
     func hold(_ pose: LucioleState) {
         guard !isHidden else { return }
         mascot.apply(pose)
-        if pose == .ask || pose == .wait, atElement { generation += 1 }       // une question ou une validation attend : elle ne s'éloigne pas
+        if pose == .wait, atElement { generation += 1 }                       // une validation attend : elle reste près du bouton concerné, cadre compris
+        if pose == .ask {                                                     // une question s'adresse à la personne : le cadre n'a plus d'objet, Luciole regagne son coin
+            generation += 1; atElement = false
+            if Motion.reduced { ring.alphaValue = 0; tagBox.alphaValue = 0; mascot.frame.origin = dock; return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.35; context.timingFunction = Motion.timing; context.allowsImplicitAnimation = true
+                self.ring.animator().alphaValue = 0; self.tagBox.animator().alphaValue = 0; self.mascot.animator().frame.origin = self.dock
+            }
+        }
     }
 
     /// Fin de tâche : le cadre s'efface et la luciole repart vers le panneau.
@@ -215,7 +223,7 @@ final class AgentCursor: NSView, AgentPresence {
     }
 
     /// Dev : où est Luciole (pour les essais).
-    var report: String { isHidden ? "hidden" : "at=\(Int(mascot.frame.minX)),\(Int(mascot.frame.minY)) target=\(Int(target.x)),\(Int(target.y)) pose=\(mascot.state.rawValue)" }
+    var report: String { isHidden ? "hidden" : "at=\(Int(mascot.frame.minX)),\(Int(mascot.frame.minY)) target=\(Int(target.x)),\(Int(target.y)) pose=\(mascot.state.rawValue) ring=\(ring.alphaValue > 0.5 ? "on" : "off") atElement=\(atElement)" }
 
     /// Arrêt immédiat (Stop, fermeture du panneau) : tout disparaît tout de suite.
     func hideNow() {

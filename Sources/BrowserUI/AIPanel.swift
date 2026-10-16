@@ -467,6 +467,7 @@ final class AIPanelController {
         var pose: LucioleState
         if pageIsProtected { pose = .off }
         else if hasPending { pose = pending.map { if case .question = $0.kind { .ask } else { .wait } } ?? .wait }
+        else if rateLimitWait != nil, running { pose = .wait }                                                                     // le fournisseur fait patienter : Luciole attend, elle ne paraît pas bloquée
         else if let moment = eventPose, running || moment == .happy || moment == .err { pose = moment }       // ce que la tâche fait vraiment, d'après ses événements
         else { pose = LucioleState.pose(availability: state, running: running, streaming: streaming, failed: failure != nil) }
         if provider.isCloud, !cloudKeyPresent { pose = .sleep }
@@ -528,7 +529,7 @@ final class AIPanelController {
     var report: String {
         let last = messages.last(where: { $0.role == .assistant })
         let trace = last?.trace.map { "\($0.state):\($0.text)" + ($0.detail.map { " — " + $0 } ?? "") }.joined(separator: " | ") ?? ""
-        return "open=\(isOpen) state=\(availability) running=\(isRunning) width=\(Int(width)) pose=\(panel.mascot.state.rawValue) pending=\(pending.map { "\($0.kind)" } ?? "none") cursor=[\(cursor.report)] think=\(last?.thinking.count ?? 0) trace=[\(trace)] line=\(failure ?? "")| answer=\((last?.text ?? "").replacingOccurrences(of: "\n", with: " ⏎ "))"
+        return "open=\(isOpen) state=\(availability) running=\(isRunning) width=\(Int(width)) pose=\(panel.mascot.state.rawValue) wait=\(rateLimitWait.map(String.init) ?? "-") pending=\(pending.map { "\($0.kind)" } ?? "none") cursor=[\(cursor.report)] think=\(last?.thinking.count ?? 0) trace=[\(trace)] line=\(failure ?? "")| answer=\((last?.text ?? "").replacingOccurrences(of: "\n", with: " ⏎ "))"
     }
 
     #if DEBUG
@@ -678,6 +679,7 @@ extension AIPanelController: AgentEnvironment {
         eventPoseReset?.cancel()
         eventPose = LucioleState.pose(for: event)
         if case .waitingForProvider(let seconds) = event { rateLimitWait = seconds } else if case .thinking = event { /* l'attente du fournisseur est gérée par la requête */ }
+        attachCursor()
         cursor.follow(eventPose ?? .idle)
         if case .finished = event {
             // La pose de fin (contente, ou en erreur) reste un instant, puis Luciole revient au repos.

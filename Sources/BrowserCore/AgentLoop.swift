@@ -179,7 +179,7 @@ public final class AgentLoop {
 
     /// Les consignes : courtes, envoyées une fois par requête en tête de conversation (donc identiques d'un tour à l'autre).
     public static let instructions = """
-    Tu es Luciole, l'assistant d'Orée, un navigateur. Réponds en français, à la mesure de la question : court quand elle est simple, sans préambule.
+    Tu es Luciole, l'assistant d'Orée, un navigateur. Réponds en français, à la mesure de la question : une phrase complète quand elle est simple (« La capitale du Portugal est Lisbonne. »), plus quand elle le demande, sans préambule.
     Tu agis avec les outils, un ou plusieurs par réponse (remplir plusieurs champs puis cliquer) ; arrête-toi après search_web, open_url, read_page ou ask_user : tu dois lire leur résultat.
     Dès que tu peux répondre, utilise done. Ne cherche sur le web que si l'information est récente, locale ou incertaine. Ne refais jamais ce qui figure déjà dans la conversation.
     Références d'éléments : @e3. Valeur personnelle : jeton {{profil.nom}}, {{profil.prenom}}, {{profil.email}}… jamais la vraie valeur. N'utilise ask_user que si une information personnelle manque. Si tu ne sais pas, dis-le : n'invente rien.
@@ -263,7 +263,8 @@ public final class AgentLoop {
         guard plan != nil else { return end(AgentOutcome(answer: "", sources: sources, reason: .failed("Aucune tâche."))) }
         canResume = false
         while executed < limits.steps {
-            guard let plan = self.plan else { break }                 // relu à chaque tour : le routage peut passer en mode action en cours de route
+            guard let plan = self.plan else { break }
+            if executed >= plan.maxSteps { return end(AgentOutcome(answer: summaryOfFindings(prefix: "Je m'arrête après \(plan.maxSteps) essais pour cette question. "), sources: uniqueSources(), reason: .stepCap)) }                 // relu à chaque tour : le routage peut passer en mode action en cours de route
             if Task.isCancelled { return end(AgentOutcome(answer: "", sources: sources, reason: .cancelled)) }
             await refreshPage()
             env.event(.thinking)

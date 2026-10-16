@@ -82,3 +82,17 @@ struct RetryPolicyTests {
         #expect(gate.wait(now: now.addingTimeInterval(9)) == 0)
     }
 }
+
+@Suite("Attente écrite dans un message d'erreur")
+struct RetryMessageTests {
+    @Test("« try again in … » donne l'attente ; une limite de débit est reconnue")
+    func parse() {
+        #expect(RetryAfter.fromMessage("Rate limit reached for model. Please try again in 6.8s. Need more tokens?") == 6.8)
+        #expect(RetryAfter.fromMessage("Please try again in 1m5.2s.") == 65.2)
+        #expect(RetryAfter.fromMessage("Please try again in 250ms") == 0.25)
+        #expect(RetryAfter.fromMessage("erreur sans attente") == nil)
+        #expect(RetryAfter.isRateLimitMessage("Rate limit reached for model"))
+        #expect(RetryAfter.isRateLimitMessage("Too many requests"))
+        #expect(!RetryAfter.isRateLimitMessage("Invalid API key"))
+    }
+}

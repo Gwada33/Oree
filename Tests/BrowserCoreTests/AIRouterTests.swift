@@ -60,6 +60,14 @@ struct AIRouterTests {
         #expect(!AIRouter.plan(question: "Et à Madrid ?", pageReadable: false, hasConversation: false).keepsConversation)
     }
 
+    @Test("le nombre d'essais suit la route : une question simple n'en mérite pas quinze")
+    func steps() {
+        #expect(AIRouter.plan(question: "Quelle est la capitale du Portugal ?", pageReadable: false).maxSteps <= 4)
+        #expect(AIRouter.plan(question: "Résume cette page", pageReadable: true).maxSteps <= 6)
+        #expect(AIRouter.plan(question: "Météo à Lyon", pageReadable: false).maxSteps <= 8)
+        #expect(AIRouter.plan(question: "Remplis ce formulaire", pageReadable: true).maxSteps == 15)
+    }
+
     @Test("les accents et les majuscules ne changent rien")
     func folding() {
         #expect(AIRouter.fold("Aujourd’hui À Été") == "aujourd'hui a ete")

@@ -16,6 +16,20 @@ public enum RetryAfter {
         return nil
     }
 
+    /// Les fournisseurs écrivent parfois l'attente dans le message d'erreur : « Please try again in 6.8s », « try again in 1m5.2s ».
+    public static func fromMessage(_ message: String) -> Double? {
+        guard let range = message.range(of: "try again in ", options: .caseInsensitive) else { return nil }
+        let rest = message[range.upperBound...]
+        let token = rest.prefix { $0.isNumber || $0 == "." || "hms".contains($0) }
+        return duration(String(token).trimmingCharacters(in: CharacterSet(charactersIn: ".")))
+    }
+
+    /// Le message parle-t-il d'une limite de débit ? (certains fournisseurs la signalent dans le flux, avec un code 200.)
+    public static func isRateLimitMessage(_ message: String) -> Bool {
+        let text = message.lowercased()
+        return text.contains("rate limit") || text.contains("rate_limit") || text.contains("too many requests") || text.contains("try again in")
+    }
+
     /// « 1m30.5s » → 90,5 ; « 250ms » → 0,25 ; « 2h » → 7200.
     public static func duration(_ text: String) -> Double? {
         var total = 0.0, number = "", matched = false

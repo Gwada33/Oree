@@ -58,9 +58,12 @@ struct CloudClient: Sendable {
                 let (bytes, response) = try await URLSession.shared.bytes(for: http)
                 let reply = response as? HTTPURLResponse
                 status = reply?.statusCode ?? 0
-                headerWait = RetryAfter.seconds(from: reply?.value(forHTTPHeaderField: "retry-after"))
-                    ?? RetryAfter.duration(reply?.value(forHTTPHeaderField: "x-ratelimit-reset-tokens") ?? "")
-                    ?? RetryAfter.duration(reply?.value(forHTTPHeaderField: "x-ratelimit-reset-requests") ?? "")
+                // Les en-têtes de fenêtre de limite (« x-ratelimit-reset-* ») accompagnent toutes les réponses : ils ne disent « attendez » que sur un refus.
+                if status == 429 || status == 503 {
+                    headerWait = RetryAfter.seconds(from: reply?.value(forHTTPHeaderField: "retry-after"))
+                        ?? RetryAfter.duration(reply?.value(forHTTPHeaderField: "x-ratelimit-reset-tokens") ?? "")
+                        ?? RetryAfter.duration(reply?.value(forHTTPHeaderField: "x-ratelimit-reset-requests") ?? "")
+                }
                 if (200..<300).contains(status ?? 0) {
                     var assembler = ChatStreamAssembler()
                     for try await line in bytes.lines {
@@ -68,13 +71,21 @@ struct CloudClient: Sendable {
                     }
                     if let used = assembler.usage { AIUsageMeter.shared.record { $0.promptTokens += used.prompt; $0.completionTokens += used.completion } }
                     let parsed = assembler.reply(provider: provider)
-                    if case .failure(let message, _) = parsed { failure = message; hint = 0.4; status = nil }           // un flux vide ou coupé : un accident à relancer
+                    if case .failure(let message, _) = parsed {
+                        failure = message
+                        if RetryAfter.isRateLimitMessage(message) { status = 429; headerWait = RetryAfter.fromMessage(message) }       // une limite de débit annoncée dans le flux (code 200)
+                        else { hint = 0.4; status = nil }                                                                             // un flux vide ou coupé : un accident à relancer
+                    }
                     else if let text = GroqChat.agentText(parsed) { return assembler.wasCutShort && !text.hasPrefix("{") ? text + " […]" : text }
                 } else {
                     var data = Data()
                     for try await byte in bytes { data.append(byte) }
                     let parsed = GroqChat.parse(status: status ?? 0, body: data, retryAfterHeader: nil, provider: provider)
-                    if case .failure(let message, let retry) = parsed { failure = message; if status == 400 { hint = retry } }     // appel d'outil mal écrit : relancé aussitôt
+                    if case .failure(let message, let retry) = parsed {
+                        failure = message
+                        if status == 400 { hint = retry }                                          // appel d'outil mal écrit : relancé aussitôt
+                        if status == 429, headerWait == nil { headerWait = RetryAfter.fromMessage(message) }      // l'attente écrite dans le message d'erreur
+                    }
                 }
             } catch is CancellationError { throw CancellationError() }
             catch let error as URLError where error.code == .cancelled { throw CancellationError() }
