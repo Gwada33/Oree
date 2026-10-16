@@ -105,6 +105,9 @@
 | **Menu du Dock** | Nouvelle fenêtre, navigation privée, autres profils, directement depuis l'icône. | ✅ | ⭐ |
 | **Menu Services** | « Ouvrir dans Orée » depuis n'importe quelle appli sur un lien ou un texte sélectionné. | ✅ | ⭐ |
 | **Spotlight** | Favoris et pages retrouvables depuis la recherche du Mac. | ✅ | ⭐⭐ |
+| **Copier tous les médias** | Clic droit : enregistre toutes les images, vidéos et sons de la page dans un dossier et les met sur le presse-papiers (⌘V dans le Finder) ; ou copie leurs adresses. | ✅ (page de test) | ⭐⭐ |
+| **Copier la page entière** | Clic droit : toute la page, de haut en bas, en PDF et image sur le presse-papiers. | ✅ (page de test ; pages très longues coupées à 20 000 pt) | ⭐ |
+| **Inspecter l'élément** | Clic droit : ouvre l'inspecteur web. | 🔶 (ouverture non vue à l'écran) | ⭐ |
 | **AirPlay** | Envoyer une vidéo vers une Apple TV ou un écran compatible. | 🔶 (activé, jamais essayé avec un appareil) | ⭐ |
 
 ---

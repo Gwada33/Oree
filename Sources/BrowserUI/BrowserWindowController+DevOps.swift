@@ -255,6 +255,13 @@ extension BrowserWindowController {
         case "spotlightquery":
             SpotlightIndexer.find(titleContaining: "Oree12345") { ids in try? ids.joined(separator: ",").write(toFile: "/tmp/oree-spot-found.txt", atomically: true, encoding: .utf8) }
             return "asked"
+        case "pbtypes":
+            let board = NSPasteboard.general
+            return "types=\((board.types ?? []).map(\.rawValue).joined(separator: ",")) pdf=\(board.data(forType: .pdf)?.count ?? 0) files=\((board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? []).count)"
+        case "mediacopy": (tab.webView as? OreeWebView)?.copyAllMedia(); return "started"
+        case "mediaurls": (tab.webView as? OreeWebView)?.copyMediaAddresses(); return "started"
+        case "pagecopy": (tab.webView as? OreeWebView)?.copyWholePage(); return "started"
+        case "inspect": (tab.webView as? OreeWebView)?.showInspector(); return "inspectable=\(tab.webView?.isInspectable ?? false) notice=\(noticePill.visibleMessage ?? "-")"
         case "spotlightclear": SpotlightIndexer.shared.removeAll { _ in }; return "cleared"
         case "responsive":
             // « 1 » : le 2e appareil de la liste, « rotate », « off » (fichier /tmp/oree-responsive.txt) ; renvoie la taille de la page et l'identité.

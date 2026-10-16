@@ -126,6 +126,12 @@ final class OreeWebView: WKWebView {
             menu.addItem(.separator())
             add("Copier l'adresse de la page") { Self.copy(page) }
         }
+        menu.addItem(.separator())
+        add("Copier tous les médias de la page") { [weak self] in self?.copyAllMedia() }
+        add("Copier les adresses des médias") { [weak self] in self?.copyMediaAddresses() }
+        add("Copier la page entière") { [weak self] in self?.copyWholePage() }
+        menu.addItem(.separator())
+        add("Inspecter l'élément") { [weak self] in self?.showInspector() }
         return menu
     }
 
