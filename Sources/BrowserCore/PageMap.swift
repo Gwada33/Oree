@@ -80,7 +80,7 @@ public struct PageMap: Equatable, Sendable {
     }
 
     /// Le texte donné au modèle. Les éléments au-delà de `maxElements` sont comptés (« AUTRES +N »), pas listés.
-    public func render(maxElements: Int = PageMap.maxElements, maxText: Int = PageMap.maxTextCharacters) -> String {
+    public func render(maxElements: Int = PageMap.maxElements, maxText: Int = PageMap.maxTextCharacters, focus: String? = nil) -> String {
         let ordered = prioritized()
         let shown = Array(ordered.prefix(maxElements))
         // On rend dans l'ordre de la page, pas dans l'ordre de priorité : c'est ce que lirait une personne.
@@ -93,15 +93,47 @@ public struct PageMap: Equatable, Sendable {
         let others = ordered.count - shown.count
         if others > 0 { out += "\nAUTRES +\(others)" }
         out += "\nTEXTE\n"
-        var used = 0
-        for block in blocks {
-            let text = Self.clean(block.text, 400)
-            if text.isEmpty { continue }
-            if used + text.count > maxText { out += "[…]\n"; break }
-            used += text.count
-            out += "[\(block.tag)] \(text)\n"
-        }
+        out += Self.renderText(blocks, budget: maxText, focus: focus)
         return out.trimmingCharacters(in: .newlines)
+    }
+}
+
+// MARK: - Choix des passages
+
+extension PageMap {
+    /// Le texte de la page, dans la limite de `budget` caractères. Si tout tient, tout est donné. Sinon, avec une question (`focus`), on garde d'abord les titres
+    /// (ils situent le reste) puis les passages qui parlent de la question, dans l'ordre de la page, en marquant ce qui est sauté ; sans rapport trouvé ou sans
+    /// question, on garde le début de la page, comme avant.
+    static func renderText(_ blocks: [Block], budget: Int, focus: String?) -> String {
+        let cleaned = blocks.map { (tag: $0.tag, text: clean($0.text, 400)) }.filter { !$0.text.isEmpty }
+        let total = cleaned.reduce(0) { $0 + $1.text.count }
+        func line(_ block: (tag: String, text: String)) -> String { "[\(block.tag)] \(block.text)\n" }
+        guard total > budget else { return cleaned.map(line).joined() }
+        let terms = focus.map(SearchResultFilter.terms) ?? []
+        var chosen = Set<Int>()
+        var used = 0
+        func take(_ index: Int) -> Bool {
+            guard !chosen.contains(index), used + cleaned[index].text.count <= budget else { return false }
+            chosen.insert(index); used += cleaned[index].text.count; return true
+        }
+        var matched = false
+        if !terms.isEmpty {
+            let scored = cleaned.enumerated().map { (index: $0.offset, score: SearchResultFilter.overlap(terms, in: $0.element.text)) }.filter { $0.score > 0 }
+            if !scored.isEmpty {
+                matched = true
+                // Les titres d'abord, dans la limite d'un tiers du budget : ils disent de quoi parle chaque partie.
+                for (index, block) in cleaned.enumerated() where block.tag.lowercased().hasPrefix("h") && used + block.text.count <= budget / 3 { _ = take(index) }
+                for entry in scored.sorted(by: { $0.score == $1.score ? $0.index < $1.index : $0.score > $1.score }) { _ = take(entry.index) }
+                // Le premier passage (l'introduction) donne le sujet : s'il reste de la place, il reste.
+                if !cleaned.isEmpty { _ = take(0) }
+            }
+        }
+        if !matched { for index in cleaned.indices { if !take(index) { break } } }
+        var out = "", skipped = false
+        for (index, block) in cleaned.enumerated() {
+            if chosen.contains(index) { if skipped { out += "[…]\n"; skipped = false }; out += line(block) } else { skipped = true }
+        }
+        return skipped ? out + "[…]\n" : out
     }
 }
 

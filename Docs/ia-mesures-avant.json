@@ -1,0 +1,72 @@
+[
+ {
+  "scenario": "simple",
+  "finished": true,
+  "answer": "La capitale du Portugal est Lisbonne.",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 1063,
+  "jetons_sortie": 35,
+  "contexte_car": 5697,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "page",
+  "finished": true,
+  "answer": "La population de Porto, selon la page, est de 273 476 habitants (municipalité) en 2025.",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 2795,
+  "jetons_sortie": 73,
+  "contexte_car": 10936,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "resume",
+  "finished": true,
+  "answer": "Je n'ai pas pu terminer.",
+  "requêtes": 5,
+  "relances": 3,
+  "échecs": 1,
+  "jetons_entrée": 2882,
+  "jetons_sortie": 25,
+  "contexte_car": 57597,
+  "recherches": 0,
+  "lectures": 1,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "web",
+  "finished": false,
+  "answer": "Arrêté à l'étape 10. Rien n'a été envoyé ; ce qui est déjà saisi reste dans la page.",
+  "requêtes": 22,
+  "relances": 11,
+  "échecs": 0,
+  "jetons_entrée": 21504,
+  "jetons_sortie": 352,
+  "contexte_car": 199857,
+  "recherches": 1,
+  "lectures": 3,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "follow",
+  "finished": true,
+  "answer": "La capitale de l'Espagne est Madrid.",
+  "requêtes": 5,
+  "relances": 2,
+  "échecs": 0,
+  "jetons_entrée": 6532,
+  "jetons_sortie": 141,
+  "contexte_car": 45238,
+  "recherches": 1,
+  "lectures": 0,
+  "actions_évitées": 0
+ }
+]
