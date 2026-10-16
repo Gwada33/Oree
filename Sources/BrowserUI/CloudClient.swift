@@ -26,6 +26,7 @@ struct CloudClient: Sendable {
         request.httpBody = GroqChat.requestBody(prompt: prompt, model: model, stream: true)
         for attempt in 0..<4 {
             try Task.checkCancellation()
+            AIUsageMeter.shared.record { $0.requests += 1; $0.contextChars += request.httpBody?.count ?? 0; if attempt > 0 { $0.retries += 1 } }
             let (bytes, response) = try await URLSession.shared.bytes(for: request)
             let http = response as? HTTPURLResponse
             let status = http?.statusCode ?? 0
@@ -36,6 +37,7 @@ struct CloudClient: Sendable {
                     if assembler.feed(line: line) != nil, let onText { let shown = assembler.displayText, thought = assembler.reasoning; await onText(shown, thought) }
                 }
                 reply = assembler.reply(provider: provider)
+                if let used = assembler.usage { AIUsageMeter.shared.record { $0.promptTokens += used.prompt; $0.completionTokens += used.completion } }
             } else {
                 var data = Data()
                 for try await byte in bytes { data.append(byte) }
@@ -45,6 +47,7 @@ struct CloudClient: Sendable {
                 // Limite de débit : on attend ce que le fournisseur demande (20 s au plus) et on réessaie, au lieu d'abandonner la tâche.
                 if let retry, attempt < 3, retry <= 20 { try await Task.sleep(for: .seconds(retry + 0.5)); continue }
                 if status == 200, attempt < 3 { continue }              // un flux vide ou coupé : un nouvel essai
+                AIUsageMeter.shared.record { $0.failures += 1 }
                 throw Failure(message: message)
             }
             if let text = GroqChat.agentText(reply) { return text }

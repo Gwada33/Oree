@@ -66,7 +66,7 @@ public enum GroqChat {
             "messages": [["role": "system", "content": system], ["role": "user", "content": prompt]],
             "tools": tools, "tool_choice": "auto", "parallel_tool_calls": true, "temperature": 0.2, "max_tokens": 1500,
         ]
-        if stream { body["stream"] = true }
+        if stream { body["stream"] = true; body["stream_options"] = ["include_usage": true] }       // le dernier morceau donne les jetons réellement comptés
         if model.hasPrefix("openai/gpt-oss") { body["reasoning_effort"] = "low" }      // moins de jetons « réfléchis » : la limite de débit est serrée
         return (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
     }
@@ -139,6 +139,8 @@ public struct ChatStreamAssembler: Sendable {
     public private(set) var reasoning = ""
     private var tools: [Int: (name: String, arguments: String)] = [:]      // par indice d'appel : plusieurs appels dans une réponse
     private var errorMessage: String?
+    /// Les jetons comptés par le fournisseur (dernier morceau du flux), s'il les a donnés.
+    public private(set) var usage: (prompt: Int, completion: Int)?
 
     public init() {}
 
@@ -148,6 +150,9 @@ public struct ChatStreamAssembler: Sendable {
         guard line.hasPrefix("data:") else { return nil }
         let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
         guard payload != "[DONE]", let object = (try? JSONSerialization.jsonObject(with: Data(payload.utf8))) as? [String: Any] else { return nil }
+        if let counted = (object["usage"] as? [String: Any]) ?? ((object["x_groq"] as? [String: Any])?["usage"] as? [String: Any]) {
+            usage = (counted["prompt_tokens"] as? Int ?? 0, counted["completion_tokens"] as? Int ?? 0)
+        }
         if let error = object["error"] as? [String: Any] { errorMessage = error["message"] as? String ?? "erreur dans le flux"; return nil }
         guard let delta = ((object["choices"] as? [[String: Any]])?.first)?["delta"] as? [String: Any] else { return nil }
         if let calls = delta["tool_calls"] as? [[String: Any]] {

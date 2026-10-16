@@ -821,6 +821,7 @@ extension AIPanelController: AgentEnvironment {
                 let request = ConfirmRequest(title: "Lancer cette recherche ?", rows: [(key: "Requête", value: String(query.prefix(200)))], warning: "Je vais envoyer ce texte à un moteur de recherche.", host: "duckduckgo.com")
                 guard await confirm(request) else { return AgentToolResult(ok: false, text: "La personne a refusé cette recherche. N'insiste pas : réponds avec done.", summary: "Recherche refusée par vous") }
             }
+            AIUsageMeter.shared.record { $0.searches += 1 }
             return await search.search(query)
         case "open_url":
             guard let string = args["url"] as? String, let url = URL(string: string), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
@@ -836,6 +837,7 @@ extension AIPanelController: AgentEnvironment {
             let ok = await hooks.navigate(string)
             return AgentToolResult(ok: ok, text: ok ? "Page ouverte : \(hooks.activeWebView()?.title ?? string)" : "La page n'a pas chargé.", summary: ok ? "Ouverture de \(url.host ?? string)" : "Page non chargée", sources: ok ? [string] : [])
         case "read_page":
+            AIUsageMeter.shared.record { $0.pageReads += 1 }
             guard pageIsReadable, let web = hooks.activeWebView(), let map = await PageMapScript.capture(web) else { return AgentToolResult(ok: false, text: "Aucune page lisible.", summary: "Page non lisible") }
             return AgentToolResult(ok: true, text: map.render(maxElements: 0, maxText: 2400), summary: "Lecture de la page")
         case "ask_user":

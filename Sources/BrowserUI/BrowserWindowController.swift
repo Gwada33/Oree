@@ -437,6 +437,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     NSApp.sendAction(NSSelectorFromString("copy:"), to: tab.webView, from: nil)
                     return "copied"
                 case "aibar": self.aiBar().toggle(); return self.aiBar().report
+                case "aiusage": return AIUsageMeter.shared.snapshot.summary
+                case "aiusagereset": AIUsageMeter.shared.reset(); return "reset"
                 case "aistate": return self.aiBarController?.report ?? "open=false (jamais ouverte)"
                 case "aiquery":
                     // Dev: pose à la barre IA la question écrite dans /tmp/oree-ai-query.txt (la vraie question, par le vrai service).
