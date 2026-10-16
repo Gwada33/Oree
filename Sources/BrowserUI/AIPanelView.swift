@@ -1,6 +1,5 @@
 import AppKit
 import BrowserCore
-import OreeAIClient
 
 // Le panneau Luciole, fidèle à la fiche de spécifications (mesures en points, jetons de couleur par nom) :
 // fond « chrome », en-tête 44, puce de contexte 28, fil à marges de 16, cartes à rayon 14, composeur à rayon 10.

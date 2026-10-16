@@ -106,20 +106,9 @@ final class DownloadsController {
                 Log.network.error("Agent de téléchargement indisponible : \(error.localizedDescription, privacy: .public)")
             }
         }
-        let models = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/HyperBrowser/Models", isDirectory: true)
-        let manager = DownloadManager(store: .standard, allowedDirectories: [downloads, models])     // comme OreeDownloader : le modèle de l'IA locale
+        let manager = DownloadManager(store: .standard, allowedDirectories: [downloads])     // comme OreeDownloader
         await manager.loadPersisted(autoResume: true)
         return (LocalEngine(manager: manager), "dans l’app")
-    }
-
-    /// Démarre le téléchargement du modèle de l'IA locale (le moteur et la liste des téléchargements, comme tout fichier). Rien d'autre que
-    /// cette adresse n'est passé : pas de cookies, pas de page d'origine. `nil` si le moteur ne le prend pas.
-    func startModelDownload(url: URL, name: String, directory: URL) async -> UUID? {
-        guard let engine else { return nil }
-        let spec = DownloadRequestSpec(url: url, suggestedName: name, destinationDirectory: directory, maxConnections: 8, adaptive: true)
-        guard await engine.start(spec) == .accepted else { return nil }
-        adopt(Item(id: spec.id, name: name, sourceURL: url, phase: .running, received: 0, total: nil, bytesPerSecond: 0, connections: 0, error: nil, fileURL: nil, origin: .engine))
-        return spec.id
     }
 
     // MARK: Browsing priority

@@ -1,6 +1,5 @@
 import AppKit
 import BrowserCore
-import OreeAIClient
 
 /// Luciole, la mascotte du panneau IA, fidèle à la fiche « mascotte et animations » : sept formes sur une grille de 40 × 40 (halo, ailes, antennes,
 /// lanterne, tête, yeux), treize poses, une seule animation en boucle à la fois. Couleurs par jeton : halo accent à 15 %, lanterne accent, tête et

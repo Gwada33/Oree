@@ -1,20 +1,13 @@
 import AppKit
 import BrowserCore
-import DownloadKit
-import OreeAIClient
-import OreeAIEngine
-import OreeAIProtocol
 import BrowserStorage
 import WebKit
 
-/// Fait le lien entre le panneau, le service IA, la page, la recherche, le téléchargement du modèle et l'agent launchd. Une conversation par onglet.
+/// Fait le lien entre le panneau, le fournisseur d'IA (Groq, Mistral ou LM Studio), la page et la recherche. Une conversation par onglet.
 ///
-/// Rien ne démarre avant la première ouverture : ni l'agent, ni la connexion au service. Une tâche à la fois (le service refuse la seconde).
-/// Chaque question lance la boucle d'agent (`AgentLoop`, BrowserCore) : le modèle voit la page (si elle est partagée), demande un outil, le
-/// navigateur le fait (avec confirmation pour tout geste sensible), jusqu'à la réponse ou un plafond (15 étapes, 3 recherches, 5 pages).
-/// Le service n'a ni génération contrainte ni appels d'outils natifs (étape 5 du plan) : le modèle écrit une ligne JSON que `AgentParser`
-/// lit avec indulgence. Avec un modèle de 2 milliards de paramètres, les actions longues réussiront souvent à moitié : la trace et les
-/// confirmations sont là pour que la personne garde la main.
+/// Chaque question lance la boucle d'agent (`AgentLoop`, BrowserCore) : un routage léger décide d'où vient la réponse (connaissances du modèle, page ouverte, web, action),
+/// le modèle demande des outils, le navigateur les fait (avec confirmation pour tout geste sensible), jusqu'à la réponse ou un plafond (15 étapes, 3 recherches, 5 pages).
+/// Rien n'est installé ni téléchargé : le panneau n'a pas de modèle embarqué.
 @MainActor
 final class AIPanelController {
     struct Hooks {
@@ -28,28 +21,25 @@ final class AIPanelController {
     }
 
     private let panel = AIPanelView()
-    private let client: AIClient
-    private weak var downloads: DownloadsController?
     private let hooks: Hooks
     /// Appelé quand le panneau s'ouvre ou se ferme (le bouton de la barre d'outils suit).
     var onVisibilityChange: ((Bool) -> Void)?
-    private let pin = ModelPin.default
-    private let machName = ProcessInfo.processInfo.environment["HB_AI_MACH_NAME"] ?? OreeAIServiceInfo.machName
     private var widthConstraint: NSLayoutConstraint!
     private let search = SearchTab()
     private let cursor = AgentCursor()
     private func attachCursor() { if let host = hooks.pageHost() { cursor.attach(to: host) } }
 
-    private var reachable: Bool?
-    private var status: AIStatus?
-    private var download: AIDownloadProgress?
-    private var downloadSpeed: Double = 0
-    private var lastSample: (date: Date, bytes: Int64)?
-    private var downloadID: UUID?
-    private var downloadTask: Task<Void, Never>?
-    private var eventsTask: Task<Void, Never>?
-    private var started = false
     private var failure: String?
+    /// Une tâche arrêtée par une erreur du fournisseur (limite de débit, réseau) : elle peut repartir de là où elle en était.
+    private var resumable: (loop: AgentLoop, task: String)?
+    /// La question en cours : sert à choisir, dans une page longue, les passages qui y répondent.
+    private var currentTask = ""
+    /// La pose de Luciole dictée par le dernier événement réel de la tâche (nil : aucune tâche).
+    private var eventPose: LucioleState?
+    private var eventPoseReset: Task<Void, Never>?
+    /// Secondes avant le nouvel essai quand le fournisseur limite le débit (nil : pas d'attente).
+    private var rateLimitWait: Int?
+    private let searchCache = TTLCache<AgentToolResult>(capacity: 32)
     private var conversations: [UUID: [AIMessage]] = [:]
     private var currentTab: UUID?
     private var currentTitle = ""
@@ -79,25 +69,21 @@ final class AIPanelController {
         } else { lmStudio = (false, []) }
         refresh()
     }
-    /// Le fournisseur en usage : Groq (nuage) ou le modèle local. Les pages lues partent chez Groq quand il est choisi : le panneau le dit.
+    /// Le fournisseur en usage : Groq, Mistral ou LM Studio. Les pages lues partent chez le fournisseur en nuage quand il est choisi : le panneau le dit.
     private var provider: AIProvider { AIProvider.effective(stored: SettingsStore.shared.aiProviderChoice, keys: cloudKeys) }
     // La tâche en cours
     private var agentTask: Task<Void, Never>?
     private var runTab: UUID?
     private var runID = UUID()           // une tâche arrêtée peut finir plus tard : seule la tâche courante met l'affichage à jour
-    private var turn: (id: String, buffer: String, continuation: CheckedContinuation<String, Error>)?
     private var pending: AIPending?
-    private var cancelling: Task<Void, Never>?    // le service finit d'arrêter l'ancien tour : on attend avant d'en lancer un autre
     private var confirmContinuation: CheckedContinuation<Bool, Never>?
     private var questionContinuation: CheckedContinuation<String?, Never>?
 
     private static let widthKey = "oree.ai.panelWidth"
     private var width = AIPanelMetrics.clamp((UserDefaults.standard.object(forKey: AIPanelController.widthKey) as? Double) ?? AIPanelMetrics.defaultWidth)
 
-    init(contentView: NSView, top: NSLayoutYAxisAnchor, downloads: DownloadsController, hooks: Hooks) {
-        self.downloads = downloads
+    init(contentView: NSView, top: NSLayoutYAxisAnchor, hooks: Hooks) {
         self.hooks = hooks
-        self.client = AIClient(machService: ProcessInfo.processInfo.environment["HB_AI_MACH_NAME"] ?? OreeAIServiceInfo.machName)
         panel.isHidden = true
         contentView.addSubview(panel)
         widthConstraint = panel.widthAnchor.constraint(equalToConstant: CGFloat(width))
@@ -139,21 +125,18 @@ final class AIPanelController {
 
     private var availability: AIAvailability {
         #if DEBUG
-        // Dev (debug seulement) : `HB_AI_FAKE_STATE` montre un état du modèle sans le provoquer, pour relire les écrans.
+        // Dev (debug seulement) : `HB_AI_FAKE_STATE` montre un état sans le provoquer, `HB_AI_SCRIPTED` répond avec des textes écrits à l'avance (sans fournisseur).
         switch ProcessInfo.processInfo.environment["HB_AI_FAKE_STATE"] {
-        case "needsModel": return .needsModel
-        case "downloading": return .downloading(AIDownloadProgress(received: Int64(Double(pin.size) * 0.56), total: pin.size))
-        case "verifying": return .verifying
-        case "corrupt": return .corrupt
         case "connecting": return .connecting
         case "unreachable": return .unreachable
         default: break
         }
+        if ProcessInfo.processInfo.environment["HB_AI_SCRIPTED"] != nil { return .ready }
         #endif
         if provider == .lmstudio {
-            switch lmStudio.reachable { case nil: return .connecting; case false?: return .unreachable; case true?: return lmStudio.models.isEmpty ? .unreachable : .ready(.warm) }
+            switch lmStudio.reachable { case nil: return .connecting; case false?: return .unreachable; case true?: return lmStudio.models.isEmpty ? .unreachable : .ready }
         }
-        return provider.isCloud ? (cloudKeyPresent ? .ready(.warm) : .unreachable) : AIAvailability(reachable: reachable, status: status, download: download)
+        return cloudKeyPresent ? .ready : .unreachable
     }
     private var isRunning: Bool { agentTask != nil }
     private var messages: [AIMessage] {
@@ -217,64 +200,11 @@ final class AIPanelController {
         panel.focus()
     }
 
-    // MARK: Service
+    // MARK: Fournisseur
 
-    /// Installe l'agent (une fois, sans danger à répéter), vérifie l'état du service puis le réveille pour que la première question parte vite.
+    /// À l'ouverture : LM Studio est sondé (il tourne sur ce Mac) ; un fournisseur en nuage n'a rien à préparer.
     private func prepare() async {
-        if provider == .lmstudio { await probeLMStudio(); return }
-        guard provider == .local else { refresh(); return }          // fournisseur en nuage : rien à installer ni à réveiller sur ce Mac
-        if !started {
-            started = true
-            reachable = await ensureAgent() ? nil : false
-            if reachable == nil { startListening() }
-        }
-        refresh()
-        guard reachable != false else { return }
-        guard let current = await client.status() else { reachable = false; refresh(); return }
-        reachable = true
-        status = current
-        refresh()
-        // « Vérification » = fichier présent mais pas encore vérifié : c'est `warmUp` qui lance la vérification (≈ 1 s pour 1,3 Go, une fois par
-        // lancement du service) puis réveille le modèle. On le fait dès que le panneau s'ouvre, pour que la première question parte vite.
-        if current.model == .ready || current.model == .verifying, let warmed = await client.warmUp(timeout: 40) { status = warmed; refresh() }
-    }
-
-    /// L'agent pointe vers l'exécutable `OreeAI` de CETTE copie de l'app. `HB_AI_NO_AGENT=1` : l'agent est géré à la main (essais).
-    private func ensureAgent() async -> Bool {
-        let env = ProcessInfo.processInfo.environment
-        if env["HB_AI_NO_AGENT"] != nil { return true }
-        guard Bundle.main.bundlePath.hasSuffix(".app"),
-              let executable = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("OreeAI") else { return false }
-        let bundleID = Bundle.main.bundleIdentifier ?? "com.nolhan.hyperbrowser"
-        let name = machName
-        // launchctl prend du temps : jamais sur le fil principal.
-        let result = await Task.detached { Result { try AIAgentInstaller.ensureInstalled(executable: executable, bundleIdentifier: bundleID, machName: name) } }.value
-        if case .failure(let error) = result { Log.security.error("Agent IA indisponible : \(error.localizedDescription, privacy: .public)"); return false }
-        return true
-    }
-
-    private func startListening() {
-        guard eventsTask == nil else { return }
-        let events = client.events()
-        eventsTask = Task { [weak self] in
-            for await event in events { self?.handle(event) }
-        }
-    }
-
-    private func handle(_ event: AIEvent) {
-        switch event {
-        case .stateChanged(let current):
-            status = current
-        case .textDelta(let id, let text):
-            if turn?.id == id { turn?.buffer += text }
-        case .done(let id, let final, _):
-            if let t = turn, t.id == id { turn = nil; t.continuation.resume(returning: final.isEmpty ? t.buffer : final) }
-        case .error(let id, let message):
-            if let t = turn, id == nil || id == t.id { turn = nil; t.continuation.resume(throwing: AgentFailure(message: message)) }
-            else if id == nil { failure = message }
-        default: break
-        }
-        refresh()
+        if provider == .lmstudio { await probeLMStudio() } else { refresh() }
     }
 
     struct AgentFailure: Error, LocalizedError { var message: String; var errorDescription: String? { message } }
@@ -294,13 +224,33 @@ final class AIPanelController {
         let context = messages.suffix(6).map { ($0.role == .user ? "Vous : " : "Luciole : ") + String($0.text.prefix(240)) }
         messages += [AIMessage(role: .user, text: text), AIMessage(role: .assistant, text: "", title: String(text.prefix(38)) + (text.count > 38 ? "…" : ""))]
         panel.clearComposer()
+        currentTask = text
+        eventPose = .think
+        // « reprends » (ou la même question) après une erreur du fournisseur : la tâche repart de son état, ce qui est fait n'est pas refait.
+        let resuming: AgentLoop? = {
+            guard let resumable, resumable.loop.canResume else { return nil }
+            let again = Self.isResumeRequest(text) || AIRouter.fold(text) == AIRouter.fold(resumable.task)
+            return again ? resumable.loop : nil
+        }()
+        if resuming != nil { currentTask = resumable?.task ?? text } else { resumable = nil }
         agentTask = Task { [weak self] in
             guard let self else { return }
-            let recalled = self.memoryOn ? self.memory.recall(host: self.hooks.activeWebView()?.url?.host, limit: self.provider.usesAPI ? 6 : 3) : []
-            let outcome = await AgentLoop(environment: self, style: self.provider.usesAPI ? .nativeTools : .jsonLine).run(task: text, context: context, memory: recalled)
+            let loop = resuming ?? AgentLoop(environment: self)
+            let outcome: AgentOutcome
+            if resuming != nil { outcome = await loop.resume() } else {
+                let recalled = self.memoryOn ? self.memory.recall(host: self.hooks.activeWebView()?.url?.host, limit: 4) : []
+                outcome = await loop.run(task: text, context: context, memory: recalled)
+            }
+            self.resumable = loop.canResume ? (loop, self.currentTask) : nil
             if self.runID == run { self.finish(outcome, in: tab) }
         }
         refresh()
+    }
+
+    /// « reprends », « continue », « réessaie » : la demande de reprendre la tâche arrêtée.
+    private static func isResumeRequest(_ text: String) -> Bool {
+        let words = AIRouter.fold(text).split(whereSeparator: { !$0.isLetter }).map(String.init)
+        return words.count <= 3 && !Set(words).isDisjoint(with: ["reprends", "reprendre", "continue", "continuer", "reessaie", "reessayer", "retente"])
     }
 
     private func finish(_ outcome: AgentOutcome, in tab: UUID) {
@@ -308,9 +258,11 @@ final class AIPanelController {
         if var last = list.last, last.role == .assistant {
             switch outcome.reason {
             case .done: last.text = outcome.answer
-            case .stepCap: last.text = outcome.answer; last.capped = true
+            case .stepCap, .stalled: last.text = outcome.answer; last.capped = true
             case .cancelled: if last.text.isEmpty { last.text = Self.stoppedText(steps: last.trace.count) }
-            case .failed(let message): failure = message; if last.text.isEmpty { last.text = "Je n'ai pas pu terminer." }
+            case .failed(let message):
+                failure = message
+                if last.text.isEmpty { last.text = resumable != nil ? "Je n'ai pas pu terminer. Écrivez « reprends » : je repars de là où j'en étais, sans refaire ce qui est fait." : "Je n'ai pas pu terminer." }
             }
             last.sources = outcome.sources
             last.thinking = ""
@@ -321,7 +273,7 @@ final class AIPanelController {
         agentTask = nil
         runTab = nil
         pending = nil
-        cursor.settle()
+        cursor.settle(failed: { if case .failed = outcome.reason { return true }; return false }())
         refresh()
     }
 
@@ -345,7 +297,6 @@ final class AIPanelController {
         runTab = nil
         resolveConfirm(false)
         resolveQuestion(nil)
-        if let t = turn { turn = nil; t.continuation.resume(throwing: CancellationError()); cancelling = Task { await client.cancel(taskID: t.id) } }
     }
 
     private func resolveConfirm(_ ok: Bool) {
@@ -462,54 +413,8 @@ final class AIPanelController {
 
     private func modelAction(_ action: AIPanelView.ModelAction) {
         switch action {
-        case .download, .resume: downloadModel()
-        case .later: close()
-        case .retry: failure = nil; reachable = nil; started = false; lmStudio = (nil, []); refresh(); Task { await prepare() }
-        case .cancelDownload:
-            if let id = downloadID { downloads?.cancel(id) }
-            downloadTask?.cancel(); downloadTask = nil; downloadID = nil; download = nil; downloadSpeed = 0; lastSample = nil
-            refresh()
-        case .deleteReceived:
-            try? FileManager.default.removeItem(at: ModelFile.url(for: pin))
-            failure = nil; refresh()
-        }
-    }
-
-    /// Après l'accord de l'utilisateur (le bouton) : télécharge le modèle avec le moteur de téléchargement d'Orée (reprise, vitesse), puis le service le vérifie.
-    private func downloadModel() {
-        guard let downloads, downloadID == nil else { return }
-        let target = ModelFile.url(for: pin)
-        if status?.model == .corrupt { try? FileManager.default.removeItem(at: target) }     // sinon le moteur numéroterait le nouveau fichier
-        failure = nil
-        download = AIDownloadProgress(received: 0, total: pin.size)
-        refresh()
-        downloadTask = Task { [weak self] in
-            guard let self else { return }
-            guard let id = await downloads.startModelDownload(url: self.pin.url, name: self.pin.name, directory: ModelFile.directory) else {
-                self.download = nil
-                self.failure = "Le téléchargement n'a pas pu démarrer."
-                self.refresh()
-                return
-            }
-            self.downloadID = id
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(500))
-                guard let item = downloads.items.first(where: { $0.id == id }) else { break }
-                let now = Date()
-                if let last = self.lastSample, now.timeIntervalSince(last.date) > 0 {
-                    let instant = Double(item.received - last.bytes) / now.timeIntervalSince(last.date)
-                    self.downloadSpeed = self.downloadSpeed == 0 ? max(instant, 0) : self.downloadSpeed * 0.7 + max(instant, 0) * 0.3      // lissée
-                }
-                self.lastSample = (now, item.received)
-                self.download = AIDownloadProgress(received: item.received, total: item.total ?? self.pin.size)
-                self.refresh()
-                if item.phase == .finished { break }
-                if item.phase == .failed || item.phase == .cancelled { self.failure = item.error ?? "Téléchargement interrompu."; break }
-            }
-            self.download = nil
-            self.downloadID = nil
-            self.downloadSpeed = 0; self.lastSample = nil
-            await self.prepare()               // le service vérifie le fichier (SHA-256) puis le réveille
+        case .later, .cancelDownload, .deleteReceived, .download, .resume: close()
+        case .retry: failure = nil; lmStudio = (nil, []); refresh(); Task { await prepare() }
         }
     }
 
@@ -532,7 +437,6 @@ final class AIPanelController {
     }
 
     private func modelScreen(_ state: AIAvailability) -> AIPanelView.ModelScreen? {
-        let total = pin.size
         if provider == .lmstudio, lmStudio.reachable == false || lmStudio.models.isEmpty, lmStudio.reachable != nil {
             let base = SettingsStore.shared.lmStudioBase.absoluteString
             return lmStudio.reachable == true
@@ -547,35 +451,9 @@ final class AIPanelController {
         }
         switch state {
         case .ready: return nil
-        case .connecting: return .init(title: "Luciole se réveille.", text: "Moins d'une seconde.", indeterminate: true)
+        case .connecting: return .init(title: "Luciole se réveille.", text: "Un instant.", indeterminate: true)
         case .unreachable:
-            return .init(title: "Luciole n'est pas joignable pour l'instant.", text: "Le service IA ne répond pas. Il se lance au premier usage : réessayez, ou relancez Orée si cela dure. Le reste d'Orée fonctionne normalement.",
-                         primary: ("Réessayer", .retry))
-        case .needsModel:
-            if let failure {
-                var screen = AIPanelView.ModelScreen(title: "Le téléchargement s'est interrompu.", text: "Ce qui a déjà été reçu est gardé : la reprise repart de là.",
-                                                    primary: ("Reprendre", .resume), secondary: ("Supprimer ce qui a été reçu", .deleteReceived))
-                screen.footnote = "Détail : " + failure
-                return screen
-            }
-            var free = ""
-            if let bytes = try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage {
-                free = "Il faut \(size(Int64(Double(total) * 1.6))) d'espace libre pendant l'installation ; ce Mac en a \(size(bytes))."
-            }
-            return .init(title: "Luciole dort encore.", text: "Pour lire, résumer et agir sans internet, Luciole a besoin de son modèle. Rien ne se télécharge sans votre accord.",
-                         facts: [("arrow.down", size(total), ", téléchargé une seule fois."), ("lock", "", "Reste sur ce Mac. Ce que vous lisez ne part sur aucun serveur."),
-                                 ("slider.horizontal.3", "", "Supprimable à tout moment dans Réglages › Assistant IA.")],
-                         primary: ("Télécharger (\(size(total)))", .download), secondary: ("Plus tard", .later), footnote: free.isEmpty ? nil : free)
-        case .downloading(let progress):
-            let done = progress.received, all = progress.total ?? total
-            var right = ""
-            if downloadSpeed > 0 { right = "\(ByteFormat.speed(downloadSpeed)) · environ \(Int(max(Double(all - done) / downloadSpeed, 1))) s" }
-            return .init(title: "Téléchargement du modèle", text: "Vous pouvez continuer à naviguer. Luciole s'allume tout seul à la fin.",
-                         progress: all > 0 ? Double(done) / Double(all) : nil, indeterminate: all <= 0,
-                         progressLeft: "\(size(done)) sur \(size(all))", progressRight: right, secondary: ("Annuler le téléchargement", .cancelDownload))
-        case .verifying: return .init(title: "Vérification du modèle", text: "Orée vérifie le fichier avant de le charger : quelques secondes.", indeterminate: true)
-        case .corrupt:
-            return .init(title: "Le modèle est abîmé.", text: "Le fichier reçu ne correspond pas à ce qui était attendu. Il sera remplacé par une nouvelle copie.", primary: ("Télécharger à nouveau", .download))
+            return .init(title: "Luciole n'est pas joignable pour l'instant.", text: "Vérifiez votre connexion, puis réessayez. Le reste d'Orée fonctionne normalement.", primary: ("Réessayer", .retry))
         }
     }
 
@@ -589,7 +467,7 @@ final class AIPanelController {
         var pose: LucioleState
         if pageIsProtected { pose = .off }
         else if hasPending { pose = pending.map { if case .question = $0.kind { .ask } else { .wait } } ?? .wait }
-        else if running, list.last?.trace.last?.state == .running { pose = .act }
+        else if let moment = eventPose, running || moment == .happy || moment == .err { pose = moment }       // ce que la tâche fait vraiment, d'après ses événements
         else { pose = LucioleState.pose(availability: state, running: running, streaming: streaming, failed: failure != nil) }
         if provider.isCloud, !cloudKeyPresent { pose = .sleep }
 
@@ -599,16 +477,12 @@ final class AIPanelController {
         case .connecting: chipText = "Réveil"
         case .unreachable where provider.isCloud: chipText = "Clé manquante"; dot = .outline
         case .unreachable: chipText = "Indisponible"; dot = .muted
-        case .needsModel: chipText = failure != nil ? "Erreur" : "Non installé"; dot = failure != nil ? .alert : .outline
-        case .downloading(let p):
-            chipText = p.total.map { $0 > 0 ? "Téléchargement · \(Int(Double(p.received) / Double($0) * 100)) %" : "Téléchargement" } ?? "Téléchargement"
-        case .verifying: chipText = "Vérification"
-        case .corrupt: chipText = "Erreur"; dot = .alert
         case .ready:
             if failure != nil { chipText = "Erreur"; dot = .alert }
             else if hasPending { chipText = "Attend votre accord" }
+            else if let wait = rateLimitWait { chipText = "Limite de débit · \(wait) s"; dot = .outline }
             else if running { chipText = "Au travail" }
-            else { chipText = provider.usesAPI ? provider.displayName : "Prêt" }
+            else { chipText = provider.displayName }
         }
 
         // Puce de contexte
@@ -729,9 +603,10 @@ final class AIPanelController {
 
 extension AIPanelController: AgentEnvironment {
     /// Dev : chaque tour (consigne comprise) dans le fichier `HB_AI_TRACE`, pour lire ce que dit le modèle.
-    private static func logTurn(_ prompt: String, _ text: String) {
+    private static func logTurn(_ request: ModelRequest, _ text: String) {
         guard let path = ProcessInfo.processInfo.environment["HB_AI_TRACE"] else { return }
-        let entry = "=== PROMPT (\(PageMap.estimatedTokens(prompt)) jetons estimés)\n\(prompt)\n=== RÉPONSE\n\(text)\n\n"
+        let body = request.messages.map { "[\($0.role.rawValue)] " + ($0.calls.isEmpty ? $0.content : $0.calls.map { "\($0.call.name) \($0.call.argumentsJSON)" }.joined(separator: "\n")) }.joined(separator: "\n---\n")
+        let entry = "=== REQUÊTE (\(request.messages.count) messages, outils : \(request.tools.joined(separator: ","))), \(PageMap.estimatedTokens(body)) jetons estimés)\n\(body)\n=== RÉPONSE\n\(text)\n\n"
         if let handle = FileHandle(forWritingAtPath: path) { handle.seekToEndOfFile(); handle.write(Data(entry.utf8)); try? handle.close() }
         else { try? entry.write(toFile: path, atomically: true, encoding: .utf8) }
     }
@@ -757,59 +632,62 @@ extension AIPanelController: AgentEnvironment {
         if now.timeIntervalSince(lastPartialRefresh) > 0.1 { lastPartialRefresh = now; refresh() }
     }
 
-    func askModel(_ prompt: String) async throws -> String {
+    func askModel(_ request: ModelRequest) async throws -> String {
         #if DEBUG
-        if let scripted = Self.scriptedReply() { Self.logTurn(prompt, scripted); return scripted }
+        if let scripted = Self.scriptedReply() { Self.logTurn(request, scripted); return scripted }
         #endif
-        if provider.usesAPI {
-            guard let model = provider == .lmstudio ? lmModel : SettingsStore.shared.aiModel(for: provider) else { throw AgentFailure(message: "Aucun modèle chargé dans LM Studio.") }
-            do {
-                mutateAnswer { $0 = "" }                      // un nouveau tour : on repart d'un texte vide
-                setThinking("")
-                let text = try await CloudClient(provider: provider, model: model, endpoint: SettingsStore.shared.aiEndpoint(for: provider)).complete(prompt: prompt) { [weak self] partial, thinking in
-                    self?.showPartial(partial, thinking: thinking)
-                }
-                Self.logTurn(prompt, text)
-                return text
-            } catch is CancellationError { throw CancellationError() }
-            catch let error as URLError where error.code == .cancelled { throw CancellationError() }
-            catch let error as CloudClient.Failure { throw AgentFailure(message: error.message) }
-            catch { throw AgentFailure(message: "\(provider.displayName) est injoignable : \(error.localizedDescription)") }
-        }
-        await cancelling?.value
-        let request = AIRunRequest(userText: prompt)
-        let id = request.taskID
-        let text: String = try await withCheckedThrowingContinuation { continuation in
-            turn = (id, "", continuation)
-            Task { [weak self] in
-                guard let self else { return }
-                var accepted = await self.client.run(request)
-                for _ in 0..<3 where !accepted && self.turn?.id == id {       // le service peut finir d'arrêter l'ancien tour
-                    try? await Task.sleep(for: .milliseconds(600))
-                    accepted = await self.client.run(request)
-                }
-                if !accepted, let t = self.turn, t.id == id {
-                    self.turn = nil
-                    t.continuation.resume(throwing: AgentFailure(message: "Le service IA n'a pas pris la demande. Réessayez dans un instant."))
-                }
-            }
-            // Un tour sans fin de réponse en 90 s : on le dit au lieu d'attendre indéfiniment.
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(90))
-                guard let self, let t = self.turn, t.id == id else { return }
-                self.turn = nil
-                await self.client.cancel(taskID: id)
-                t.continuation.resume(throwing: AgentFailure(message: "Pas de réponse du service IA depuis 90 secondes."))
-            }
-        }
-        Self.logTurn(prompt, text)
-        return text
+        guard let model = provider == .lmstudio ? lmModel : SettingsStore.shared.aiModel(for: provider) else { throw AgentFailure(message: "Aucun modèle chargé dans LM Studio.") }
+        do {
+            mutateAnswer { $0 = "" }                      // un nouveau tour : on repart d'un texte vide
+            setThinking("")
+            let client = CloudClient(provider: provider, model: model, endpoint: SettingsStore.shared.aiEndpoint(for: provider))
+            let text = try await client.complete(request, onText: { [weak self] partial, thinking in
+                self?.setRateLimitWait(nil)
+                self?.showPartial(partial, thinking: thinking)
+            }, onWait: { [weak self] seconds in
+                self?.setRateLimitWait(seconds)
+            })
+            setRateLimitWait(nil)
+            Self.logTurn(request, text)
+            return text
+        } catch is CancellationError { throw CancellationError() }
+        catch let error as URLError where error.code == .cancelled { throw CancellationError() }
+        catch let error as CloudClient.Failure { setRateLimitWait(nil); throw AgentFailure(message: error.message) }
+        catch { setRateLimitWait(nil); throw AgentFailure(message: "\(provider.displayName) est injoignable : \(error.localizedDescription)") }
     }
 
-    /// Carte de la page affichée, réduite pour tenir dans les 4 096 jetons du contexte (avec la réponse et les consignes).
-    func pageMap() async -> String? {
-        guard shareContext, pageIsReadable, let web = hooks.activeWebView(), let map = await PageMapScript.capture(web) else { return nil }
-        return provider.usesAPI ? map.render(maxElements: 45, maxText: 2800) : map.render(maxElements: 30, maxText: 1200)
+    /// Une attente imposée par le fournisseur : le panneau le dit (« Limite de débit · 6 s ») et Luciole attend, au lieu de paraître bloquée.
+    private func setRateLimitWait(_ seconds: Int?) {
+        guard rateLimitWait != seconds else { return }
+        rateLimitWait = seconds
+        refresh()
+    }
+
+    var pageReadable: Bool { shareContext && pageIsReadable && hooks.activeWebView() != nil }
+    var currentURL: String? { hooks.activeWebView()?.url?.absoluteString }
+
+    /// La page affichée pour le modèle : les passages qui répondent à la question quand elle est longue, plus ses éléments cliquables.
+    /// La signature change quand le contenu change vraiment (adresse, texte, éléments), pas à chaque lecture.
+    func pageSnapshot(focus: String) async -> PageSnapshot? {
+        guard pageReadable, let web = hooks.activeWebView(), let map = await PageMapScript.capture(web) else { return nil }
+        let text = map.render(maxElements: 40, maxText: 2400, focus: focus)
+        return PageSnapshot(text: text, signature: ContentSignature.of(text))
+    }
+
+    func event(_ event: AgentEvent) {
+        eventPoseReset?.cancel()
+        eventPose = LucioleState.pose(for: event)
+        if case .waitingForProvider(let seconds) = event { rateLimitWait = seconds } else if case .thinking = event { /* l'attente du fournisseur est gérée par la requête */ }
+        cursor.follow(eventPose ?? .idle)
+        if case .finished = event {
+            // La pose de fin (contente, ou en erreur) reste un instant, puis Luciole revient au repos.
+            eventPoseReset = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1.6))
+                guard !Task.isCancelled else { return }
+                self?.eventPose = nil; self?.refresh()
+            }
+        }
+        refresh()
     }
 
     func perform(_ call: AgentCall) async -> AgentToolResult {
@@ -821,8 +699,7 @@ extension AIPanelController: AgentEnvironment {
                 let request = ConfirmRequest(title: "Lancer cette recherche ?", rows: [(key: "Requête", value: String(query.prefix(200)))], warning: "Je vais envoyer ce texte à un moteur de recherche.", host: "duckduckgo.com")
                 guard await confirm(request) else { return AgentToolResult(ok: false, text: "La personne a refusé cette recherche. N'insiste pas : réponds avec done.", summary: "Recherche refusée par vous") }
             }
-            AIUsageMeter.shared.record { $0.searches += 1 }
-            return await search.search(query)
+            return await searchWithCache(query)
         case "open_url":
             guard let string = args["url"] as? String, let url = URL(string: string), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
                 return AgentToolResult(ok: false, text: "Adresse refusée : seules les adresses http(s) s'ouvrent.", summary: "Adresse refusée")
@@ -839,7 +716,7 @@ extension AIPanelController: AgentEnvironment {
         case "read_page":
             AIUsageMeter.shared.record { $0.pageReads += 1 }
             guard pageIsReadable, let web = hooks.activeWebView(), let map = await PageMapScript.capture(web) else { return AgentToolResult(ok: false, text: "Aucune page lisible.", summary: "Page non lisible") }
-            return AgentToolResult(ok: true, text: map.render(maxElements: 0, maxText: 2400), summary: "Lecture de la page")
+            return AgentToolResult(ok: true, text: map.render(maxElements: 0, maxText: 2400, focus: currentTask), summary: "Lecture de la page")
         case "ask_user":
             guard let question = args["question"] as? String, !question.isEmpty else { return AgentToolResult(ok: false, text: "Il manque « question ».") }
             guard let answer = await ask(question) else { return AgentToolResult(ok: false, text: "La personne n'a pas répondu.", summary: "Sans réponse") }
@@ -855,6 +732,19 @@ extension AIPanelController: AgentEnvironment {
             }
             return AgentToolResult(ok: result.ok, text: result.message, summary: result.message)
         }
+    }
+
+    /// La recherche, une seule fois par requête : un résultat de moins de dix minutes est réutilisé (aucune requête, aucune page chargée).
+    private func searchWithCache(_ query: String) async -> AgentToolResult {
+        let key = ActionLedger.key(for: AgentCall(name: "search_web", argumentsJSON: "{\"query\":\"\(query)\"}"))
+        if let cached = searchCache.value(for: key) {
+            AIUsageMeter.shared.record { $0.searchesCached += 1 }
+            return cached
+        }
+        AIUsageMeter.shared.record { $0.searches += 1 }
+        let result = await search.search(query)
+        if result.ok { searchCache.set(result, for: key, ttl: 600) }
+        return result
     }
 
     func ask(_ question: String) async -> String? {

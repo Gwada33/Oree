@@ -39,6 +39,6 @@ import Foundation
     @Test func lmStudioIsLocalAndNeedsNoKey() {
         #expect(AIProvider.lmstudio.usesAPI && !AIProvider.lmstudio.isCloud)
         #expect(AIProvider.effective(stored: nil, keys: [.groq]) == .groq)       // jamais choisi tout seul
-        #expect(!AIProvider.local.usesAPI && AIProvider.mistral.isCloud)
+        #expect(AIProvider.mistral.isCloud)
     }
 }

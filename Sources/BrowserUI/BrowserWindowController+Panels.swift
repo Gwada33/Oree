@@ -525,7 +525,7 @@ extension BrowserWindowController {
             windowWidth: { [weak self] in self?.window?.contentView?.bounds.width ?? 1200 },
             isPrivate: { [weak self] in self?.activeTab?.isPrivate ?? false },
             onLayout: { [weak self] pushed in self?.pushPage(by: pushed) })
-        let created = AIPanelController(contentView: contentView, top: contentContainer.topAnchor, downloads: downloads, hooks: hooks)
+        let created = AIPanelController(contentView: contentView, top: contentContainer.topAnchor, hooks: hooks)
         created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open }
         aiBarController = created
         created.tabChanged(id: activeTab?.id, title: activeTab?.displayTitle)

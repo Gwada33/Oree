@@ -54,9 +54,7 @@ guard CommandLine.arguments.contains("--agent") else {
 }
 
 let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-// Models/ : le modèle de l'IA locale (≈ 1,3 Go) se télécharge là, avec reprise ; sa somme SHA-256 est vérifiée par le service IA avant tout chargement.
-let models = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/HyperBrowser/Models", isDirectory: true)
-let manager = DownloadManager(store: .standard, allowedDirectories: [downloads, models])
+let manager = DownloadManager(store: .standard, allowedDirectories: [downloads])
 let delegate = DownloadListenerDelegate(manager: manager)
 let listener = NSXPCListener(machServiceName: DownloaderService.machName)
 listener.delegate = delegate

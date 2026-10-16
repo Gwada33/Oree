@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end check of the agent loop (step 4 of Docs/ia.md) in a separate Orée instance (debug build only): the model's replies are
 scripted (/tmp/oree-ai-script.json), everything else is real: the page, the executor, the trace, the confirmation card, the
-question card, Stop. The service only has to be reachable (own Mach name, removed at the end). Exit 1 on any failure.
+question card, Stop. No provider is called (HB_AI_SCRIPTED). Exit 1 on any failure.
 
   python3 scripts/bench/agent_check.py
 """
@@ -10,9 +10,6 @@ import functools, http.server, json, os, re, subprocess, sys, tempfile, threadin
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 UI, APP = os.path.join(ROOT, "scripts", "ui.sh"), os.path.join(ROOT, "Oree.app")
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hands_fixture")
-MODEL = os.path.expanduser("~/Library/Application Support/HyperBrowser/Models/Qwen3.5-4B-Q4_K_M.gguf")
-MACH = "com.nolhan.hyperbrowser.ai-agent-test"
-PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{MACH}.plist")
 PORT = 8791
 TRACE = "/tmp/oree-agent-trace.txt"
 
@@ -53,12 +50,10 @@ def resolve(text):
     open("/tmp/oree-ai-query.txt", "w").write(text); ui("tab", "airesolve", "0")
 
 def main():
-    if not os.path.exists(MODEL):
-        print("ignoré : le modèle n'est pas sur le disque (le service doit répondre « prêt »)"); return 0
     server, before = serve(), pids()
     tmp = tempfile.mkdtemp(prefix="agentcheck-"); ext = os.path.join(tmp, "ext"); os.makedirs(ext)
     if os.path.exists(TRACE): os.remove(TRACE)
-    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_NO_AGENT=1", f"HB_AI_MACH_NAME={MACH}", f"HB_AI_TRACE={TRACE}"]
+    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_AI_SCRIPTED=1", f"HB_AI_TRACE={TRACE}"]
     subprocess.run(["open", "-g", "-n", *[x for e in env for x in ("--env", e)], APP, "--args", "--automation"]); time.sleep(5)
     mine = pids() - before
     results = []
@@ -66,7 +61,7 @@ def main():
     try:
         ui("load", f"http://127.0.0.1:{PORT}/controlled.html"); time.sleep(3)
         ui("tab", "aibar", "0")
-        check("le service est prêt", wait_for(lambda: "state=ready" in state(), 40))
+        check("le panneau est prêt", wait_for(lambda: "state=ready" in state(), 40))
         shot("agent-empty")
 
         print("\nTâche avec une action sensible")
@@ -85,7 +80,7 @@ def main():
 
         print("\nRefus à la carte")
         script('{"tool":"click","ref":"@e5"}', '{"tool":"done","answer":"Annulé."}')
-        ask("Renvoie")
+        ask("Renvoie le formulaire")
         check("la carte apparaît de nouveau", wait_for(lambda: "pending=confirm" in state(), 25))
         resolve("no")
         check("refusée : la tâche continue, rien n'est envoyé", wait_for(lambda: "running=false" in state(), 25) and js("window.__submits") == "1")
@@ -93,7 +88,7 @@ def main():
 
         print("\nStop pendant une confirmation")
         script('{"tool":"click","ref":"@e5"}', '{"tool":"done","answer":"jamais"}')
-        ask("Encore")
+        ask("Renvoie encore le formulaire")
         check("la carte apparaît", wait_for(lambda: "pending=confirm" in state(), 25))
         ui("tab", "aistop", "0")
         s = state()
@@ -115,7 +110,7 @@ def main():
         ask("Ouvre ça")
         check("une adresse file:// est refusée", wait_for(lambda: "running=false" in state(), 25) and "failed:Ouverture de file:///etc/passwd — Adresse refusée" in state())
         script('{"tool":"type","ref":"@e1","text":"{{profil.inconnu}}"}', '{"tool":"done","answer":"fini"}')
-        ask("Écris mon profil")
+        ask("Remplis mon profil")
         check("un jeton de profil inconnu échoue sans rien écrire", wait_for(lambda: "running=false" in state(), 25) and "{{" not in js("document.getElementById('name').value"))
 
         print("\nDiscussion et liens")
@@ -135,20 +130,22 @@ def main():
         check("la valeur saisie n'est jamais gardée", "Zébulon" not in data)
         check("ce que la personne a appris à Luciole est gardé", "Quel est votre prénom ?" in data)
         script('{"tool":"done","answer":"ok"}')
-        ask("Tu te souviens ?")
+        ask("Résume cette page comme la dernière fois")
         wait_for(lambda: "running=false" in state(), 25)
-        check("la mémoire est donnée au modèle au tour suivant", "CE DONT TU TE SOUVIENS" in open(TRACE).read().split("=== PROMPT")[-1])
+        check("la mémoire est donnée au modèle quand la tâche en a besoin", "CE DONT TU TE SOUVIENS" in open(TRACE).read().split("=== REQUÊTE")[-1])
+        script('{"tool":"done","answer":"ok"}')
+        ask("Quelle est la capitale du Portugal ?")
+        wait_for(lambda: "running=false" in state(), 25)
+        check("et pas pour une question de culture générale", "CE DONT TU TE SOUVIENS" not in open(TRACE).read().split("=== REQUÊTE")[-1])
 
         print("\nPlafond d'étapes")
         script(*['{"tool":"scroll","direction":"down"}', '{"tool":"scroll","direction":"up"}'] * 8)
         ask("Défile sans fin")
-        check("après 15 étapes, l'IA s'arrête et le dit", wait_for(lambda: "running=false" in state() and "limite de 15 étapes" in state(), 120))
+        check("une boucle sans progrès s'arrête et le dit (avant même la limite de 15 étapes)", wait_for(lambda: "running=false" in state() and ("tourne en rond" in state() or "limite de 15 étapes" in state()), 120))
         shot("agent-cap")
         os.remove("/tmp/oree-ai-script.json") if os.path.exists("/tmp/oree-ai-script.json") else None
     finally:
         for p in mine: subprocess.run(["kill", p])
-        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{MACH}"], capture_output=True)
-        if os.path.exists(PLIST): os.remove(PLIST)
         server.shutdown()
     print(f"\n{sum(results)}/{len(results)} vérifications passent")
     return 0 if all(results) else 1

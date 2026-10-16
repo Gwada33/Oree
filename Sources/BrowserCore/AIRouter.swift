@@ -40,6 +40,12 @@ public enum AIRouter {
         }
     }
 
+    /// Le modèle demande un outil qui agit sur la page alors que le routage n'en avait pas prévu (la question ne le laissait pas deviner) : on passe en mode action,
+    /// avec la page. Le routage sert à économiser, jamais à empêcher.
+    public static func escalated() -> AIPlan {
+        AIPlan(route: .agent, includePage: true, tools: AgentParser.tools.filter { $0 != "read_page" }, maxSearches: 3, maxTokens: 800, keepsConversation: true)
+    }
+
     public static func route(text: String, words: [String], pageReadable: Bool) -> AIRoute {
         let phrase = " " + words.joined(separator: " ") + " "
         func has(_ list: [String]) -> Bool { list.contains { phrase.contains(" \($0) ") || ($0.contains(" ") && text.contains($0)) } }
@@ -64,7 +70,7 @@ public enum AIRouter {
     // MARK: Mots (sans accent, en minuscules)
 
     static let actionWords = ["remplis", "remplir", "remplissez", "clique", "cliquer", "clique sur", "ouvre", "ouvrir", "va sur", "aller sur", "navigue", "connecte moi", "connecte-moi",
-                              "inscris", "inscris moi", "reserve", "reserver", "achete", "acheter", "commande", "commander", "ajoute au panier", "envoie", "envoyer", "telecharge", "telecharger",
+                              "inscris", "inscris moi", "renvoie", "renvoyer", "supprime", "supprimer", "efface", "effacer", "publie", "poste", "abonne", "reserve", "reserver", "achete", "acheter", "commande", "commander", "ajoute au panier", "envoie", "envoyer", "telecharge", "telecharger",
                               "coche", "selectionne", "saisis", "tape", "valide", "soumets", "postule", "scrolle", "fais defiler", "descends", "fill", "click", "open"]
     static let searchRequests = ["cherche", "chercher", "recherche", "rechercher", "trouve", "trouver", "google", "sur le web", "sur internet", "en ligne", "search", "look up"]
     static let pageWords = ["page", "article", "site", "onglet", "texte", "document", "ici", "resume", "resumer", "resumez", "synthese", "points cles", "traduis", "traduire", "cette", "ce site", "celui ci", "celle ci", "ci dessus", "auteur", "titre", "paragraphe", "section"]

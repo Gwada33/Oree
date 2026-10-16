@@ -1313,9 +1313,6 @@ struct AssistantSection: View {
                 }
                 Text("Avec \(provider.provider.displayName), l'assistant appelle de vrais outils et répond bien plus vite, mais le texte de la page que vous lui demandez de lire (titres, libellés des champs, extraits) et vos questions sont envoyés à \(provider.provider.displayName), dans le nuage. Les valeurs de votre profil, elles, restent sur ce Mac : seuls les jetons {{profil.xxx}} sont envoyés. La clé est gardée dans le Trousseau.")
                     .font(.caption).foregroundStyle(.secondary)
-            } else {
-                Text("Le modèle local tourne sur ce Mac, sans internet : rien ne quitte votre ordinateur. Il est plus lent et se trompe plus souvent sur les actions.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         Section("Mémoire de Luciole") {

@@ -13,7 +13,7 @@ final class SearchTab: NSObject, WKNavigationDelegate {
     static let extract = """
     const clean = s => (s || '').replace(/\\s+/g, ' ').trim();
     const real = href => { try { const u = new URL(href, location.href); return u.searchParams.get('uddg') || u.href; } catch (e) { return href; } };
-    return [...document.querySelectorAll('.result')].slice(0, 5).map(r => {
+    return [...document.querySelectorAll('.result')].slice(0, 10).map(r => {
       const a = r.querySelector('.result__a');
       const s = r.querySelector('.result__snippet');
       return a ? { title: clean(a.textContent), url: real(a.getAttribute('href')), snippet: clean(s && s.textContent).slice(0, 220) } : null;
@@ -33,15 +33,9 @@ final class SearchTab: NSObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish(false) }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish(false) }
 
-    /// Formate des résultats pour le modèle : « 1. Titre / adresse / extrait ».
-    static func format(_ results: [[String: Any]]) -> (text: String, sources: [String]) {
-        var lines: [String] = [], sources: [String] = []
-        for (i, r) in results.enumerated() {
-            let url = r["url"] as? String ?? ""
-            lines.append("\(i + 1). \(r["title"] as? String ?? "")\n   \(url)\n   \(r["snippet"] as? String ?? "")")
-            if i < 3, !url.isEmpty { sources.append(url) }
-        }
-        return (lines.joined(separator: "\n"), sources)
+    /// Les résultats bruts du moteur, triés par l'application (annonces et doublons écartés, classés par lien avec la question) avant que le modèle les voie.
+    static func hits(from results: [[String: Any]]) -> [SearchHit] {
+        results.map { SearchHit(title: $0["title"] as? String ?? "", url: $0["url"] as? String ?? "", snippet: $0["snippet"] as? String ?? "") }
     }
 
     func search(_ query: String) async -> AgentToolResult {
@@ -56,7 +50,9 @@ final class SearchTab: NSObject, WKNavigationDelegate {
         guard loaded, let raw = await web.callJSON(Self.extract, world: Self.world, seconds: 6) as? [[String: Any]], !raw.isEmpty else {
             return AgentToolResult(ok: false, text: "La recherche n'a rien renvoyé (pas de réseau, ou le moteur a refusé).", summary: "Recherche sans résultat")
         }
-        let formatted = Self.format(raw)
-        return AgentToolResult(ok: true, text: formatted.text, summary: "Recherche : \(query) (\(raw.count) résultats)", sources: formatted.sources)
+        let kept = SearchResultFilter.select(Self.hits(from: raw), query: query)
+        guard !kept.isEmpty else { return AgentToolResult(ok: false, text: "La recherche n'a rien renvoyé d'utilisable.", summary: "Recherche sans résultat") }
+        let formatted = SearchResultFilter.format(kept)
+        return AgentToolResult(ok: true, text: formatted.text, summary: "Recherche : \(query) (\(kept.count) résultats retenus sur \(raw.count))", sources: formatted.sources)
     }
 }

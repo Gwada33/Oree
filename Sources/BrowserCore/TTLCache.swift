@@ -35,3 +35,12 @@ public final class TTLCache<Value: Sendable>: @unchecked Sendable {
     public func removeAll() { lock.lock(); entries = [:]; lock.unlock() }
     public var count: Int { lock.lock(); defer { lock.unlock() }; return entries.count }
 }
+
+/// Une empreinte courte et stable d'un texte (FNV-1a 64 bits) : de quoi savoir si une page a changé, sans garder la page.
+public enum ContentSignature {
+    public static func of(_ text: String) -> String {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in text.utf8 { hash ^= UInt64(byte); hash = hash &* 0x100000001b3 }
+        return String(hash, radix: 16)
+    }
+}

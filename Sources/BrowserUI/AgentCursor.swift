@@ -1,7 +1,6 @@
 import AppKit
 import WebKit
 import BrowserCore
-import OreeAIClient
 
 /// Ce que l'exécuteur d'actions demande à la « présence » de Luciole dans la page : aller vers l'élément, appuyer, repartir.
 @MainActor
@@ -9,7 +8,8 @@ protocol AgentPresence: AnyObject {
     func reveal(rect: CGRect, in web: WKWebView, kind: PresenceKind) async
     func press() async
     func hold(_ pose: LucioleState)
-    func settle()
+    func follow(_ pose: LucioleState)
+    func settle(failed: Bool)
     func hideNow()
 }
 
@@ -19,8 +19,9 @@ enum PresenceKind {
     var pose: LucioleState { self == .type ? .write : .act }
 }
 
-/// Luciole qui se déplace dans la page : une petite luciole vole jusqu'à l'élément visé, un cadre d'accent l'entoure, elle « appuie » (une onde part de l'élément),
-/// puis elle repart vers le panneau quand la tâche est finie. Dessiné par Orée dans une couche au-dessus de la WKWebView — jamais injecté dans le DOM du site —
+/// Luciole qui se déplace dans la page. Pendant une tâche, elle reste en vue dans un coin de la page et sa pose suit ce qui se passe vraiment (elle réfléchit, lit,
+/// attend le fournisseur…) ; pour un geste, elle vole jusqu'à l'élément visé, un cadre d'accent l'entoure un instant, elle « appuie » (une onde part de l'élément),
+/// puis le cadre s'efface et elle regagne son coin. Quand la tâche est finie, elle repart vers le panneau. Dessiné par Orée dans une couche au-dessus de la WKWebView — jamais injecté dans le DOM du site —
 /// et sans prise sur la souris. Avec « réduire les animations », elle apparaît à sa place sans voler.
 @MainActor
 final class AgentCursor: NSView, AgentPresence {
@@ -30,6 +31,7 @@ final class AgentCursor: NSView, AgentPresence {
     private let tagLabel = NSTextField(labelWithString: "")
     private var target: CGPoint = .zero
     private var placed = false
+    private var atElement = false        // elle est près d'un élément (geste en cours, question ou validation) : elle n'en bouge pas d'elle-même
     private var generation = 0            // chaque nouvelle tâche (ou arrêt) invalide un départ programmé
 
     override var isFlipped: Bool { true }
@@ -63,6 +65,47 @@ final class AgentCursor: NSView, AgentPresence {
                                      leadingAnchor.constraint(equalTo: host.leadingAnchor), trailingAnchor.constraint(equalTo: host.trailingAnchor)])
     }
 
+    /// Son coin de repos : en haut à droite de la page, du côté du panneau.
+    private var dock: CGPoint { CGPoint(x: max(bounds.maxX - 34 - 18, 4), y: 14) }
+
+    /// La pose suit un événement réel de la tâche. Elle apparaît dans son coin à la première (une tâche qui démarre) et n'en bouge plus tant qu'aucun geste ne l'appelle.
+    func follow(_ pose: LucioleState) {
+        guard superview != nil, pose != .idle else { return }
+        generation += 1                                  // une tâche qui reprend annule un départ programmé
+        layoutSubtreeIfNeeded()
+        mascot.apply(pose)
+        if isHidden || !placed {
+            isHidden = false
+            ring.alphaValue = 0; tagBox.alphaValue = 0
+            mascot.frame.origin = CGPoint(x: bounds.maxX + 6, y: dock.y); mascot.alphaValue = 0
+            placed = true; atElement = false
+            if Motion.reduced { mascot.frame.origin = dock; mascot.alphaValue = 1; return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.35; context.timingFunction = Motion.timing; context.allowsImplicitAnimation = true
+                self.mascot.animator().frame.origin = self.dock
+                self.mascot.animator().alphaValue = 1
+            }
+        }
+    }
+
+    /// Le geste est fini : le cadre et l'étiquette s'effacent, la luciole regagne son coin (sauf si une autre action a commencé entre-temps).
+    private func release(after delay: Double) {
+        let mine = generation
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.generation == mine, !self.isHidden else { return }
+                self.atElement = false
+                if Motion.reduced { self.ring.alphaValue = 0; self.tagBox.alphaValue = 0; self.mascot.frame.origin = self.dock; return }
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.4; context.timingFunction = Motion.timing; context.allowsImplicitAnimation = true
+                    self.ring.animator().alphaValue = 0
+                    self.tagBox.animator().alphaValue = 0
+                    self.mascot.animator().frame.origin = self.dock
+                }
+            }
+        }
+    }
+
     /// Une durée de pause qui ne bloque pas le fil principal.
     private func pause(_ seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
 
@@ -79,6 +122,7 @@ final class AgentCursor: NSView, AgentPresence {
         let box = convert(rect, in: web)
         guard box.width > 0, box.height > 0 else { return }
         isHidden = false
+        atElement = true
         target = CGPoint(x: box.midX, y: box.midY)
         tagLabel.stringValue = kind.verb
         mascot.apply(kind.pose)
@@ -94,6 +138,7 @@ final class AgentCursor: NSView, AgentPresence {
         placed = true
         if Motion.reduced {
             mascot.frame.origin = home; mascot.alphaValue = 1; ring.alphaValue = 1; tagBox.alphaValue = 1
+            release(after: 1.4)
             await pause(0.15)
             return
         }
@@ -110,6 +155,7 @@ final class AgentCursor: NSView, AgentPresence {
                 self.ring.animator().alphaValue = 1
             }, completionHandler: { MainActor.assumeIsolated { continuation.resume() } })
         }
+        release(after: 1.5)                                       // le cadre ne reste pas posé là : il s'efface après le geste
         await pause(0.12)
     }
 
@@ -138,14 +184,18 @@ final class AgentCursor: NSView, AgentPresence {
     }
 
     /// Elle reste près de l'élément tant qu'une question ou une validation attend, avec la pose qui va avec.
-    func hold(_ pose: LucioleState) { if !isHidden { mascot.apply(pose) } }
+    func hold(_ pose: LucioleState) {
+        guard !isHidden else { return }
+        mascot.apply(pose)
+        if pose == .ask || pose == .wait, atElement { generation += 1 }       // une question ou une validation attend : elle ne s'éloigne pas
+    }
 
     /// Fin de tâche : le cadre s'efface et la luciole repart vers le panneau.
-    func settle() {
+    func settle(failed: Bool = false) {
         guard !isHidden else { return }
         generation += 1
         let mine = generation
-        mascot.apply(.happy)
+        mascot.apply(failed ? .err : .happy)
         let leave = { [weak self] in
             guard let self else { return }
             self.ring.alphaValue = 0; self.tagBox.alphaValue = 0
@@ -170,7 +220,7 @@ final class AgentCursor: NSView, AgentPresence {
     /// Arrêt immédiat (Stop, fermeture du panneau) : tout disparaît tout de suite.
     func hideNow() {
         generation += 1
-        isHidden = true; placed = false
+        isHidden = true; placed = false; atElement = false
         ring.alphaValue = 0; tagBox.alphaValue = 0; mascot.alphaValue = 0
     }
 }

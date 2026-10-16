@@ -92,10 +92,45 @@ import Foundation
     @Test func providerDefaultsToGroqOnlyWhenAKeyExists() {
         #expect(AIProvider.effective(stored: nil, keys: [.groq]) == .groq)
         #expect(AIProvider.effective(stored: nil, keys: [.groq, .mistral]) == .mistral)      // Mistral d'abord
-        #expect(AIProvider.effective(stored: nil, keys: []) == .local)
-        #expect(AIProvider.effective(stored: .local, keys: [.groq]) == .local)      // le choix explicite l'emporte
+        #expect(AIProvider.effective(stored: nil, keys: []) == .groq)                 // sans clé : Groq, et le panneau demande sa clé
+        #expect(AIProvider.effective(stored: .lmstudio, keys: [.groq]) == .lmstudio)  // le choix explicite l'emporte
+        #expect(AIProvider(rawValue: "local") == nil)                                  // l'ancien choix « modèle intégré » n'existe plus : il se lit comme « pas de choix »
         #expect(AIProvider.mistral.endpoint.host == "api.mistral.ai" && AIProvider.mistral.defaultModel == "mistral-small-latest")
         #expect(AIProvider.mistral.keychainService == "com.nolhan.hyperbrowser.mistral")
         #expect(GroqChat.parse(status: 401, body: Data(), provider: .mistral) == .failure(message: "Mistral a refusé la clé (401). Vérifiez-la dans Réglages › Assistant IA.", retryAfter: nil))
+    }
+
+    @Test func requestSendsOnlyTheAllowedToolsAndTheOutputLimit() throws {
+        let request = ModelRequest(messages: [ChatMessage(role: .system, content: "s"), ChatMessage(role: .user, content: "q")], tools: ["search_web"], maxTokens: 600)
+        let body = try #require(try JSONSerialization.jsonObject(with: GroqChat.requestBody(request, model: "m", stream: true)) as? [String: Any])
+        let names = (body["tools"] as? [[String: Any]] ?? []).compactMap { ($0["function"] as? [String: Any])?["name"] as? String }
+        #expect(Set(names) == ["search_web", "done"])                       // « done » est toujours permis : c'est la façon de répondre
+        #expect(body["max_tokens"] as? Int == 600)
+        #expect((body["stream_options"] as? [String: Any])?["include_usage"] as? Bool == true)
+    }
+
+    @Test func toolCallsAndTheirResultsTravelAsTheProviderExpects() throws {
+        let call = AgentCall(name: "click", argumentsJSON: "{\"ref\":\"@e3\"}")
+        let request = ModelRequest(messages: [
+            ChatMessage(role: .user, content: "q"),
+            ChatMessage(role: .assistant, content: "", calls: [("call_1", call)]),
+            ChatMessage(role: .tool, content: "<donnees>ok</donnees>", callID: "call_1"),
+        ], tools: AgentParser.tools, maxTokens: 500)
+        let body = try #require(try JSONSerialization.jsonObject(with: GroqChat.requestBody(request, model: "m")) as? [String: Any])
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        let assistant = messages[1]
+        let function = ((assistant["tool_calls"] as? [[String: Any]])?.first?["function"]) as? [String: Any]
+        #expect(function?["name"] as? String == "click" && function?["arguments"] as? String == "{\"ref\":\"@e3\"}")
+        #expect((assistant["tool_calls"] as? [[String: Any]])?.first?["id"] as? String == "call_1")
+        #expect(messages[2]["role"] as? String == "tool" && messages[2]["tool_call_id"] as? String == "call_1")
+    }
+
+    @Test func theStreamGivesTokensAndWhyItStopped() {
+        var assembler = ChatStreamAssembler()
+        assembler.feed(line: #"data: {"choices":[{"delta":{"content":"Bonj"}}]}"#)
+        assembler.feed(line: #"data: {"choices":[{"delta":{},"finish_reason":"length"}]}"#)
+        assembler.feed(line: #"data: {"choices":[],"usage":{"prompt_tokens":812,"completion_tokens":40}}"#)
+        #expect(assembler.usage?.prompt == 812 && assembler.usage?.completion == 40)
+        #expect(assembler.wasCutShort)
     }
 }
