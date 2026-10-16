@@ -1,3 +1,7 @@
+> **Mise à jour du 15 octobre 2026 : l'IA locale intégrée n'existe plus.** Le service OreeAI, llama.cpp, le modèle Qwen et son téléchargement ont été retirés de l'app
+> (voir `Docs/ia-optimisation.md`). Luciole parle à Groq, Mistral ou LM Studio. Ce document garde le contrat des outils et de la carte de page, qui restent valables ;
+> ce qui concerne le service local, son modèle et le LoRA est archivé dans `Docs/archive-ia-locale/`.
+
 # IA locale d'Orée
 
 Document commun aux deux sessions (voir « Qui fait quoi »). Source : « Orée — Plan de l'IA locale » (11 octobre 2026). Le bloc « Contrat » est

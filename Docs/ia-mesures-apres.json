@@ -1,0 +1,72 @@
+[
+ {
+  "scenario": "simple",
+  "finished": true,
+  "answer": "La capitale du Portugal est Lisbonne.",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 501,
+  "jetons_sortie": 36,
+  "contexte_car": 2368,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "page",
+  "finished": true,
+  "answer": "La population de Porto est d'environ 273 476 habitants.",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 2081,
+  "jetons_sortie": 48,
+  "contexte_car": 8118,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "resume",
+  "finished": true,
+  "answer": "Porto, également appelé Oporto, est la deuxième plus grande ville du Portugal et la capitale du district de Porto. La municipalité compte environ 273 476 habita",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 2324,
+  "jetons_sortie": 140,
+  "contexte_car": 8390,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "web",
+  "finished": true,
+  "answer": "Aujourd’hui à Lyon, il fait chaud, avec une température d’environ 25 °C, et le ciel est partiellement nuageux.",
+  "requêtes": 2,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 1557,
+  "jetons_sortie": 88,
+  "contexte_car": 7372,
+  "recherches": 1,
+  "lectures": 0,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "follow",
+  "finished": true,
+  "answer": "Madrid",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 504,
+  "jetons_sortie": 28,
+  "contexte_car": 2369,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ }
+]

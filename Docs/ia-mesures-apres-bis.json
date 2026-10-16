@@ -1,0 +1,72 @@
+[
+ {
+  "scenario": "simple",
+  "finished": true,
+  "answer": "La capitale du Portugal est Lisbonne.",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 501,
+  "jetons_sortie": 35,
+  "contexte_car": 2368,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "page",
+  "finished": true,
+  "answer": "La population de Porto est d'environ 273 476 habitants.",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 2081,
+  "jetons_sortie": 47,
+  "contexte_car": 8118,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "resume",
+  "finished": true,
+  "answer": "Porto, également appelé Oporto, est la deuxième plus grande ville du Portugal et la capitale du district du même nom. La municipalité compte environ 273 476 hab",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 2324,
+  "jetons_sortie": 140,
+  "contexte_car": 8390,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "web",
+  "finished": true,
+  "answer": "Je n'ai pas pu terminer. Écrivez « reprends » : je repars de là où j'en étais, sans refaire ce qui est fait.",
+  "requêtes": 7,
+  "relances": 3,
+  "échecs": 1,
+  "jetons_entrée": 2546,
+  "jetons_sortie": 111,
+  "contexte_car": 33869,
+  "recherches": 1,
+  "lectures": 1,
+  "actions_évitées": 0
+ },
+ {
+  "scenario": "follow",
+  "finished": true,
+  "answer": "La capitale de l'Espagne est Madrid.",
+  "requêtes": 1,
+  "relances": 0,
+  "échecs": 0,
+  "jetons_entrée": 504,
+  "jetons_sortie": 37,
+  "contexte_car": 2369,
+  "recherches": 0,
+  "lectures": 0,
+  "actions_évitées": 0
+ }
+]
