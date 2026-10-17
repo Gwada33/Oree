@@ -21,6 +21,7 @@ import Foundation
         if case .confirm = click(.init(ref: 2, tag: "button", label: "Continuer", isSubmit: true, inForm: true)) {} else { Issue.record("submit sans confirmation") }
         if case .confirm = click(.init(ref: 3, tag: "button", label: "Payer 49 €")) {} else { Issue.record("paiement sans confirmation") }
         if case .confirm = click(.init(ref: 4, tag: "a", label: "Voir", href: "/files/rapport.zip")) {} else { Issue.record("téléchargement sans confirmation") }
+        if case .confirm = click(.init(ref: 6, tag: "button", label: "Supprimer mon compte")) {} else { Issue.record("suppression sans confirmation") }
         if case .confirm = click(.init(ref: 5, tag: "a", label: "Voir", href: "/x", download: true)) {} else { Issue.record("download sans confirmation") }
     }
 

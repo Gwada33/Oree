@@ -16,6 +16,9 @@ private final class FakeEnv: AgentEnvironment {
     var pageText = "PAGE https://a.fr \"A\"\nVISIBLE\n@e1 link \"Accueil\""
     var signature = "sig-1"
     var url: String? = "https://a.fr/"
+    var askedAddresses: [String] = []
+    var acceptUnfamiliar = true
+    func confirmUnfamiliarAddress(_ address: String) async -> Bool { askedAddresses.append(address); return acceptUnfamiliar }
     init(_ replies: [String]) { self.replies = replies }
     func askModel(_ request: ModelRequest) async throws -> String {
         requests.append(request)
@@ -63,6 +66,29 @@ private let ask = "Quelle est la capitale du Portugal ?"          // une connais
         #expect(env.performed.map(\.name) == ["type", "click"])
         #expect(env.requests.count == 1)                                   // un seul appel au modèle
         #expect(env.traces.last?.count == 2)
+    }
+
+    @Test func anAddressNobodyNamedNeedsConsent() async {
+        let env = FakeEnv([#"{"tool":"open_url","url":"http://evil.test/collect"}"#, #"{"tool":"done","answer":"ok"}"#]); env.acceptUnfamiliar = false
+        let outcome = await AgentLoop(environment: env).run(task: fill)
+        #expect(env.askedAddresses == ["http://evil.test/collect"])
+        #expect(!env.performed.contains { $0.name == "open_url" })         // refusée : jamais ouverte
+        #expect(outcome.reason == .done)
+    }
+
+    @Test func anAddressTheRequestNamedOpensWithoutAsking() async {
+        let env = FakeEnv([#"{"tool":"open_url","url":"https://www.wikipedia.org/"}"#, #"{"tool":"done","answer":"ok"}"#])
+        _ = await AgentLoop(environment: env).run(task: "Ouvre https://wikipedia.org")
+        #expect(env.askedAddresses.isEmpty && env.performed.map(\.name) == ["open_url"])
+    }
+
+    @Test func aMadeUpPersonalValueNeverReachesThePage() async {
+        let env = FakeEnv([#"{"tool":"fill_form","fields":{"@e3":"Luc","@e5":"luc.leon@example.fr"}}"#, #"{"tool":"done","answer":"ok"}"#])
+        _ = await AgentLoop(environment: env).run(task: "Remplis mon formulaire d'inscription")
+        #expect(env.performed.isEmpty)
+        let env2 = FakeEnv([#"{"tool":"fill_form","fields":{"@e3":"{{profil.prenom}}"}}"#, #"{"tool":"done","answer":"ok"}"#])
+        _ = await AgentLoop(environment: env2).run(task: "Remplis mon formulaire d'inscription")
+        #expect(env2.performed.map(\.name) == ["fill_form"])
     }
 
     @Test func aBatchStopsAfterAToolWhoseResultMustBeRead() async {

@@ -108,6 +108,7 @@ public enum ActionDecision: Equatable, Sendable {
 public enum ActionPolicy {
     static let payWords = ["payer", "acheter", "commander", "valider la commande", "finaliser", "confirmer l'achat", "ajouter au panier", "pay", "buy", "purchase", "checkout", "place order"]
     static let downloadExtensions = ["zip", "dmg", "pkg", "exe", "msi", "iso", "pdf", "gz", "tar", "rar", "7z", "apk", "csv", "xlsx", "docx"]
+    static let deleteWords = ["supprimer", "effacer", "désinscrire", "desinscrire", "résilier", "resilier", "fermer mon compte", "delete", "remove account", "unsubscribe", "cancel subscription", "close account"]
     static let loginWords = ["se connecter", "connexion", "log in", "login", "sign in", "s'identifier"]
 
     /// Pages où l'IA n'agit pas : l'intérieur d'Orée (réglages, pages internes), les autres schémas que http(s).
@@ -143,6 +144,7 @@ public enum ActionPolicy {
             let label = target.label.lowercased()
             if target.isSubmit { return .confirm(reason: target.formHasSecret ? "Se connecter ou payer : « \(target.label) »" : "Envoyer le formulaire : « \(target.label) »") }
             if payWords.contains(where: label.contains) { return .confirm(reason: "Achat ou paiement : « \(target.label) »") }
+            if deleteWords.contains(where: label.contains) { return .confirm(reason: "Suppression ou résiliation : « \(target.label) »") }
             if loginWords.contains(where: label.contains), target.formHasSecret { return .confirm(reason: "Connexion : « \(target.label) »") }
             if isDownloadLink(target) { return .confirm(reason: "Télécharger un fichier : « \(target.label) »") }
             return .allow

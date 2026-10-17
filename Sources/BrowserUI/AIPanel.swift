@@ -774,6 +774,12 @@ extension AIPanelController: AgentEnvironment {
         }
     }
 
+    func confirmUnfamiliarAddress(_ address: String) async -> Bool {
+        let host = URL(string: address)?.host ?? address
+        return await confirm(ConfirmRequest(title: "Ouvrir ce site ?", rows: [(key: "Site", value: host), (key: "Adresse", value: String(address.prefix(160)))],
+                                            warning: "Ni votre demande ni une recherche ne mentionnaient ce site. Une page peut l'avoir suggéré : ouvrez-le seulement si vous le reconnaissez.", host: host))
+    }
+
     private func confirm(_ request: ConfirmRequest) async -> Bool {
         await withCheckedContinuation { continuation in
             confirmContinuation = continuation
