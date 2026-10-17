@@ -116,6 +116,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Orée peut parler à un serveur d'IA (LM Studio) installé sur une autre machine de votre réseau.</string>
     <key>NSCameraUsageDescription</key>
     <string>Les sites web que vous autorisez peuvent utiliser la caméra (visioconférence, photo).</string>
     <key>NSMicrophoneUsageDescription</key>

@@ -1373,15 +1373,17 @@ final class AssistantProviderModel: ObservableObject {
         lmStatus = "Recherche des modèles…"
         let base = SettingsStore.shared.lmStudioBase
         Task { @MainActor in
-            var request = URLRequest(url: LMStudio.modelsURL(base: base), timeoutInterval: 3)
+            var request = URLRequest(url: LMStudio.modelsURL(base: base), timeoutInterval: 8)
             request.httpMethod = "GET"
-            if let (data, response) = try? await URLSession.shared.data(for: request), (response as? HTTPURLResponse)?.statusCode == 200 {
+            var failure = "aucune réponse"
+            let reply: (Data, URLResponse)? = await { do { return try await URLSession.shared.data(for: request) } catch { failure = "\((error as NSError).localizedDescription) (code \((error as NSError).code))"; return nil } }()
+            if let (data, response) = reply, (response as? HTTPURLResponse)?.statusCode == 200 {
                 lmModels = LMStudio.parseModels(data)
                 lmStatus = lmModels.isEmpty ? "Le serveur répond mais aucun modèle de conversation n'est chargé." : "\(lmModels.count) modèle\(lmModels.count > 1 ? "s" : "") trouvé\(lmModels.count > 1 ? "s" : "") sur \(base.host ?? "le serveur")."
                 if !lmModels.contains(model) { model = lmModels.first ?? "" }
             } else {
                 lmModels = []
-                lmStatus = "LM Studio ne répond pas sur \(base.absoluteString). Lancez-le et démarrez le serveur local (Developer › Start Server)."
+                lmStatus = "LM Studio ne répond pas sur \(base.absoluteString) : \(failure). Lancez-le et démarrez le serveur local (Developer › Start Server) ; sur une autre machine, autorisez Orée dans Réglages Système › Confidentialité et sécurité › Réseau local."
             }
         }
     }

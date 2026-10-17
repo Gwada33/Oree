@@ -60,15 +60,21 @@ final class AIPanelController {
     private var cloudKeyPresent: Bool { cloudKeys.contains(provider) }
     /// LM Studio : le serveur local répond-il (nil : pas encore essayé) et quels modèles de conversation propose-t-il ?
     private var lmStudio: (reachable: Bool?, models: [String]) = (nil, [])
+    private var lmStudioError = ""
     private var lmModel: String? { LMStudio.chooseModel(preferred: SettingsStore.shared.aiModel(for: .lmstudio), available: lmStudio.models) }
 
     private func probeLMStudio() async {
         let url = LMStudio.modelsURL(base: SettingsStore.shared.lmStudioBase)
-        var request = URLRequest(url: url, timeoutInterval: 3)
+        // 8 s : la première connexion à une machine du réseau attend la réponse à la fenêtre macOS « Réseau local ».
+        var request = URLRequest(url: url, timeoutInterval: 8)
         request.httpMethod = "GET"
-        if let (data, response) = try? await URLSession.shared.data(for: request), (response as? HTTPURLResponse)?.statusCode == 200 {
-            lmStudio = (true, LMStudio.parseModels(data))
-        } else { lmStudio = (false, []) }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if (response as? HTTPURLResponse)?.statusCode == 200 { lmStudio = (true, LMStudio.parseModels(data)); lmStudioError = "" }
+            else { lmStudio = (false, []); lmStudioError = "réponse HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)" }
+        } catch {
+            lmStudio = (false, []); lmStudioError = "\((error as NSError).localizedDescription) (code \((error as NSError).code))"
+        }
         refresh()
     }
     /// Le fournisseur en usage : Groq, Mistral ou LM Studio. Les pages lues partent chez le fournisseur en nuage quand il est choisi : le panneau le dit.
@@ -451,7 +457,7 @@ final class AIPanelController {
             let base = SettingsStore.shared.lmStudioBase.absoluteString
             return lmStudio.reachable == true
                 ? .init(title: "Aucun modèle chargé dans LM Studio.", text: "Le serveur répond, mais il ne propose aucun modèle de conversation. Chargez-en un dans LM Studio, puis réessayez.", primary: ("Réessayer", .retry))
-                : .init(title: "LM Studio n'est pas joignable.", text: "Lancez LM Studio, chargez un modèle et démarrez le serveur local (onglet Developer › Start Server). Adresse essayée : \(base). Le reste d'Orée fonctionne normalement.", primary: ("Réessayer", .retry))
+                : .init(title: "LM Studio n'est pas joignable.", text: "Lancez LM Studio, chargez un modèle et démarrez le serveur local (onglet Developer › Start Server). Adresse essayée : \(base). Erreur : \(lmStudioError.isEmpty ? "aucune réponse" : lmStudioError). Si LM Studio est sur une autre machine : Réglages Système › Confidentialité et sécurité › Réseau local › activez Orée. Le reste d'Orée fonctionne normalement.", primary: ("Réessayer", .retry))
         }
         if provider.isCloud, !cloudKeyPresent {
             return .init(title: "Ajoutez votre clé \(provider.displayName).", text: "Réglages › Assistant IA › \(provider.displayName) : collez votre clé API. Elle reste dans le Trousseau de ce Mac.")
