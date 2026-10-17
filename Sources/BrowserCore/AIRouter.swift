@@ -31,7 +31,7 @@ public enum AIRouter {
         switch route {
         case .direct:
             // Sans page. Une page à lire reste possible (read_page) et une recherche aussi, mais le modèle n'en reçoit ni le texte ni l'obligation.
-            return AIPlan(route: .direct, includePage: false, tools: base + (pageReadable ? ["read_page"] : []) + ["search_web"], maxSearches: 1, maxTokens: 900, maxSteps: 4, keepsConversation: follow)
+            return AIPlan(route: .direct, includePage: false, tools: base + (pageReadable ? ["read_page"] : []) + ["search_web", "calculate", "search_history"], maxSearches: 1, maxTokens: 900, maxSteps: 4, keepsConversation: follow)
         case .page:
             return AIPlan(route: .page, includePage: true, tools: base + ["scroll", "search_web"], maxSearches: 1, maxTokens: 1100, maxSteps: 6, keepsConversation: follow)
         case .web:

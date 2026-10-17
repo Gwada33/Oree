@@ -529,7 +529,20 @@ extension BrowserWindowController {
             openTab: { [weak self] url in _ = self?.newTab(urlString: url.absoluteString, isPrivate: false) },
             windowWidth: { [weak self] in self?.window?.contentView?.bounds.width ?? 1200 },
             isPrivate: { [weak self] in self?.activeTab?.isPrivate ?? false },
-            onLayout: { [weak self] pushed in self?.pushPage(by: pushed) })
+            onLayout: { [weak self] pushed in self?.pushPage(by: pushed) },
+            searchHistory: { [weak self] query in
+                guard let self else { return [] }
+                let history = ((try? self.historyRepo.search(matching: query, limit: 8)) ?? []).map { (title: $0.title, url: $0.url) }
+                let needle = query.lowercased()
+                let marks = ((try? self.bookmarkRepo.all()) ?? []).filter { $0.title.lowercased().contains(needle) || $0.url.lowercased().contains(needle) }.prefix(5).map { (title: $0.title, url: $0.url) }
+                return Array(marks) + history
+            },
+            addNote: { [weak self] text in self?.openNotes(append: text) },
+            openAnswerPage: { [weak self] title, html in
+                guard let self else { return }
+                let opened = self.newTab(urlString: nil, isPrivate: self.activeTab?.isPrivate ?? false)
+                opened.webView?.loadHTMLString(html, baseURL: nil)
+            })
         let created = AIPanelController(contentView: contentView, top: contentContainer.topAnchor, hooks: hooks)
         created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open; self?.journalPanel("ai", open: open) }
         created.onTaskFinished = { [weak self] route, ms, ok, usage in

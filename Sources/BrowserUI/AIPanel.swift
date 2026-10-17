@@ -18,6 +18,9 @@ final class AIPanelController {
         var windowWidth: () -> CGFloat
         var isPrivate: () -> Bool                  // l'onglet actif est privé : rien n'est gardé
         var onLayout: (CGFloat) -> Void           // largeur dont la page doit s'écarter (0 : rien)
+        var searchHistory: (String) -> [(title: String, url: String)]     // historique et favoris (jamais appelé en navigation privée)
+        var addNote: (String) -> Void
+        var openAnswerPage: (_ title: String, _ html: String) -> Void   // la réponse mise en page, dans un nouvel onglet
     }
 
     private let panel = AIPanelView()
@@ -109,6 +112,7 @@ final class AIPanelController {
         panel.onConfirm = { [weak self] ok in self?.resolveConfirm(ok) }
         panel.onAnswer = { [weak self] text in self?.resolveQuestion(text) }
         panel.onCopy = { text in NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
+        panel.onOpenPage = { [weak self] source in self?.hooks.openAnswerPage("Réponse de Luciole", Markdown.page(title: "Réponse de Luciole", source: source)) }
         panel.onOpenSource = { [weak self] url in
             guard let self else { return }
             self.inheritFrom = self.currentTab
@@ -735,6 +739,32 @@ extension AIPanelController: AgentEnvironment {
             AIUsageMeter.shared.record { $0.pageReads += 1 }
             guard pageIsReadable, let web = hooks.activeWebView(), let map = await PageMapScript.capture(web) else { return AgentToolResult(ok: false, text: "Aucune page lisible.", summary: "Page non lisible") }
             return AgentToolResult(ok: true, text: map.render(maxElements: 0, maxText: 2400, focus: currentTask), summary: "Lecture de la page")
+        case "calculate":
+            return AgentLocalTools.calculate(args["expression"] as? String ?? "")
+        case "search_history":
+            guard !hooks.isPrivate() else { return AgentToolResult(ok: false, text: "L'historique n'est pas consulté depuis un onglet privé.", summary: "Onglet privé") }
+            guard let query = args["query"] as? String, !query.isEmpty else { return AgentToolResult(ok: false, text: "Il manque « query ».", summary: "Requête vide") }
+            return AgentLocalTools.history(query: query, entries: hooks.searchHistory(query))
+        case "add_note":
+            guard !hooks.isPrivate() else { return AgentToolResult(ok: false, text: "Aucune note n'est écrite depuis un onglet privé.", summary: "Onglet privé") }
+            guard let text = args["text"] as? String, !text.trimmingCharacters(in: .whitespaces).isEmpty else { return AgentToolResult(ok: false, text: "Il manque « text ».", summary: "Texte vide") }
+            hooks.addNote(text)
+            return AgentToolResult(ok: true, text: "Ajouté à la note.", summary: "Ajouté à votre note")
+        case "history_nav":
+            guard let web = hooks.activeWebView() else { return AgentToolResult(ok: false, text: "Aucune page ouverte.") }
+            switch args["direction"] as? String {
+            case "back": guard web.canGoBack else { return AgentToolResult(ok: false, text: "Il n'y a pas de page précédente.", summary: "Pas de page précédente") }; web.goBack()
+            case "forward": guard web.canGoForward else { return AgentToolResult(ok: false, text: "Il n'y a pas de page suivante.", summary: "Pas de page suivante") }; web.goForward()
+            case "reload": web.reload()
+            default: return AgentToolResult(ok: false, text: "direction : back, forward ou reload.", summary: "Direction inconnue")
+            }
+            try? await Task.sleep(for: .seconds(1.2))
+            return AgentToolResult(ok: true, text: "Page affichée : \(web.title ?? web.url?.host ?? "chargement")", summary: "Navigation faite")
+        case "wait":
+            let limit = Date().addingTimeInterval(AgentLocalTools.waitSeconds(args["seconds"]))
+            try? await Task.sleep(for: .seconds(0.5))
+            while Date() < limit, hooks.activeWebView()?.isLoading == true { try? await Task.sleep(for: .seconds(0.25)) }
+            return AgentToolResult(ok: true, text: "J'ai attendu.", summary: "Attente")
         case "ask_user":
             guard let question = args["question"] as? String, !question.isEmpty else { return AgentToolResult(ok: false, text: "Il manque « question ».") }
             guard let answer = await ask(question) else { return AgentToolResult(ok: false, text: "La personne n'a pas répondu.", summary: "Sans réponse") }

@@ -284,6 +284,7 @@ final class AIPanelView: SurfaceView, NSTextViewDelegate {
     var onConfirm: ((Bool) -> Void)?
     var onAnswer: ((String?) -> Void)?
     var onCopy: ((String) -> Void)?
+    var onOpenPage: ((String) -> Void)?
     var onOpenSource: ((URL) -> Void)?
     var onRefresh: (() -> Void)?
     var onResize: ((CGFloat) -> Void)? { didSet { handle.onDrag = onResize } }
@@ -727,8 +728,8 @@ final class AIPanelView: SurfaceView, NSTextViewDelegate {
 
     private func answerText(_ string: String, caret: Bool) -> NSView {
         let label = text(string, size: 13, lineHeight: 1.6)
-        guard caret else { return label }
-        label.stringValue = string + " ▍"; setLineHeight(label, 1.6)
+        let rendered = NSMutableAttributedString(attributedString: MarkdownRenderer.attributed(caret ? string + " ▍" : string))
+        label.attributedStringValue = rendered
         return label
     }
 
@@ -898,6 +899,11 @@ final class AIPanelView: SurfaceView, NSTextViewDelegate {
         }
         let spacer = NSView(); spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         views.append(spacer)
+        if MarkdownRenderer.deservesAPage(message.text) {
+            let page = CopyButton(title: "Ouvrir en page", symbol: "doc.richtext", width: 118, label: "Ouvrir la réponse en page", flash: false)
+            page.onClick = { [weak self] in self?.onOpenPage?(message.text) }
+            views.append(page)
+        }
         let copy = CopyButton(); copy.onClick = { [weak self] in self?.onCopy?(message.text) }
         views.append(copy)
         return row(views, spacing: 8)
@@ -1108,19 +1114,21 @@ private final class ClickableSurface: SurfaceView {
 private final class CopyButton: HoverView {
     var onClick: (() -> Void)?
     private var copied = false
-    override init(frame: NSRect) {
-        super.init(frame: frame)
+    private let title: String, symbol: String, width: CGFloat, flash: Bool
+    init(title: String = "Copier", symbol: String = "doc.on.doc", width: CGFloat = 74, label: String = "Copier la réponse", flash: Bool = true) {
+        self.title = title; self.symbol = symbol; self.width = width; self.flash = flash
+        super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         heightAnchor.constraint(equalToConstant: 28).isActive = true
-        setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel("Copier la réponse")
+        setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel(label)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override var intrinsicContentSize: NSSize { NSSize(width: 74, height: 28) }
+    override var intrinsicContentSize: NSSize { NSSize(width: width, height: 28) }
     override func draw(_ dirtyRect: NSRect) {
         if hover > 0.001 { Theme.hover.scaled(hover).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill() }
-        let image = NSImage.oreeSymbol(copied ? "checkmark" : "doc.on.doc", size: 12, weight: .regular) { Theme.muted }
+        let image = NSImage.oreeSymbol(copied ? "checkmark" : symbol, size: 12, weight: .regular) { Theme.muted }
         image.draw(in: NSRect(x: 8, y: bounds.midY - 7, width: 14, height: 14))
-        let text = NSAttributedString(string: copied ? "Copié" : "Copier", attributes: [.font: Theme.sans(12, .medium), .foregroundColor: Theme.muted])
+        let text = NSAttributedString(string: copied ? "Copié" : title, attributes: [.font: Theme.sans(12, .medium), .foregroundColor: Theme.muted])
         text.draw(at: NSPoint(x: 28, y: bounds.midY - text.size().height / 2))
     }
     override func updateTrackingAreas() {
@@ -1132,7 +1140,9 @@ private final class CopyButton: HoverView {
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
-        onClick?(); copied = true; needsDisplay = true
+        onClick?()
+        guard flash else { return }
+        copied = true; needsDisplay = true
         Task { try? await Task.sleep(for: .seconds(1.5)); self.copied = false; self.needsDisplay = true }
     }
     override func accessibilityPerformPress() -> Bool { onClick?(); return true }
