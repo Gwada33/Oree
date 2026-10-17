@@ -312,6 +312,8 @@ public final class AgentLoop {
                         case .run:
                             if call.name == "search_web", searches >= min(limits.searches, plan.maxSearches) {
                                 result = AgentToolResult(ok: false, text: "Plafond de recherches atteint. Réponds avec ce que tu as.", summary: "Plafond de recherches")
+                            } else if call.name == "open_url", let why = OpenURLGuard.problem(task: task, urlString: ((try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8))) as? [String: Any])?["url"] as? String ?? "", knownSources: sources) {
+                                result = AgentToolResult(ok: false, text: why, summary: "Adresse refusée")
                             } else if call.name == "open_url", pages >= limits.pages {
                                 result = AgentToolResult(ok: false, text: "Plafond de \(limits.pages) pages atteint. Réponds avec ce que tu as.", summary: "Plafond de pages")
                             } else {

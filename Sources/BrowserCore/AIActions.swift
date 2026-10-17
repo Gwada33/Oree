@@ -26,7 +26,8 @@ public enum AIAction: Equatable, Sendable {
     static func ref(_ any: Any?) -> Int? {
         if let n = any as? Int { return n }
         guard let s = any as? String else { return nil }
-        return Int(s.drop { $0 == "@" || $0 == "e" || $0 == "E" })
+        // Tolère les parasites d'un petit modèle (« (@e4 », « @e4: ») : le premier nombre de la référence.
+        return Int(s.drop { !$0.isNumber }.prefix { $0.isNumber })
     }
 
     /// Lit un appel d'outil du modèle (nom + arguments JSON). Les outils sans geste sur la page (`search_web`, `done`…) ne sont pas ici.
