@@ -85,6 +85,8 @@ def main():
         check("la saisie déjà faite est visible dans la trace", "done:Saisie dans" in s)
         resolve("yes")
         check("validée, la tâche se termine avec la réponse", wait_for(lambda: "running=false" in state() and "Formulaire envoyé." in state(), 25))
+        if os.environ.get("HB_LUCIOLE_PAGE"):
+            check("dans la page : après la tâche, Luciole retourne dormir (mode repos, chemin gardé, bulle de fin)", wait_for(lambda: "mode=rest" in state() and "rest=true" in state() and "restBubble=-" not in state(), 12))
         check("le formulaire a bien été envoyé une fois", js("window.__submits") == "1")
         check("la trace garde les deux actions", state().count("done:") == 2)
 

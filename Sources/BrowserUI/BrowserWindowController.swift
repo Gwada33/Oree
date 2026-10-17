@@ -272,6 +272,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     let customizeButton = ChromeIconButton(symbol: "paintbrush", label: "Personnaliser  ⌘,")
     let moreButton = ChromeIconButton(symbol: "ellipsis", label: "Palette de commandes  ⌘K")
     let assistantButton = ChromeIconButton(symbol: "sparkles", label: "Assistant (Luciole)  ⌘J")
+    /// Luciole qui dort dans la barre d'outils (28 pt) : elle la quitte quand on l'appelle et y revient ensuite.
+    let assistantMascot = LucioleView(size: 28)
     /// La rangée de boutons du bas de la barre latérale, et ce qui la complète à droite (espace libre, « N en veille »).
     var footerStack: NSStackView?
     var footerTail: [NSView] = []

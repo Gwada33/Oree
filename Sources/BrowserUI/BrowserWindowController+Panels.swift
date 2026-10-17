@@ -552,6 +552,14 @@ extension BrowserWindowController {
                 self.showToolNotice("Passage gardé dans votre liste de lecture.")
             })
         let created = AIPanelController(contentView: contentView, top: contentContainer.topAnchor, hooks: hooks)
+        created.onRestPose = { [weak self] pose in
+            guard let self, SettingsStore.shared.lucioleInPage else { return }
+            if let pose { self.assistantMascot.apply(pose) }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Motion.reduced ? 0 : 0.3
+                self.assistantMascot.animator().alphaValue = pose == nil ? 0 : 1          // « Luciole quitte la barre d'outils » : elle est dans la page
+            }
+        }
         created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open; self?.journalPanel("ai", open: open) }
         created.onTaskFinished = { [weak self] route, ms, ok, usage in
             self?.journal.emit("ai.task", ["route": .string(route), "req": .int(usage.requests), "tin": .int(usage.promptTokens), "tout": .int(usage.completionTokens), "ms": .int(ms),

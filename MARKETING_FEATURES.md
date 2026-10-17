@@ -110,6 +110,15 @@
 | **Inspecter l'élément** | Clic droit : ouvre l'inspecteur web. | 🔶 (ouverture non vue à l'écran) | ⭐ |
 | **AirPlay** | Envoyer une vidéo vers une Apple TV ou un écran compatible. | 🔶 (activé, jamais essayé avec un appareil) | ⭐ |
 
+### 2.7 Luciole vit dans la page — ⭐⭐
+| Fonction | Ce que ça fait pour l'utilisateur | Statut | Unicité |
+|---|---|---|---|
+| **Luciole dans la page** | ⌘J ouvre une capsule de verre en bas de la page, plus de panneau latéral ; la mascotte dort dans la barre d'outils et y revient. | ✅ (verre vu sur macOS 27) | ⭐⭐ |
+| **Sélectionner, c'est demander** | Sélectionnez un passage : Expliquer, Traduire ou Garder apparaissent à côté. La réponse s'écrit à côté du passage, surligné et relié par un fil de lumière. | ✅ (page de test) | ⭐⭐ |
+| **Valider en voyant** | Avant tout envoi, paiement ou connexion, la page s'assombrit autour du bouton et une carte montre en clair ce qui va partir. Rien ne part sans votre clic, Entrée ne valide jamais. | ✅ | ⭐⭐ |
+| **Le chemin de l'agent** | Chaque action de Luciole laisse une étape numérotée sur la page ; une pastille « Arrêter » reste en haut. | ✅ (tâche de 2 étapes) | ⭐⭐ |
+| **Réponses mises en page** | Tableaux, listes, titres, code ; « Ouvrir en page » pour lire en grand. | ✅ | ⭐ |
+
 ---
 
 ## 3. Arguments par public

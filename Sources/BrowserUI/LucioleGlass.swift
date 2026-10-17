@@ -143,6 +143,8 @@ final class LucioleGlassButton: LucioleGlass {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    func setTitle(_ title: String) { label.stringValue = title; setAccessibilityLabel(title) }
+
     /// La largeur dont la pastille a besoin (icône, texte, marges), pour la poser sans la couper.
     var idealWidth: CGFloat { ceil(label.intrinsicContentSize.width) + (icon.image == nil ? 32 : 52) + (label.superview?.subviews.contains { $0 !== label && $0 !== icon && $0 is NSTextField } == true ? 28 : 0) }
 

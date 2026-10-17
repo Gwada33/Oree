@@ -160,6 +160,7 @@ extension BrowserWindowController {
         downloads.resumeWebView = { [weak self] in self?.activeTab?.webView }
         downloads.start()
         assistantButton.onClick = { [weak self] in self?.askAIAction() }
+        if SettingsStore.shared.lucioleInPage { assistantButton.setCustomContent(assistantMascot); assistantMascot.apply(.sleep) }
         applyChromeLayout()
         return bar
     }

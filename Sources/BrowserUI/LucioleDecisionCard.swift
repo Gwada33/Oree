@@ -6,7 +6,7 @@ import BrowserCore
 /// Annuler est le choix par défaut ; « Valider » ne répond qu'après 1,2 s ; Entrée ne valide jamais ; Échap annule.
 @MainActor
 final class LucioleDecisionCard: LucioleGlass {
-    enum Kind { case confirm, question }
+    enum Kind { case confirm, question, model }
     var onPrimary: ((String?) -> Void)?
     var onCancel: (() -> Void)?
 
@@ -56,6 +56,7 @@ final class LucioleDecisionCard: LucioleGlass {
     /// Les rôles « alerte » n'existent pas dans AppKit : le groupe est étiqueté « Alerte » et annoncé à VoiceOver quand il apparaît.
     func show(confirm request: ConfirmRequest, armed: Bool) {
         kind = .confirm
+        primary.isHidden = false; cancel.setTitle("Annuler")
         kicker.stringValue = "Je m'arrête ici · à toi de décider"
         titleLabel.stringValue = request.title
         detail.stringValue = request.warning
@@ -78,6 +79,7 @@ final class LucioleDecisionCard: LucioleGlass {
 
     func show(question: String) {
         kind = .question
+        primary.isHidden = false; cancel.setTitle("Annuler")
         kicker.stringValue = "Luciole a besoin d'une précision"
         titleLabel.stringValue = question
         detail.stringValue = "Votre réponse n'est envoyée qu'au fournisseur choisi, et ne sert qu'à cette tâche."
@@ -88,6 +90,21 @@ final class LucioleDecisionCard: LucioleGlass {
         primary.setAccessibilityLabel("Répondre")
     }
 
+    /// L'état du modèle (à installer, injoignable, clé manquante…) : une carte sobre, avec « Réessayer » quand il y a quelque chose à retenter.
+    func show(model title: String, text: String, primary action: String?) {
+        kind = .model
+        kicker.stringValue = "Luciole n'est pas prête"
+        titleLabel.stringValue = title
+        detail.stringValue = text
+        rowsStack.isHidden = true; field.isHidden = true
+        primary.isHidden = action == nil
+        primaryLabel.stringValue = action ?? ""
+        cancel.setTitle("Fermer")
+        setArmed(true)
+        setAccessibilityLabel("Luciole n'est pas prête. \(title). \(text)")
+        primary.setAccessibilityLabel(action ?? "")
+    }
+
     /// « Valider » ne répond qu'après 1,2 s : impossible à valider d'un clic réflexe.
     func setArmed(_ on: Bool) { armed = on; primary.alphaValue = on ? 1 : 0.4 }
 
@@ -95,6 +112,7 @@ final class LucioleDecisionCard: LucioleGlass {
 
     @objc private func primaryTapped() {
         guard armed else { return }
+        if kind == .model { onPrimary?(nil); return }
         if kind == .question {
             let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return }
@@ -103,7 +121,7 @@ final class LucioleDecisionCard: LucioleGlass {
     }
 
     /// Entrée ne valide jamais : sur une validation, elle annule ; sur une question, elle envoie la réponse écrite.
-    func returnPressed() { if kind == .confirm { onCancel?() } else { primaryTapped() } }
+    func returnPressed() { if kind == .confirm || kind == .model { onCancel?() } else { primaryTapped() } }
 
     func focusDefault() { window?.makeFirstResponder(kind == .question ? field : nil) }
 

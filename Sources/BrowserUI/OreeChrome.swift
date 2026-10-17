@@ -197,6 +197,14 @@ final class ChromeIconButton: HoverView {
         layer.add(pop, forKey: "pulse")
     }
 
+    /// Remplace l'icône par une vue (la mascotte de Luciole, qui dort dans la barre d'outils) ; la vue est centrée et ne prend pas la souris.
+    func setCustomContent(_ view: NSView) {
+        icon.isHidden = true
+        view.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(view)
+        NSLayoutConstraint.activate([view.centerXAnchor.constraint(equalTo: centerXAnchor), view.centerYAnchor.constraint(equalTo: centerYAnchor)])
+    }
+
     private func refreshImage() {
         let active = isActive
         icon.image = .oreeSymbol(symbol, size: pointSize, weight: .regular) { active ? Theme.accentInk : Theme.muted }

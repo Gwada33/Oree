@@ -28,6 +28,13 @@ struct LucioleOverlayModel {
     var actionTotal = 15
     var actionLines: [String] = []
     var path: [(step: Int, rect: CGRect)] = []
+    // État du modèle (à installer, injoignable…) : une carte, sans panneau.
+    var modelTitle: String?
+    var modelText = ""
+    var modelPrimary: String?
+    // Repos : Luciole est retournée dormir dans la barre d'outils ; il ne reste que le chemin (60 s) et, 4 s, une petite bulle sous la barre d'outils.
+    var rest = false
+    var restBubble: String?
 }
 
 /// Luciole qui vit DANS la page : une couche native transparente posée au-dessus de la WKWebView de l'onglet actif. Elle ne laisse passer les clics que sur ses
@@ -43,6 +50,9 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     var onGesture: ((SelectionPassage.Gesture) -> Void)?
     var onConfirm: ((Bool) -> Void)?
     var onAnswer: ((String?) -> Void)?
+    var onModelPrimary: (() -> Void)?
+    private let restBubbleView = LucioleGlass(radius: 20)
+    private let restLabel = NSTextField(labelWithString: "")
     private let decisionCard = LucioleDecisionCard()
     private let actionPill = LucioleGlass(radius: 21, dense: true)
     private let pillDot = NSView(), pillTitle = NSTextField(labelWithString: ""), pillStep = NSTextField(labelWithString: "")
@@ -54,7 +64,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     private var traceOpen = false
 
     /// Ce que la couche montre : la capsule d'appel, la seule bulle de réponse ancrée à un passage (venue d'un geste), ou l'éventail seul.
-    private enum Mode { case capsule, answerOnly }
+    private enum Mode { case capsule, answerOnly, rest }
     private var mode: Mode = .capsule
     private let fanMascot = LucioleView(size: 42)
     private var fan: [LucioleGlassButton] = []
@@ -110,9 +120,20 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         pathLine.strokeColor = Theme.accent.cgColor; pathLine.lineWidth = 3
         pathGlow.strokeColor = Theme.accent.withAlphaComponent(0.35).cgColor; pathGlow.lineWidth = 9
         buildActionPill()
-        for v in [decisionCard, actionPill, traceBubble] { addSubview(v); v.isHidden = true }
-        decisionCard.onPrimary = { [weak self] text in guard let self else { return }; if self.decisionCard.kind == .question { self.onAnswer?(text) } else { self.onConfirm?(true) } }
-        decisionCard.onCancel = { [weak self] in guard let self else { return }; if self.decisionCard.kind == .question { self.onAnswer?(nil) } else { self.onConfirm?(false) } }
+        restLabel.font = Theme.sans(13.5, .medium); restLabel.textColor = Theme.text; restLabel.translatesAutoresizingMaskIntoConstraints = false
+        restBubbleView.content.addSubview(restLabel)
+        NSLayoutConstraint.activate([restLabel.leadingAnchor.constraint(equalTo: restBubbleView.content.leadingAnchor, constant: 16), restLabel.trailingAnchor.constraint(equalTo: restBubbleView.content.trailingAnchor, constant: -16),
+                                     restLabel.centerYAnchor.constraint(equalTo: restBubbleView.content.centerYAnchor)])
+        restBubbleView.setAccessibilityElement(true); restBubbleView.setAccessibilityRole(.staticText)
+        for v in [decisionCard, actionPill, traceBubble, restBubbleView] { addSubview(v); v.isHidden = true }
+        decisionCard.onPrimary = { [weak self] text in
+            guard let self else { return }
+            switch self.decisionCard.kind { case .question: self.onAnswer?(text); case .confirm: self.onConfirm?(true); case .model: self.onModelPrimary?() }
+        }
+        decisionCard.onCancel = { [weak self] in
+            guard let self else { return }
+            switch self.decisionCard.kind { case .question: self.onAnswer?(nil); case .confirm: self.onConfirm?(false); case .model: self.onClose?() }
+        }
         setAccessibilityElement(false)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -225,7 +246,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = superview.map { convert(point, from: $0) } ?? point
-        let interactive: [NSView] = [capsule, bubble, decisionCard, actionPill, traceBubble] + pills + fan
+        let interactive: [NSView] = [capsule, bubble, decisionCard, actionPill, traceBubble, restBubbleView] + pills + fan
         return interactive.contains { !$0.isHidden && $0.frame.contains(local) } ? super.hitTest(point) : nil     // partout ailleurs : la page reçoit le clic
     }
 
@@ -268,6 +289,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
 
     /// L'appel : Luciole quitte la barre d'outils (`from`, en coordonnées de fenêtre) et descend dans la capsule.
     func present(from toolbarButton: NSRect?) {
+        if presented, mode == .rest { presented = false; restBubbleView.isHidden = true }
         guard !presented else { return }
         hideFan()
         mode = .capsule
@@ -279,7 +301,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         startAura()
         installKeyMonitor()
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            guard let self, self.presented, self.mode == .capsule, self.model?.stage == .call, event.window === self.window else { return event }
+            guard let self, self.presented, self.mode == .capsule, self.model?.stage == .call || self.model?.stage == .protected, event.window === self.window else { return event }
             let point = self.convert(event.locationInWindow, from: nil)
             let inside = ([self.capsule] + self.pills).contains { !$0.isHidden && $0.frame.contains(point) }
             if !inside { DispatchQueue.main.async { self.onClose?() } }          // un clic hors de la capsule la renvoie dormir (le clic atteint aussi la page)
@@ -348,14 +370,34 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         updateBubble(model)
         updateDecision(model)
         updateAction(model)
+        updateRest(model)
         relayout()
+    }
+
+    private func updateRest(_ model: LucioleOverlayModel) {
+        let text = model.restBubble ?? model.protectedLine
+        if let text, !text.isEmpty {
+            if restLabel.stringValue != text || restBubbleView.isHidden {
+                restLabel.stringValue = text
+                restBubbleView.setAccessibilityLabel(text)
+                let wasHidden = restBubbleView.isHidden
+                restBubbleView.isHidden = false
+                if wasHidden { restBubbleView.appear() }
+                if let window { NSAccessibility.post(element: window, notification: .announcementRequested, userInfo: [.announcement: text]) }
+            }
+        } else if !restBubbleView.isHidden { restBubbleView.disappear() }
     }
 
     // MARK: Décision, action, chemin
 
     private var decisionKey = ""
     private func updateDecision(_ model: LucioleOverlayModel) {
-        let key = model.confirm.map { "c:\($0.title)|\($0.rows.map { "\($0.key)=\($0.value)" }.joined(separator: ";"))" } ?? model.question.map { "q:\($0)" } ?? ""
+        var key = ""
+        if let title = model.modelTitle { key = "m:" + title + "|" + model.modelText }
+        else if let request = model.confirm {
+            let rows = request.rows.map { $0.key + "=" + $0.value }.joined(separator: ";")
+            key = "c:" + request.title + "|" + rows
+        } else if let question = model.question { key = "q:" + question }
         decisionRect = model.decisionRect
         if key.isEmpty {
             if !decisionCard.isHidden { decisionCard.disappear() }
@@ -363,7 +405,8 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         } else {
             if key != decisionKey {
                 decisionKey = key
-                if let request = model.confirm { decisionCard.show(confirm: request, armed: model.confirmArmed) } else if let question = model.question { decisionCard.show(question: question) }
+                if let title = model.modelTitle { decisionCard.show(model: title, text: model.modelText, primary: model.modelPrimary) }
+                else if let request = model.confirm { decisionCard.show(confirm: request, armed: model.confirmArmed) } else if let question = model.question { decisionCard.show(question: question) }
                 decisionCard.isHidden = false; decisionCard.appear()
                 if let window { NSAccessibility.post(element: window, notification: .announcementRequested, userInfo: [.announcement: decisionCard.announcement, .priority: NSAccessibilityPriorityLevel.high.rawValue]) }
                 window?.makeFirstResponder(nil); decisionCard.focusDefault()
@@ -442,6 +485,10 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func updateBubble(_ model: LucioleOverlayModel) {
+        if model.protectedLine != nil || model.rest {          // page protégée ou repos : pas de bulle de réponse (une ligne sous la barre d'outils suffit)
+            if !bubble.isHidden { bubble.disappear() }
+            return
+        }
         let deciding = model.confirm != nil || model.question != nil
         let acting = model.actionTitle != nil && model.answer.isEmpty
         let hasContent = model.protectedLine != nil || ((!model.answer.isEmpty || model.running) && !deciding && !acting)
@@ -492,10 +539,14 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         let page = bounds.size
         let capsuleFrame = LucioleGeometry.capsule(in: page)
         capsule.frame = capsuleFrame
-        if mode == .answerOnly { capsule.isHidden = true; pills.forEach { $0.isHidden = true } }
+        if mode == .answerOnly || mode == .rest || model?.protectedLine != nil { capsule.isHidden = true; pills.forEach { $0.isHidden = true } }
+        if mode == .rest { bubble.isHidden = true; actionPill.isHidden = true; traceBubble.isHidden = true }
+        // La petite bulle sous la barre d'outils, en haut à droite de la page.
+        let restWidth = min(max(restLabel.intrinsicContentSize.width + 34, 120), page.width - 32)
+        restBubbleView.frame = CGRect(x: page.width - restWidth - 16, y: 10, width: restWidth, height: 40)
         let widths = pills.map { Double(max($0.idealWidth + 14, 170)) }
         for (pill, frame) in zip(pills, LucioleGeometry.suggestions(widths: widths, above: capsuleFrame)) { pill.frame = frame }
-        guard !bubble.isHidden || model?.running == true || !(model?.answer.isEmpty ?? true) else { return }
+        guard !bubble.isHidden || model?.running == true || !(model?.answer.isEmpty ?? true) || !decisionCard.isHidden || !actionPill.isHidden else { return }
         // La bulle : 380 pt de large ; la hauteur suit le texte, dans la limite de la place au-dessus de la capsule.
         let textWidth = LucioleGeometry.bubbleWidth - 36
         let text = bubbleText.attributedStringValue
@@ -598,6 +649,17 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     }
 
     var fanIsVisible: Bool { !fan.isEmpty }
+
+    /// Le repos après une tâche : plus de capsule ni de pastille ; le chemin reste, et une petite bulle sous la barre d'outils.
+    func presentRest() {
+        hideFan()
+        mode = .rest
+        presented = true
+        isHidden = false
+        capsule.isHidden = true; bubble.isHidden = true
+        pills.forEach { $0.removeFromSuperview() }; pills = []; shownSuggestions = []
+        installKeyMonitor()
+    }
 
     /// Une bulle ancrée sans capsule : la réponse à un geste (Expliquer, Traduire).
     func presentAnswerOnly() {

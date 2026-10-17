@@ -35,6 +35,12 @@ final class AIPanelController {
     /// le panneau latéral s'ouvre pour ces moments-là (`panelFallback`) : une confirmation n'est jamais invisible.
     private var overlayOpen = false
     private var panelFallback = false
+    /// Luciole est retournée dormir mais le chemin (60 s) et la petite bulle de fin restent affichés par la couche.
+    private var restShown = false
+    private var restBubbleText: String?
+    private var modelPrimaryAction: AIPanelView.ModelAction?
+    /// La mascotte de la barre d'outils : nil = elle est partie dans la page (appelée, ou près d'une sélection), sinon sa pose (sleep au repos, happy après une tâche).
+    var onRestPose: ((LucioleState?) -> Void)?
     private var inPage: Bool { SettingsStore.shared.lucioleInPage }
     private let hooks: Hooks
     /// Appelé quand le panneau s'ouvre ou se ferme (le bouton de la barre d'outils suit).
@@ -123,6 +129,7 @@ final class AIPanelController {
         overlay.onGesture = { [weak self] gesture in self?.gesture(gesture) }
         overlay.onConfirm = { [weak self] ok in self?.resolveConfirm(ok) }
         overlay.onAnswer = { [weak self] text in self?.resolveQuestion(text) }
+        overlay.onModelPrimary = { [weak self] in if let action = self?.modelPrimaryAction { self?.modelAction(action) } }
         cursor.onReveal = { [weak self] rect, web in self?.recordReveal(rect, in: web) }
         overlay.onOpenPage = { [weak self] source in self?.hooks.openAnswerPage("Réponse de Luciole", Markdown.page(title: "Réponse de Luciole", source: source)) }
         widthConstraint = panel.widthAnchor.constraint(equalToConstant: CGFloat(width))
@@ -189,7 +196,9 @@ final class AIPanelController {
     func open() {
         cloudKeys = Self.presentKeys()
         if inPage {
+            if restShown { restShown = false; restBubbleText = nil; pathClear?.cancel(); reveals = [] }
             overlayOpen = true
+            onRestPose?(nil)
             onVisibilityChange?(true)
             overlay.present(from: hooks.assistantFrame())
             refresh()
@@ -208,10 +217,11 @@ final class AIPanelController {
     func close() {
         if overlayOpen {
             overlayOpen = false
-            endAnchor(); pathClear?.cancel(); reveals = []; dim.hide()
+            endAnchor(); pathClear?.cancel(); reveals = []; restShown = false; restBubbleText = nil; dim.hide()
             overlay.dismiss()
             if panelFallback { panelFallback = false; panel.isHidden = true; hooks.onLayout(0) }
             onVisibilityChange?(false)
+            onRestPose?(.sleep)
             if isRunning { stop() }
             return
         }
@@ -245,7 +255,7 @@ final class AIPanelController {
         if let id, let source = inheritFrom, source != id, conversations[id] == nil { conversations[id] = conversations[source] }
         currentTab = id
         currentTitle = title ?? ""
-        if passage != nil || !anchoredDoc.isEmpty { passage = nil; overlay.hideFan(); endAnchor() }          // le passage appartient à la page d'avant
+        if passage != nil || !anchoredDoc.isEmpty { passage = nil; overlay.hideFan(); endAnchor(); if !overlayOpen { onRestPose?(.sleep) } }          // le passage appartient à la page d'avant
         refresh()
     }
     func tabClosed(_ id: UUID) { conversations[id] = nil }
@@ -280,6 +290,7 @@ final class AIPanelController {
         case "clear":
             passage = nil
             overlay.hideFan()
+            if !overlayOpen, !restShown { onRestPose?(.sleep) }
         case "sel":
             guard !pageIsProtected, !isRunning, !overlayOpen, let rects = object["rects"] as? [[String: Double]], !rects.isEmpty else { return }
             let doc = rects.map { CGRect(x: ($0["x"] ?? 0) + scroll.x, y: ($0["y"] ?? 0) + scroll.y, width: $0["w"] ?? 0, height: $0["h"] ?? 0) }
@@ -291,6 +302,7 @@ final class AIPanelController {
             #endif
             guard !overlayOpen, SettingsStore.shared.lucioleSelectionFan, let last = overlayRects(fromDoc: [doc.last!], in: web).first else { return }
             overlay.showFan(tip: CGPoint(x: last.maxX, y: last.midY), from: hooks.assistantFrame())
+            onRestPose?(nil)
         default: break
         }
     }
@@ -309,10 +321,11 @@ final class AIPanelController {
     private func gesture(_ gesture: SelectionPassage.Gesture) {
         guard let passage, let web = hooks.activeWebView() else { return }
         overlay.hideFan()
-        guard let prompt = gesture.prompt(for: passage.text) else { hooks.keepPassage(passage.text); return }
+        guard let prompt = gesture.prompt(for: passage.text) else { hooks.keepPassage(passage.text); onRestPose?(.happy); restPoseLater(); return }
         anchoredDoc = passage.docRects
         cloudKeys = Self.presentKeys()
         overlayOpen = true
+        onRestPose?(nil)
         onVisibilityChange?(true)
         overlay.presentAnswerOnly()
         overlay.setAnchor(overlayRects(fromDoc: anchoredDoc, in: web))
@@ -657,7 +670,7 @@ final class AIPanelController {
             mode: mode, placeholder: placeholder, composerEnabled: state.canAsk && !pageIsProtected && !hasPending, running: running, showsStop: !(pending.map { if case .confirm = $0.kind { true } else { false } } ?? false),
             note: provider == .lmstudio ? (LMStudio.isLoopback(SettingsStore.shared.lmStudioBase) ? "LM Studio : tout reste sur ce Mac · Luciole peut se tromper" : "LM Studio (réseau) : les pages lues sont envoyées à \(SettingsStore.shared.lmStudioBase.host ?? "ce serveur") · Luciole peut se tromper") : provider.isCloud ? "\(provider.displayName) (nuage) : les pages lues lui sont envoyées · Luciole peut se tromper" : "Tout reste sur ce Mac · Luciole peut se tromper"))
         panel.setTranscript(list, writing: running, pending: hasPending ? pending : nil)
-        if overlayOpen { updateOverlay(state: state, pose: pose, mode: mode, model: model, running: running, hasPending: hasPending, host: host, locked: locked) }
+        if overlayOpen || restShown { updateOverlay(state: state, pose: pose, mode: mode, model: model, running: running, hasPending: hasPending, host: host, locked: locked) }
         if let p = pending, !p.armed {            // « Valider » devient actif après 1,2 s : on redessine à ce moment-là
             Task { try? await Task.sleep(for: .milliseconds(1250)); self.refresh() }
         }
@@ -665,12 +678,8 @@ final class AIPanelController {
 
     /// La couche dans la page. Une validation, une question ou un état du modèle (à installer, téléchargement, erreur) ouvrent le panneau latéral en renfort.
     private func updateOverlay(state: AIAvailability, pose: LucioleState, mode: AIPanelView.Mode, model: AIPanelView.ModelScreen?, running: Bool, hasPending: Bool, host: String?, locked: Bool) {
-        let needsPanel = model != nil          // les états du modèle (à installer, téléchargement, erreur) passent encore par le panneau ; validations et questions sont dans la page
-        if needsPanel != panelFallback {
-            panelFallback = needsPanel
-            panel.isHidden = !needsPanel
-            if needsPanel { dock(); panel.focus() } else { hooks.onLayout(0) }
-        }
+        if panelFallback { panelFallback = false; panel.isHidden = true; hooks.onLayout(0) }          // l'ancien renfort : plus utilisé, l'état du modèle s'affiche dans la page
+        modelPrimaryAction = model?.primary?.action
         var suggestions: [(symbol: String, label: String, fill: String, web: Bool)] = []
         if case .empty(_, _, let list) = mode { suggestions = list }
         let last = messages.last(where: { $0.role == .assistant })
@@ -688,6 +697,7 @@ final class AIPanelController {
         let target = reveals.last.flatMap { reveal in web.map { overlayRects(fromDoc: [reveal.doc], in: $0).first } ?? nil }
         if confirm != nil, let web, let last = reveals.last { dim.show(hole: dimRect(fromDoc: last.doc, in: web)) } else if confirm != nil { dim.show(hole: nil) } else { dim.hide() }
         let path: [(step: Int, rect: CGRect)] = web.map { web in reveals.map { (step: $0.step, rect: overlayRects(fromDoc: [$0.doc], in: web).first ?? .zero) } } ?? []
+        let modelScreenForOverlay = model
         var model = LucioleOverlayModel(
             stage: stage, pose: pose, placeholder: pageIsProtected ? "Indisponible sur cette page protégée" : (running ? "Luciole travaille… Échap pour arrêter" : "Demandez à Luciole…"),
             composerEnabled: state.canAsk && !pageIsProtected && !hasPending, running: running, suggestions: suggestions,
@@ -696,6 +706,8 @@ final class AIPanelController {
         model.confirm = confirm; model.confirmArmed = pending?.armed ?? true; model.question = question; model.decisionRect = target
         if acted, running { model.actionTitle = last?.title ?? "Luciole travaille"; model.actionStep = last?.trace.count ?? 0; model.actionLines = last?.trace.map(\.text) ?? [] }
         model.path = path
+        if let screen = modelScreenForOverlay { model.modelTitle = screen.title; model.modelText = screen.text; model.modelPrimary = screen.primary?.title }
+        if restShown { model.rest = true; model.restBubble = restBubbleText; model.stage = .rest; model.actionTitle = nil }
         overlay.apply(model)
     }
 
@@ -729,12 +741,38 @@ final class AIPanelController {
         return dim.convert(web.convert(inWeb, to: nil), from: nil)
     }
 
+    /// Après une tâche qui a agi sur la page : un saut de joie, puis Luciole retourne dormir dans la barre d'outils ; une petite bulle de 4 s dit l'essentiel,
+    /// et le chemin reste 60 s. La conversation reste là : ⌘J la rouvre. Elle ne parle jamais la première.
+    private func retractToRest() {
+        guard overlayOpen, pending == nil, !isRunning else { return }
+        let last = messages.last(where: { $0.role == .assistant })
+        restBubbleText = Self.restLine(from: last?.text ?? "")
+        overlayOpen = false; restShown = true
+        overlay.presentRest()
+        onVisibilityChange?(false)
+        onRestPose?(.happy); restPoseLater()
+        refresh()
+        Task { [weak self] in try? await Task.sleep(for: .seconds(4)); self?.restBubbleText = nil; self?.refresh() }
+    }
+
+    private func restPoseLater() { Task { [weak self] in try? await Task.sleep(for: .seconds(2.4)); if self?.overlayOpen == false { self?.onRestPose?(.sleep) } } }
+
+    /// La première phrase de la réponse, sans mise en forme, en 80 caractères au plus (« C'est réservé. », « Rien n'est parti. »).
+    static func restLine(from answer: String) -> String {
+        let plain = Markdown.plainText(answer).split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let sentence = plain.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: true).first.map { String($0) + "." } ?? plain
+        let clean = sentence.trimmingCharacters(in: .whitespaces)
+        guard !clean.isEmpty else { return "C'est fait." }
+        return clean.count > 80 ? String(clean.prefix(79)) + "…" : clean
+    }
+
     /// Le chemin reste visible 60 s après la fin de la tâche, puis s'efface.
     private func schedulePathClear() {
         pathClear?.cancel()
         pathClear = Task { [weak self] in
             try? await Task.sleep(for: .seconds(60))
             guard !Task.isCancelled, let self else { return }
+            if self.restShown, !self.overlayOpen { self.restShown = false; self.overlay.dismiss() }
             self.reveals = []
             if self.anchoredDoc.isEmpty, let web = self.hooks.activeWebView() { let off = LucioleSelectionScript.trackCall(false); _ = await web.safeCall(off.body, arguments: off.arguments, world: LucioleSelectionScript.world) }
             self.refresh()
@@ -749,7 +787,7 @@ final class AIPanelController {
         let trace = last?.trace.map { "\($0.state):\($0.text)" + ($0.detail.map { " — " + $0 } ?? "") }.joined(separator: " | ") ?? ""
         var prefix = ""
         #if DEBUG
-        if overlayOpen || overlay.fanIsVisible { prefix = "DIM[hidden=\(dim.isHidden) bounds=\(dim.bounds.integral) super=\(dim.superview.map { String(describing: type(of: $0)) } ?? "-")] OVERLAY[\(overlay.report)] panelFallback=\(panelFallback) SEL[\(debugSelection)] " }
+        if overlayOpen || restShown || overlay.fanIsVisible { prefix = "DIM[hidden=\(dim.isHidden) bounds=\(dim.bounds.integral) super=\(dim.superview.map { String(describing: type(of: $0)) } ?? "-")] OVERLAY[\(overlay.report)] panelFallback=\(panelFallback) SEL[\(debugSelection)] rest=\(restShown) restBubble=\(restBubbleText ?? "-") " }
         #endif
         return prefix + "open=\(isOpen) state=\(availability) running=\(isRunning) width=\(Int(width)) pose=\(panel.mascot.state.rawValue) wait=\(rateLimitWait.map(String.init) ?? "-") pending=\(pending.map { "\($0.kind)" } ?? "none") cursor=[\(cursor.report)] think=\(last?.thinking.count ?? 0) trace=[\(trace)] line=\(failure ?? "")| answer=\((last?.text ?? "").replacingOccurrences(of: "\n", with: " ⏎ "))"
     }
@@ -924,8 +962,9 @@ extension AIPanelController: AgentEnvironment {
         if case .waitingForProvider(let seconds) = event { rateLimitWait = seconds } else if case .thinking = event { /* l'attente du fournisseur est gérée par la requête */ }
         attachCursor()
         cursor.follow(eventPose ?? .idle)
-        if case .finished = event {
+        if case .finished(let reason) = event {
             schedulePathClear()
+            if reason == .done, overlayOpen, !reveals.isEmpty { Task { [weak self] in try? await Task.sleep(for: .seconds(1.6)); self?.retractToRest() } }
             // La pose de fin (contente, ou en erreur) reste un instant, puis Luciole revient au repos.
             eventPoseReset = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1.6))
