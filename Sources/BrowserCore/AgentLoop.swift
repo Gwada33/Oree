@@ -332,7 +332,7 @@ public final class AgentLoop {
                             } else if call.name == "open_url", pages >= limits.pages {
                                 result = AgentToolResult(ok: false, text: "Plafond de \(limits.pages) pages atteint. Réponds avec ce que tu as.", summary: "Plafond de pages")
                             } else {
-                                if call.name == "open_url", let address = Self.address(of: call),
+                                if call.name == "open_url", let address = Self.address(of: call), ["http", "https"].contains(URL(string: address)?.scheme?.lowercased() ?? ""),     // les autres schémas sont refusés sans question
                                    OpenURLGuard.isUnfamiliar(task: task, urlString: address, knownSources: sources, currentURL: env.currentURL),
                                    !(await env.confirmUnfamiliarAddress(address)) {
                                     setTrace(id, detail: "Adresse refusée par vous", .failed)

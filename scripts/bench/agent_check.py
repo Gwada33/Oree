@@ -8,7 +8,7 @@ question card, Stop. No provider is called (HB_AI_SCRIPTED). Exit 1 on any failu
 import functools, http.server, json, os, re, subprocess, sys, tempfile, threading, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-UI, APP = os.path.join(ROOT, "scripts", "ui.sh"), os.path.join(ROOT, "Oree.app")
+UI, APP = os.path.join(ROOT, "scripts", "ui.sh"), os.environ.get("OREE_TEST_APP") or os.path.join(ROOT, "Oree.app")
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hands_fixture")
 PORT = 8791
 TRACE = "/tmp/oree-agent-trace.txt"
@@ -53,7 +53,7 @@ def main():
     server, before = serve(), pids()
     tmp = tempfile.mkdtemp(prefix="agentcheck-"); ext = os.path.join(tmp, "ext"); os.makedirs(ext)
     if os.path.exists(TRACE): os.remove(TRACE)
-    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_AI_SCRIPTED=1", f"HB_AI_TRACE={TRACE}"]
+    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_AI_SCRIPTED=1", f"HB_AI_TRACE={TRACE}"] + (["HB_LUCIOLE_PAGE=1"] if os.environ.get("HB_LUCIOLE_PAGE") else [])   # HB_LUCIOLE_PAGE=1 : Luciole dans la page (le repli vers le panneau doit tout garder visible)
     subprocess.run(["open", "-g", "-n", *[x for e in env for x in ("--env", e)], APP, "--args", "--automation"]); time.sleep(5)
     mine = pids() - before
     results = []
@@ -66,7 +66,7 @@ def main():
 
         print("\nTâche avec une action sensible")
         script('{"tool":"type","ref":"@e1","text":"Zébulon"}', '{"tool":"click","ref":"@e5"}', '{"tool":"done","answer":"Formulaire envoyé."}')
-        ask("Inscris-moi")
+        ask("Remplis le formulaire d'inscription")
         check("une carte « à valider » apparaît avant l'envoi", wait_for(lambda: "pending=confirm" in state(), 25))
         s = state(); print("  ", s[:300]); shot("agent-confirm")
         check("la carte dit ce qui va être envoyé", "Créer mon compte" in s)
@@ -124,7 +124,7 @@ def main():
 
         print("\nMémoire")
         memfile = os.path.join(tmp, "Luciole", "memoire.json")
-        check("la discussion et le journal sont enregistrés sur disque", wait_for(lambda: os.path.exists(memfile) and "Inscris-moi" in open(memfile).read(), 10))
+        check("la discussion et le journal sont enregistrés sur disque", wait_for(lambda: os.path.exists(memfile) and "formulaire d'inscription" in open(memfile).read(), 10))
         data = open(memfile).read() if os.path.exists(memfile) else ""
         check("ce que Luciole a fait est gardé (libellés)", "Saisie dans" in data)
         check("la valeur saisie n'est jamais gardée", "Zébulon" not in data)

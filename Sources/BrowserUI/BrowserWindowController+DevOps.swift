@@ -258,6 +258,8 @@ extension BrowserWindowController {
         case "pbtypes":
             let board = NSPasteboard.general
             return "types=\((board.types ?? []).map(\.rawValue).joined(separator: ",")) pdf=\(board.data(forType: .pdf)?.count ?? 0) files=\((board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? []).count)"
+        case "overlayshot": return aiBarController?.devOverlayShot(to: "/tmp/oree-overlay.png") ?? "no panel"
+        case "windowid": return "\(window?.windowNumber ?? 0)"
         case "mediacopy": (tab.webView as? OreeWebView)?.copyAllMedia(); return "started"
         case "mediaurls": (tab.webView as? OreeWebView)?.copyMediaAddresses(); return "started"
         case "pagecopy": (tab.webView as? OreeWebView)?.copyWholePage(); return "started"

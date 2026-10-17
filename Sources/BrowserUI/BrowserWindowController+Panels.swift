@@ -542,7 +542,8 @@ extension BrowserWindowController {
                 guard let self else { return }
                 let opened = self.newTab(urlString: nil, isPrivate: self.activeTab?.isPrivate ?? false)
                 opened.webView?.loadHTMLString(html, baseURL: nil)
-            })
+            },
+            assistantFrame: { [weak self] in self.map { $0.assistantButton.convert($0.assistantButton.bounds, to: nil) } })
         let created = AIPanelController(contentView: contentView, top: contentContainer.topAnchor, hooks: hooks)
         created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open; self?.journalPanel("ai", open: open) }
         created.onTaskFinished = { [weak self] route, ms, ok, usage in

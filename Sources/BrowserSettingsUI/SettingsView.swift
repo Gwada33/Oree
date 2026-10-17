@@ -1365,6 +1365,7 @@ final class AssistantProviderModel: ObservableObject {
     @Published var keyDraft = ""
     @Published var tick = 0                 // relance l'affichage après un réglage écrit hors du modèle
     @Published var hasKey: Bool
+    @Published var inPage = SettingsStore.shared.lucioleInPage { didSet { SettingsStore.shared.lucioleInPage = inPage } }
     // LM Studio : adresse du serveur local et modèles qu'il propose.
     @Published var lmURL = SettingsStore.shared.lmStudioBaseText { didSet { SettingsStore.shared.setLMStudioBase(text: lmURL) } }
     @Published var lmModels: [String] = []
@@ -1403,6 +1404,13 @@ struct AssistantSection: View {
     @StateObject private var provider = AssistantProviderModel()
 
     var body: some View {
+        Section("Affichage de Luciole") {
+            Picker("Luciole s'affiche", selection: $provider.inPage) {
+                Text("Panneau latéral").tag(false)
+                Text("Dans la page (en cours de mise au point)").tag(true)
+            }.pickerStyle(.menu)
+            Text("S'applique à la prochaine ouverture (⌘J). Dans la page, les confirmations et les questions s'ouvrent encore dans le panneau latéral.").font(.caption).foregroundStyle(.secondary)
+        }
         Section("Cerveau de l'assistant") {
             Picker("Fournisseur", selection: $provider.provider) {
                 ForEach(AIProvider.allCases, id: \.self) { Text($0.title).tag($0) }

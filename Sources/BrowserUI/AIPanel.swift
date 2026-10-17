@@ -21,9 +21,16 @@ final class AIPanelController {
         var searchHistory: (String) -> [(title: String, url: String)]     // historique et favoris (jamais appelé en navigation privée)
         var addNote: (String) -> Void
         var openAnswerPage: (_ title: String, _ html: String) -> Void   // la réponse mise en page, dans un nouvel onglet
+        var assistantFrame: () -> NSRect?                                // le bouton de Luciole dans la barre d'outils, en coordonnées de fenêtre
     }
 
     private let panel = AIPanelView()
+    private let overlay = LucioleOverlayView()
+    /// Luciole dans la page (réglage) : la couche remplace le panneau. Tant que la page ne sait pas montrer une validation, une question ou un état du modèle,
+    /// le panneau latéral s'ouvre pour ces moments-là (`panelFallback`) : une confirmation n'est jamais invisible.
+    private var overlayOpen = false
+    private var panelFallback = false
+    private var inPage: Bool { SettingsStore.shared.lucioleInPage }
     private let hooks: Hooks
     /// Appelé quand le panneau s'ouvre ou se ferme (le bouton de la barre d'outils suit).
     var onVisibilityChange: ((Bool) -> Void)?
@@ -97,6 +104,18 @@ final class AIPanelController {
         self.hooks = hooks
         panel.isHidden = true
         contentView.addSubview(panel)
+        contentView.addSubview(overlay)
+        NSLayoutConstraint.activate([overlay.topAnchor.constraint(equalTo: top), overlay.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+                                     overlay.leadingAnchor.constraint(equalTo: contentView.leadingAnchor), overlay.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)])
+        overlay.onSubmit = { [weak self] text in self?.ask(text) }
+        overlay.onStop = { [weak self] in self?.stop() }
+        overlay.onClose = { [weak self] in self?.close() }
+        overlay.onToggleShare = { [weak self] in self?.shareContext.toggle(); self?.refresh() }
+        overlay.onOpenSource = { [weak self] url in
+            guard let self else { return }
+            self.inheritFrom = self.currentTab; self.hooks.openTab(url); self.inheritFrom = nil
+        }
+        overlay.onOpenPage = { [weak self] source in self?.hooks.openAnswerPage("Réponse de Luciole", Markdown.page(title: "Réponse de Luciole", source: source)) }
         widthConstraint = panel.widthAnchor.constraint(equalToConstant: CGFloat(width))
         NSLayoutConstraint.activate([
             panel.topAnchor.constraint(equalTo: top), panel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
@@ -133,7 +152,7 @@ final class AIPanelController {
     }
 
     var view: NSView { panel }
-    var isOpen: Bool { !panel.isHidden }
+    var isOpen: Bool { overlayOpen || !panel.isHidden }
 
     private var availability: AIAvailability {
         #if DEBUG
@@ -160,6 +179,15 @@ final class AIPanelController {
 
     func open() {
         cloudKeys = Self.presentKeys()
+        if inPage {
+            overlayOpen = true
+            onVisibilityChange?(true)
+            overlay.present(from: hooks.assistantFrame())
+            refresh()
+            overlay.focusComposer()
+            Task { await prepare() }
+            return
+        }
         panel.isHidden = false
         onVisibilityChange?(true)
         dock()
@@ -169,6 +197,14 @@ final class AIPanelController {
     }
 
     func close() {
+        if overlayOpen {
+            overlayOpen = false
+            overlay.dismiss()
+            if panelFallback { panelFallback = false; panel.isHidden = true; hooks.onLayout(0) }
+            onVisibilityChange?(false)
+            if isRunning { stop() }
+            return
+        }
         panel.isHidden = true
         onVisibilityChange?(false)
         hooks.onLayout(0)
@@ -178,7 +214,7 @@ final class AIPanelController {
 
     /// Le panneau pousse la page si la fenêtre est assez large ; sinon il la recouvre.
     private func dock() {
-        guard isOpen else { return }
+        guard isOpen, !(overlayOpen && !panelFallback) else { return }
         let windowWidth = hooks.windowWidth()
         let pushes = AIPanelMetrics.pushesPage(windowWidth: Double(windowWidth))
         panel.setOverlay(!pushes)
@@ -538,9 +574,32 @@ final class AIPanelController {
             mode: mode, placeholder: placeholder, composerEnabled: state.canAsk && !pageIsProtected && !hasPending, running: running, showsStop: !(pending.map { if case .confirm = $0.kind { true } else { false } } ?? false),
             note: provider == .lmstudio ? (LMStudio.isLoopback(SettingsStore.shared.lmStudioBase) ? "LM Studio : tout reste sur ce Mac · Luciole peut se tromper" : "LM Studio (réseau) : les pages lues sont envoyées à \(SettingsStore.shared.lmStudioBase.host ?? "ce serveur") · Luciole peut se tromper") : provider.isCloud ? "\(provider.displayName) (nuage) : les pages lues lui sont envoyées · Luciole peut se tromper" : "Tout reste sur ce Mac · Luciole peut se tromper"))
         panel.setTranscript(list, writing: running, pending: hasPending ? pending : nil)
+        if overlayOpen { updateOverlay(state: state, pose: pose, mode: mode, model: model, running: running, hasPending: hasPending, host: host, locked: locked) }
         if let p = pending, !p.armed {            // « Valider » devient actif après 1,2 s : on redessine à ce moment-là
             Task { try? await Task.sleep(for: .milliseconds(1250)); self.refresh() }
         }
+    }
+
+    /// La couche dans la page. Une validation, une question ou un état du modèle (à installer, téléchargement, erreur) ouvrent le panneau latéral en renfort.
+    private func updateOverlay(state: AIAvailability, pose: LucioleState, mode: AIPanelView.Mode, model: AIPanelView.ModelScreen?, running: Bool, hasPending: Bool, host: String?, locked: Bool) {
+        let needsPanel = hasPending || model != nil
+        if needsPanel != panelFallback {
+            panelFallback = needsPanel
+            panel.isHidden = !needsPanel
+            if needsPanel { dock(); panel.focus() } else { hooks.onLayout(0) }
+        }
+        var suggestions: [(symbol: String, label: String, fill: String, web: Bool)] = []
+        if case .empty(_, _, let list) = mode { suggestions = list }
+        let last = messages.last(where: { $0.role == .assistant })
+        let canRead = shareContext && !locked
+        let stage = LucioleStage.stage(for: .init(isOpen: true, pageProtected: pageIsProtected, running: running, pendingConfirm: hasPending, hasAnswer: !(last?.text.isEmpty ?? true)))
+        let note = provider == .lmstudio ? (LMStudio.isLoopback(SettingsStore.shared.lmStudioBase) ? "Sur ce Mac · Luciole peut se tromper" : "LM Studio (réseau) · Luciole peut se tromper")
+            : provider.isCloud ? "\(provider.displayName) · Luciole peut se tromper" : "Sur ce Mac · Luciole peut se tromper"
+        overlay.apply(LucioleOverlayModel(
+            stage: stage, pose: pose, placeholder: pageIsProtected ? "Indisponible sur cette page protégée" : (running ? "Luciole travaille… Échap pour arrêter" : "Demandez à Luciole…"),
+            composerEnabled: state.canAsk && !pageIsProtected && !hasPending, running: running, suggestions: suggestions,
+            answer: last?.text ?? "", sources: last?.sources ?? [], note: note, hasConversation: !messages.isEmpty, contextShared: canRead, contextLocked: locked,
+            protectedLine: pageIsProtected ? "Je détourne les yeux : les réglages d'Orée, les paiements et les mots de passe restent hors de portée de Luciole." : nil))
     }
 
     // MARK: Automatisation
@@ -549,10 +608,23 @@ final class AIPanelController {
     var report: String {
         let last = messages.last(where: { $0.role == .assistant })
         let trace = last?.trace.map { "\($0.state):\($0.text)" + ($0.detail.map { " — " + $0 } ?? "") }.joined(separator: " | ") ?? ""
-        return "open=\(isOpen) state=\(availability) running=\(isRunning) width=\(Int(width)) pose=\(panel.mascot.state.rawValue) wait=\(rateLimitWait.map(String.init) ?? "-") pending=\(pending.map { "\($0.kind)" } ?? "none") cursor=[\(cursor.report)] think=\(last?.thinking.count ?? 0) trace=[\(trace)] line=\(failure ?? "")| answer=\((last?.text ?? "").replacingOccurrences(of: "\n", with: " ⏎ "))"
+        var prefix = ""
+        #if DEBUG
+        if overlayOpen { prefix = "OVERLAY[\(overlay.report)] panelFallback=\(panelFallback) " }
+        #endif
+        return prefix + "open=\(isOpen) state=\(availability) running=\(isRunning) width=\(Int(width)) pose=\(panel.mascot.state.rawValue) wait=\(rateLimitWait.map(String.init) ?? "-") pending=\(pending.map { "\($0.kind)" } ?? "none") cursor=[\(cursor.report)] think=\(last?.thinking.count ?? 0) trace=[\(trace)] line=\(failure ?? "")| answer=\((last?.text ?? "").replacingOccurrences(of: "\n", with: " ⏎ "))"
     }
 
     #if DEBUG
+    /// Dev (debug seulement) : la couche seule en PNG transparent (le verre n'y est pas rendu : seuls les contenus le sont).
+    func devOverlayShot(to path: String) -> String {
+        overlay.layoutSubtreeIfNeeded()
+        guard let rep = overlay.bitmapImageRepForCachingDisplay(in: overlay.bounds) else { return "no rep" }
+        overlay.cacheDisplay(in: overlay.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return "no png" }
+        try? png.write(to: URL(fileURLWithPath: path)); return path
+    }
+
     /// Dev (debug seulement) : comme un clic sur une source du panneau.
     func devOpenSource(_ url: URL) { panel.onOpenSource?(url) }
 
