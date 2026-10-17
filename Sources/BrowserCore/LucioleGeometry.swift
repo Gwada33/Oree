@@ -55,7 +55,7 @@ public enum LucioleGeometry {
 
     /// Trois gestes en éventail (Expliquer, Traduire, Garder) à droite du point `tip` (le bout de la dernière ligne sélectionnée), à gauche si la place manque.
     public static func fan(tip: CGPoint, count: Int, size: CGSize, page: CGSize) -> (frames: [CGRect], onRight: Bool) {
-        let radius = 64.0, spread = 0.55                                    // rayon et ouverture (radians) entre deux gestes
+        let radius = 88.0, spread = 0.58                                    // rayon et ouverture (radians) entre deux gestes
         let onRight = tip.x + radius + size.width + margin < page.width
         let direction = onRight ? 1.0 : -1.0
         let frames = (0..<count).map { i -> CGRect in

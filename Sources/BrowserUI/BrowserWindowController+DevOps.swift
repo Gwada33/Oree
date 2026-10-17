@@ -259,6 +259,16 @@ extension BrowserWindowController {
             let board = NSPasteboard.general
             return "types=\((board.types ?? []).map(\.rawValue).joined(separator: ",")) pdf=\(board.data(forType: .pdf)?.count ?? 0) files=\((board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? []).count)"
         case "overlayshot": return aiBarController?.devOverlayShot(to: "/tmp/oree-overlay.png") ?? "no panel"
+        case "luciolegesture":
+            let name = ((try? String(contentsOfFile: "/tmp/oree-luciole-gesture.txt", encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            aiBarController?.devGesture(name); return "gesture \(name)"
+        case "lucioleworld":
+            Task { @MainActor in
+                let script = await tab.webView?.safeEvaluate("typeof window.__oreeLuciole", world: LucioleSelectionScript.world)
+                let length = await tab.webView?.safeEvaluate("String(getSelection()).length", world: LucioleSelectionScript.world)
+                try? "script=\(String(describing: script)) selection=\(String(describing: length))".write(toFile: "/tmp/oree-luciole-world.txt", atomically: true, encoding: .utf8)
+            }
+            return "started"
         case "windowid": return "\(window?.windowNumber ?? 0)"
         case "mediacopy": (tab.webView as? OreeWebView)?.copyAllMedia(); return "started"
         case "mediaurls": (tab.webView as? OreeWebView)?.copyMediaAddresses(); return "started"

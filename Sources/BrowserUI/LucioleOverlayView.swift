@@ -29,6 +29,20 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     var onToggleShare: (() -> Void)?
     var onOpenSource: ((URL) -> Void)?
     var onOpenPage: ((String) -> Void)?
+    var onGesture: ((SelectionPassage.Gesture) -> Void)?
+
+    /// Ce que la couche montre : la capsule d'appel, la seule bulle de réponse ancrée à un passage (venue d'un geste), ou l'éventail seul.
+    private enum Mode { case capsule, answerOnly }
+    private var mode: Mode = .capsule
+    private let fanMascot = LucioleView(size: 42)
+    private var fan: [LucioleGlassButton] = []
+    private var fanGestures: [SelectionPassage.Gesture] = []
+    private var fanTip: CGPoint?
+    private var keyMonitor: Any?
+    private let highlight = CAShapeLayer()
+    private let thread = CAShapeLayer(), threadHalo = CAShapeLayer()
+    /// Les rectangles du passage (repère de la couche), pour la bulle, le surlignage et le fil ; nil : pas de passage.
+    private var anchorRects: [CGRect] = []
 
     private let capsule = LucioleGlass(radius: 33)
     private let capsuleMascot = LucioleView(size: 54)
@@ -65,6 +79,11 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         isHidden = true
         buildCapsule(); buildBubble()
         for v in [capsule, bubble] { addSubview(v); v.isHidden = true }
+        for l in [threadHalo, thread, highlight] { l.fillColor = nil; layer?.addSublayer(l) }
+        highlight.fillColor = Theme.accent.withAlphaComponent(0.28).cgColor
+        thread.strokeColor = Theme.accent.cgColor; thread.lineWidth = 2; thread.lineCap = .round
+        threadHalo.strokeColor = Theme.accent.withAlphaComponent(0.35).cgColor; threadHalo.lineWidth = 7; threadHalo.lineCap = .round
+        fanMascot.isHidden = true; addSubview(fanMascot)
         setAccessibilityElement(false)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -151,7 +170,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = superview.map { convert(point, from: $0) } ?? point
-        let interactive: [NSView] = [capsule, bubble] + pills
+        let interactive: [NSView] = [capsule, bubble] + pills + fan
         return interactive.contains { !$0.isHidden && $0.frame.contains(local) } ? super.hitTest(point) : nil     // partout ailleurs : la page reçoit le clic
     }
 
@@ -179,21 +198,33 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     /// Échap arrête une tâche en cours (le panneau la garde pour « Arrêter ») ; sinon il renvoie Luciole dormir.
     override func cancelOperation(_ sender: Any?) { if model?.running == true { onStop?() } else { onClose?() } }
 
-    func focusComposer() { window?.makeFirstResponder(field) }
+    /// Une vue cachée n'est pas mise en page : sa taille reste nulle et les conversions de coordonnées se retrouvent en miroir. On la dispose avant de convertir.
+    func prepareGeometry() {
+        guard bounds.isEmpty else { return }
+        let wasHidden = isHidden
+        isHidden = false
+        superview?.layoutSubtreeIfNeeded()
+        isHidden = wasHidden
+    }
+
+    func focusComposer() { window?.makeFirstResponder(mode == .answerOnly ? followField : field) }
 
     // MARK: Présentation
 
     /// L'appel : Luciole quitte la barre d'outils (`from`, en coordonnées de fenêtre) et descend dans la capsule.
     func present(from toolbarButton: NSRect?) {
         guard !presented else { return }
+        hideFan()
+        mode = .capsule
         presented = true; anchorFrame = toolbarButton
         isHidden = false
         layoutSubtreeIfNeeded(); relayout()
         capsule.appear()
         flyMascot(from: toolbarButton)
         startAura()
+        installKeyMonitor()
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            guard let self, self.presented, self.model?.stage == .call, event.window === self.window else { return event }
+            guard let self, self.presented, self.mode == .capsule, self.model?.stage == .call, event.window === self.window else { return event }
             let point = self.convert(event.locationInWindow, from: nil)
             let inside = ([self.capsule] + self.pills).contains { !$0.isHidden && $0.frame.contains(point) }
             if !inside { DispatchQueue.main.async { self.onClose?() } }          // un clic hors de la capsule la renvoie dormir (le clic atteint aussi la page)
@@ -206,11 +237,13 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         presented = false
         if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
         mouseMonitor = nil
+        clearAnchor()
+        if fan.isEmpty { removeKeyMonitor() }
         pills.forEach { $0.disappear() }
         bubble.disappear()
         capsule.disappear { [weak self] in
             guard let self, !self.presented else { return }
-            self.isHidden = true
+            self.isHidden = self.fan.isEmpty
             self.pills.forEach { $0.removeFromSuperview() }; self.pills = []; self.shownSuggestions = []
             self.stopAura()
         }
@@ -321,7 +354,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     #if DEBUG
     /// Dev : où sont les surfaces (pour les essais automatiques).
     var report: String {
-        "overlay=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)) hidden=\(isHidden) presented=\(presented) capsule=\(capsule.frame.integral) hidden=\(capsule.isHidden) alpha=\(capsule.alphaValue) bubble=\(bubble.frame.integral) hidden=\(bubble.isHidden) pills=\(pills.count) superview=\(superview.map { String(describing: type(of: $0)) } ?? "-")"
+        "overlay=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)) hidden=\(isHidden) presented=\(presented) capsule=\(capsule.frame.integral) hidden=\(capsule.isHidden) alpha=\(capsule.alphaValue) bubble=\(bubble.frame.integral) hidden=\(bubble.isHidden) pills=\(pills.count) fan=\(fan.count) fanTip=\(fanTip.map { "\(Int($0.x)),\(Int($0.y))" } ?? "-") anchors=\(anchorRects.count) mode=\(mode) superview=\(superview.map { String(describing: type(of: $0)) } ?? "-")"
     }
     #endif
 
@@ -332,6 +365,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         let page = bounds.size
         let capsuleFrame = LucioleGeometry.capsule(in: page)
         capsule.frame = capsuleFrame
+        if mode == .answerOnly { capsule.isHidden = true; pills.forEach { $0.isHidden = true } }
         let widths = pills.map { Double(max($0.idealWidth + 14, 170)) }
         for (pill, frame) in zip(pills, LucioleGeometry.suggestions(widths: widths, above: capsuleFrame)) { pill.frame = frame }
         guard !bubble.isHidden || model?.running == true || !(model?.answer.isEmpty ?? true) else { return }
@@ -350,7 +384,98 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         bubbleScroll.documentView?.autoresizingMask = []
         if let heightConstraint = bubbleScroll.constraints.first(where: { $0.firstAttribute == .height }) { heightConstraint.constant = textHeight }
         else { bubbleScroll.heightAnchor.constraint(equalToConstant: textHeight).isActive = true }
-        let placed = LucioleGeometry.bubble(height: Double(bubbleHeight), anchor: nil, page: page, avoiding: capsuleFrame)
+        let anchor = LucioleGeometry.anchor(of: anchorRects, page: page)
+        let placed = LucioleGeometry.bubble(height: Double(bubbleHeight), anchor: anchor, page: page, avoiding: mode == .answerOnly ? nil : capsuleFrame)
         bubble.frame = placed.frame
+        drawAnchor(anchor: anchor, bubble: placed.frame, drawThread: placed.side != .corner && !bubble.isHidden)
     }
+
+    // MARK: Passage : surlignage et fil de lumière (dessinés ici, jamais dans le site)
+
+    private func drawAnchor(anchor: CGRect?, bubble: CGRect, drawThread: Bool) {
+        let path = CGMutablePath()
+        for rect in anchorRects { path.addRoundedRect(in: rect.insetBy(dx: -2, dy: -1), cornerWidth: 4, cornerHeight: 4) }
+        highlight.path = anchorRects.isEmpty ? nil : path
+        guard drawThread, let anchor else { thread.path = nil; threadHalo.path = nil; return }
+        let line = LucioleGeometry.thread(from: bubble, to: anchor)
+        let curve = CGMutablePath()
+        curve.move(to: line.start); curve.addQuadCurve(to: line.end, control: line.control)
+        thread.path = curve; threadHalo.path = curve
+    }
+
+    func setAnchor(_ rects: [CGRect]) { anchorRects = rects; relayout() }
+    func clearAnchor() { anchorRects = []; highlight.path = nil; thread.path = nil; threadHalo.path = nil }
+
+    // MARK: Éventail (sélection)
+
+    /// Luciole vole jusqu'au bout de la dernière ligne sélectionnée et déploie ses trois gestes ; Réserve : sans écran de réponse ouvert.
+    func showFan(tip: CGPoint, from toolbarButton: NSRect?) {
+        guard !presented else { return }
+        let reuse = fanTip != nil
+        fanTip = tip
+        isHidden = false
+        let placed = LucioleGeometry.fan(tip: tip, count: 3, size: CGSize(width: 130, height: 36), page: bounds.size)
+        if fan.isEmpty {
+            fanGestures = SelectionPassage.Gesture.allCases
+            for gesture in fanGestures {
+                let button = LucioleGlassButton(title: gesture.title, symbol: gesture.symbol, height: 36, font: Theme.sans(13.5, .medium), keyHint: gesture.key.uppercased())
+                button.onClick = { [weak self] in self?.onGesture?(gesture) }
+                button.setAccessibilityLabel("\(gesture.title) (touche \(gesture.key.uppercased()))")
+                addSubview(button); fan.append(button)
+            }
+            fanMascot.apply(SelectionPassage.Gesture.explain == .explain ? LucioleStage.selection.pose : .idle)
+            fanMascot.isHidden = false
+            installKeyMonitor()
+        }
+        fanMascot.frame = CGRect(x: tip.x - 21, y: tip.y - 21, width: 42, height: 42)
+        for (button, frame) in zip(fan, placed.frames) { button.frame = frame }
+        if !reuse { for (i, button) in fan.enumerated() { button.appear(delay: 0.1 + Double(i) * 0.05) } }      // cascade de 50 ms
+        if !reuse, !Motion.reduced, let button = toolbarButton, let window, let host = fanMascot.layer {
+            let from = convert(window.contentView?.convert(button, from: nil) ?? button, from: nil)
+            let move = CABasicAnimation(keyPath: "transform.translation"); move.fromValue = NSValue(size: NSSize(width: from.midX - tip.x, height: from.midY - tip.y)); move.toValue = NSValue(size: .zero)
+            let scale = CABasicAnimation(keyPath: "transform.scale"); scale.fromValue = 28.0 / 42.0; scale.toValue = 1
+            let group = CAAnimationGroup(); group.animations = [move, scale]; group.duration = 0.8; group.timingFunction = CAMediaTimingFunction(controlPoints: 0.45, 0, 0.15, 1)
+            host.add(group, forKey: "flight")
+        }
+    }
+
+    func hideFan() {
+        guard !fan.isEmpty || fanTip != nil else { return }
+        fanTip = nil
+        let old = fan; fan = []
+        old.forEach { button in button.disappear { button.removeFromSuperview() } }
+        fanMascot.isHidden = true
+        if !presented { removeKeyMonitor(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in if let self, !self.presented, self.fan.isEmpty { self.isHidden = true } } }
+    }
+
+    var fanIsVisible: Bool { !fan.isEmpty }
+
+    /// Une bulle ancrée sans capsule : la réponse à un geste (Expliquer, Traduire).
+    func presentAnswerOnly() {
+        hideFan()
+        mode = .answerOnly
+        presented = true
+        isHidden = false
+        installKeyMonitor()
+    }
+
+    // MARK: Clavier
+
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
+            let plain = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            if event.keyCode == 53, self.presented || !self.fan.isEmpty {                        // Échap
+                if !self.presented { self.hideFan(); return nil }
+                if self.model?.running == true { self.onStop?() } else { self.onClose?() }
+                return nil
+            }
+            if plain, !self.fan.isEmpty, !self.presented, let key = event.charactersIgnoringModifiers?.first, let gesture = SelectionPassage.Gesture.gesture(forKey: key) {
+                self.onGesture?(gesture); return nil                                              // les touches E, T, G pendant que l'éventail est visible
+            }
+            return event
+        }
+    }
+    private func removeKeyMonitor() { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil }
 }

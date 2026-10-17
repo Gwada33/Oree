@@ -51,6 +51,7 @@ import Foundation
         let right = LucioleGeometry.fan(tip: CGPoint(x: 300, y: 400), count: 3, size: CGSize(width: 100, height: 34), page: page)
         let left = LucioleGeometry.fan(tip: CGPoint(x: 1150, y: 400), count: 3, size: CGSize(width: 100, height: 34), page: page)
         #expect(right.onRight && !left.onRight && right.frames.count == 3)
+        #expect(right.frames[1].minY - right.frames[0].minY >= 34 && right.frames[2].minY - right.frames[1].minY >= 34)       // les gestes ne se chevauchent pas
         #expect((right.frames + left.frames).allSatisfy { $0.minX >= 0 && $0.maxX <= page.width })
     }
     @Test func suggestionsStackAboveTheCapsule() {

@@ -1366,6 +1366,7 @@ final class AssistantProviderModel: ObservableObject {
     @Published var tick = 0                 // relance l'affichage après un réglage écrit hors du modèle
     @Published var hasKey: Bool
     @Published var inPage = SettingsStore.shared.lucioleInPage { didSet { SettingsStore.shared.lucioleInPage = inPage } }
+    @Published var selectionFan = SettingsStore.shared.lucioleSelectionFan { didSet { SettingsStore.shared.lucioleSelectionFan = selectionFan } }
     // LM Studio : adresse du serveur local et modèles qu'il propose.
     @Published var lmURL = SettingsStore.shared.lmStudioBaseText { didSet { SettingsStore.shared.setLMStudioBase(text: lmURL) } }
     @Published var lmModels: [String] = []
@@ -1409,6 +1410,7 @@ struct AssistantSection: View {
                 Text("Panneau latéral").tag(false)
                 Text("Dans la page (en cours de mise au point)").tag(true)
             }.pickerStyle(.menu)
+            Toggle("Proposer Expliquer, Traduire et Garder quand je sélectionne un passage", isOn: $provider.selectionFan).disabled(!provider.inPage)
             Text("S'applique à la prochaine ouverture (⌘J). Dans la page, les confirmations et les questions s'ouvrent encore dans le panneau latéral.").font(.caption).foregroundStyle(.secondary)
         }
         Section("Cerveau de l'assistant") {

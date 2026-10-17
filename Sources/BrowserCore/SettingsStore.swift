@@ -394,6 +394,12 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.lucioleInPage") }
     }
 
+    /// Les gestes de Luciole (Expliquer, Traduire, Garder) apparaissent d'eux-mêmes quand on sélectionne un passage (seulement « dans la page »).
+    public var lucioleSelectionFan: Bool {
+        get { defaults.object(forKey: "settings.lucioleSelectionFan") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "settings.lucioleSelectionFan") }
+    }
+
     public var mouseGestures: Bool {
         get { ProcessInfo.processInfo.environment["HB_GESTURES"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.mouseGestures") as? Bool ?? false) }
         set { defaults.set(newValue, forKey: "settings.mouseGestures") }

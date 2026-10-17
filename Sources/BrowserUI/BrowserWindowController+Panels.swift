@@ -543,7 +543,14 @@ extension BrowserWindowController {
                 let opened = self.newTab(urlString: nil, isPrivate: self.activeTab?.isPrivate ?? false)
                 opened.webView?.loadHTMLString(html, baseURL: nil)
             },
-            assistantFrame: { [weak self] in self.map { $0.assistantButton.convert($0.assistantButton.bounds, to: nil) } })
+            assistantFrame: { [weak self] in self.map { $0.assistantButton.convert($0.assistantButton.bounds, to: nil) } },
+            keepPassage: { [weak self] passage in
+                guard let self, let tab = self.activeTab, !tab.isPrivate, let page = tab.currentURL, ["http", "https"].contains(page.scheme?.lowercased() ?? "") else { return }
+                let link = SelectionPassage.linkURL(page: page, passage: passage)
+                let quote = SelectionPassage.excerpt(passage, limit: 60)
+                try? self.readingRepo.add(url: link.absoluteString, title: "\(tab.displayTitle) — « \(quote) »")
+                self.showToolNotice("Passage gardé dans votre liste de lecture.")
+            })
         let created = AIPanelController(contentView: contentView, top: contentContainer.topAnchor, hooks: hooks)
         created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open; self?.journalPanel("ai", open: open) }
         created.onTaskFinished = { [weak self] route, ms, ok, usage in
@@ -553,6 +560,12 @@ extension BrowserWindowController {
         aiBarController = created
         created.tabChanged(id: activeTab?.id, title: activeTab?.displayTitle)
         return created
+    }
+
+    /// Le script de lecture de Luciole a vu une sélection, sa disparition ou un défilement.
+    func handleLucioleSelection(tab: Tab, json: String) {
+        guard tab.id == activeTab?.id, SettingsStore.shared.lucioleInPage else { return }
+        aiBar().selectionMessage(tab: tab, json: json)
     }
 
     /// ⌘J : le panneau IA (Luciole). Le modèle se réveille dès qu'il s'ouvre, pour être prêt quand la question est tapée.

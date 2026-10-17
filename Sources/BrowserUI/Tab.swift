@@ -335,6 +335,7 @@ final class Tab: NSObject {
         controller.add(ResumeMessageHandler(), contentWorld: ResumeScript.world, name: ResumeScript.handlerName)
         controller.add(MediaMessageHandler(), contentWorld: MediaScript.world, name: MediaScript.handlerName)
         controller.add(JournalMessageHandler(), contentWorld: JournalScript.world, name: JournalScript.handlerName)
+        controller.add(LucioleSelectionHandler(), contentWorld: LucioleSelectionScript.world, name: LucioleSelectionScript.handlerName)
         // Ghost hibernation: the page-side capture needs hooks installed before the page's own scripts run, so it is only
         // added to tabs created while the flag is on.
         if SettingsStore.shared.hibernationGhost {

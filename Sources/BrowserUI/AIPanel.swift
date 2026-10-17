@@ -22,6 +22,7 @@ final class AIPanelController {
         var addNote: (String) -> Void
         var openAnswerPage: (_ title: String, _ html: String) -> Void   // la réponse mise en page, dans un nouvel onglet
         var assistantFrame: () -> NSRect?                                // le bouton de Luciole dans la barre d'outils, en coordonnées de fenêtre
+        var keepPassage: (_ passage: String) -> Void                      // « Garder » : la page, avec un lien qui ramène au passage, va dans la liste de lecture
     }
 
     private let panel = AIPanelView()
@@ -115,6 +116,7 @@ final class AIPanelController {
             guard let self else { return }
             self.inheritFrom = self.currentTab; self.hooks.openTab(url); self.inheritFrom = nil
         }
+        overlay.onGesture = { [weak self] gesture in self?.gesture(gesture) }
         overlay.onOpenPage = { [weak self] source in self?.hooks.openAnswerPage("Réponse de Luciole", Markdown.page(title: "Réponse de Luciole", source: source)) }
         widthConstraint = panel.widthAnchor.constraint(equalToConstant: CGFloat(width))
         NSLayoutConstraint.activate([
@@ -199,6 +201,7 @@ final class AIPanelController {
     func close() {
         if overlayOpen {
             overlayOpen = false
+            endAnchor()
             overlay.dismiss()
             if panelFallback { panelFallback = false; panel.isHidden = true; hooks.onLayout(0) }
             onVisibilityChange?(false)
@@ -235,6 +238,7 @@ final class AIPanelController {
         if let id, let source = inheritFrom, source != id, conversations[id] == nil { conversations[id] = conversations[source] }
         currentTab = id
         currentTitle = title ?? ""
+        if passage != nil || !anchoredDoc.isEmpty { passage = nil; overlay.hideFan(); endAnchor() }          // le passage appartient à la page d'avant
         refresh()
     }
     func tabClosed(_ id: UUID) { conversations[id] = nil }
@@ -246,6 +250,75 @@ final class AIPanelController {
         failure = nil
         refresh()
         panel.focus()
+    }
+
+    // MARK: Sélection (Luciole dans la page)
+
+    private struct Passage { var text: String; var docRects: [CGRect] }
+    private var passage: Passage?
+    private var anchoredDoc: [CGRect] = []          // le passage de la réponse en cours, dans le repère du document (px CSS) : il suit le défilement
+    private var scroll = CGPoint.zero
+    #if DEBUG
+    private var debugSelection = ""
+    #endif
+
+    /// Ce que le script de lecture voit : une sélection (rectangles en px CSS de la fenêtre d'affichage), sa disparition, ou le défilement.
+    func selectionMessage(tab: Tab, json: String) {
+        guard inPage, tab.id == currentTab, let web = hooks.activeWebView(),
+              let object = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any], let type = object["type"] as? String else { return }
+        if let view = object["view"] as? [String: Any] { scroll = CGPoint(x: (view["sx"] as? Double) ?? 0, y: (view["sy"] as? Double) ?? 0) }
+        if !anchoredDoc.isEmpty { overlay.setAnchor(overlayRects(fromDoc: anchoredDoc, in: web)) }         // défilement, zoom, redimensionnement : le surlignage et le fil suivent
+        switch type {
+        case "clear":
+            passage = nil
+            overlay.hideFan()
+        case "sel":
+            guard !pageIsProtected, !isRunning, !overlayOpen, let rects = object["rects"] as? [[String: Double]], !rects.isEmpty else { return }
+            let doc = rects.map { CGRect(x: ($0["x"] ?? 0) + scroll.x, y: ($0["y"] ?? 0) + scroll.y, width: $0["w"] ?? 0, height: $0["h"] ?? 0) }
+            let text = (object["text"] as? String) ?? passage?.text
+            guard let text, SelectionPassage.isWorthOffering(text) else { return }
+            passage = Passage(text: text, docRects: doc)
+            #if DEBUG
+            debugSelection = "web=\(web.frame.integral) flipped=\(web.isFlipped) inOverlay=\(overlay.convert(web.bounds, from: web).integral) rect0=\(rects[0]) scroll=\(scroll) zoom=\(web.pageZoom) overlayFlipped=\(overlay.isFlipped) overlayFrame=\(overlay.frame.integral) overlayBounds=\(overlay.bounds.integral) sup=\(overlay.superview.map { "\($0.frame.integral) flipped=\($0.isFlipped)" } ?? "-") overlayInWin=\(overlay.convert(overlay.bounds, to: nil).integral) webInWin=\(web.convert(web.bounds, to: nil).integral) winH=\(web.window?.contentView?.bounds.height ?? 0)"
+            #endif
+            guard !overlayOpen, SettingsStore.shared.lucioleSelectionFan, let last = overlayRects(fromDoc: [doc.last!], in: web).first else { return }
+            overlay.showFan(tip: CGPoint(x: last.maxX, y: last.midY), from: hooks.assistantFrame())
+        default: break
+        }
+    }
+
+    private func overlayRects(fromDoc rects: [CGRect], in web: WKWebView) -> [CGRect] {
+        overlay.prepareGeometry()
+        let zoom = max(web.pageZoom, 0.1)
+        // Par les coordonnées de la fenêtre : AppKit gère ainsi les vues retournées (la page) et celles qui ne le sont pas (leur parent).
+        return rects.map { r in
+            let inWeb = NSRect(x: (r.minX - scroll.x) * zoom, y: web.isFlipped ? (r.minY - scroll.y) * zoom : web.bounds.height - (r.maxY - scroll.y) * zoom, width: r.width * zoom, height: r.height * zoom)
+            return overlay.convert(web.convert(inWeb, to: nil), from: nil)
+        }
+    }
+
+    /// Expliquer et Traduire ouvrent une bulle ancrée au passage (sans capsule) et posent la question ; Garder met la page, avec un lien vers le passage, dans la liste de lecture.
+    private func gesture(_ gesture: SelectionPassage.Gesture) {
+        guard let passage, let web = hooks.activeWebView() else { return }
+        overlay.hideFan()
+        guard let prompt = gesture.prompt(for: passage.text) else { hooks.keepPassage(passage.text); return }
+        anchoredDoc = passage.docRects
+        cloudKeys = Self.presentKeys()
+        overlayOpen = true
+        onVisibilityChange?(true)
+        overlay.presentAnswerOnly()
+        overlay.setAnchor(overlayRects(fromDoc: anchoredDoc, in: web))
+        let track = LucioleSelectionScript.trackCall(true)
+        Task { _ = await web.safeCall(track.body, arguments: track.arguments, world: LucioleSelectionScript.world) }
+        refresh()
+        ask(prompt)
+        Task { await prepare() }
+    }
+
+    private func endAnchor() {
+        guard !anchoredDoc.isEmpty else { return }
+        anchoredDoc = []
+        if let web = hooks.activeWebView() { let off = LucioleSelectionScript.trackCall(false); Task { _ = await web.safeCall(off.body, arguments: off.arguments, world: LucioleSelectionScript.world) } }
     }
 
     // MARK: Fournisseur
@@ -610,12 +683,15 @@ final class AIPanelController {
         let trace = last?.trace.map { "\($0.state):\($0.text)" + ($0.detail.map { " — " + $0 } ?? "") }.joined(separator: " | ") ?? ""
         var prefix = ""
         #if DEBUG
-        if overlayOpen { prefix = "OVERLAY[\(overlay.report)] panelFallback=\(panelFallback) " }
+        if overlayOpen || overlay.fanIsVisible { prefix = "OVERLAY[\(overlay.report)] panelFallback=\(panelFallback) SEL[\(debugSelection)] " }
         #endif
         return prefix + "open=\(isOpen) state=\(availability) running=\(isRunning) width=\(Int(width)) pose=\(panel.mascot.state.rawValue) wait=\(rateLimitWait.map(String.init) ?? "-") pending=\(pending.map { "\($0.kind)" } ?? "none") cursor=[\(cursor.report)] think=\(last?.thinking.count ?? 0) trace=[\(trace)] line=\(failure ?? "")| answer=\((last?.text ?? "").replacingOccurrences(of: "\n", with: " ⏎ "))"
     }
 
     #if DEBUG
+    /// Dev (debug seulement) : comme une touche E, T ou G pendant que l'éventail est visible.
+    func devGesture(_ name: String) { if let g = SelectionPassage.Gesture(rawValue: name) { gesture(g) } }
+
     /// Dev (debug seulement) : la couche seule en PNG transparent (le verre n'y est pas rendu : seuls les contenus le sont).
     func devOverlayShot(to path: String) -> String {
         overlay.layoutSubtreeIfNeeded()
