@@ -54,14 +54,34 @@ enum MarkdownRenderer {
             var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: style]
             let string: String
             switch span {
-            case .text(let t): string = t
+            case .text(let t):
+                out.append(autolinked(t, attributes: attributes)); continue
             case .bold(let t): string = t; attributes[.font] = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
             case .italic(let t): string = t; attributes[.obliqueness] = 0.2          // la police de l'interface n'a pas d'italique : on incline
             case .code(let t): string = t; attributes[.font] = NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular); attributes[.backgroundColor] = Theme.field
-            case .link(let t, _): string = t; attributes[.foregroundColor] = Theme.accent; attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            case .link(let t, let url): string = t; attributes[.link] = url; attributes[.foregroundColor] = Theme.accent; attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
             }
             out.append(NSAttributedString(string: string, attributes: attributes))
         }
+        return out
+    }
+
+    /// Une adresse écrite en toutes lettres devient un lien court (le site et le début du chemin) qui s'ouvre dans Orée.
+    private static func autolinked(_ text: String, attributes: [NSAttributedString.Key: Any]) -> NSAttributedString {
+        guard text.contains("http"), let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return NSAttributedString(string: text, attributes: attributes) }
+        let out = NSMutableAttributedString()
+        var cursor = text.startIndex
+        for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let range = Range(match.range, in: text), let url = match.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { continue }
+            out.append(NSAttributedString(string: String(text[cursor..<range.lowerBound]), attributes: attributes))
+            let host = (url.host ?? "").replacingOccurrences(of: "www.", with: "")
+            var shown = host + (url.path.count > 1 ? url.path : "")
+            if shown.count > 38 { shown = String(shown.prefix(37)) + "…" }
+            var linkAttributes = attributes; linkAttributes[.link] = url; linkAttributes[.foregroundColor] = Theme.accent; linkAttributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            out.append(NSAttributedString(string: shown, attributes: linkAttributes))
+            cursor = range.upperBound
+        }
+        out.append(NSAttributedString(string: String(text[cursor...]), attributes: attributes))
         return out
     }
 

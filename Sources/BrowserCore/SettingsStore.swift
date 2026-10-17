@@ -401,6 +401,16 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.lucioleSelectionFan") }
     }
 
+    /// La mémoire ambiante : Orée garde l'extrait des pages lues (jamais en navigation privée, ni connexion, paiement ou mot de passe) pour que Luciole les retrouve. Sur ce Mac seulement.
+    public var ambientMemory: Bool {
+        get { ProcessInfo.processInfo.environment["HB_AMBIENT_MEMORY"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.ambientMemory") as? Bool ?? true) }
+        set { defaults.set(newValue, forKey: "settings.ambientMemory") }
+    }
+    public var ambientMemoryDays: Int {
+        get { max(1, min(365, defaults.object(forKey: "settings.ambientMemoryDays") as? Int ?? 30)) }
+        set { defaults.set(newValue, forKey: "settings.ambientMemoryDays") }
+    }
+
     public var mouseGestures: Bool {
         get { ProcessInfo.processInfo.environment["HB_GESTURES"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.mouseGestures") as? Bool ?? false) }
         set { defaults.set(newValue, forKey: "settings.mouseGestures") }

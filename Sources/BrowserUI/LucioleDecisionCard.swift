@@ -28,6 +28,7 @@ final class LucioleDecisionCard: LucioleGlass {
         titleLabel.font = Theme.sans(16, .semibold); titleLabel.textColor = Theme.text
         detail.font = Theme.sans(12.5); detail.textColor = Theme.muted
         rowsStack.orientation = .vertical; rowsStack.alignment = .leading; rowsStack.spacing = 4
+        field.cell = CenteredFieldCell(textCell: ""); field.cell?.isEditable = true; field.cell?.isScrollable = true
         field.placeholderString = "Votre réponse…"; field.font = Theme.sans(14); field.isBordered = false; field.drawsBackground = true; field.backgroundColor = Theme.hover
         field.focusRingType = .none; field.wantsLayer = true; field.layer?.cornerRadius = 10
         primaryLabel.font = Theme.sans(13.5, .semibold); primaryLabel.textColor = Theme.onAccent
@@ -192,5 +193,25 @@ final class LucioleDimView: NSView {
         guard !isHidden else { return }
         if Motion.reduced { isHidden = true; return }
         NSAnimationContext.runAnimationGroup({ $0.duration = 0.18; animator().alphaValue = 0 }, completionHandler: { [weak self] in self?.isHidden = true; self?.alphaValue = 1 })
+    }
+}
+
+
+/// Un champ de saisie dont le texte est centré verticalement (le champ standard colle le texte en haut) avec une marge à gauche ; le curseur et la sélection suivent.
+final class CenteredFieldCell: NSTextFieldCell {
+    var horizontalInset: CGFloat = 12
+    private func textFrame(_ rect: NSRect) -> NSRect {
+        var frame = rect.insetBy(dx: horizontalInset, dy: 0)
+        let height = cellSize(forBounds: rect).height
+        frame.origin.y = rect.minY + max(0, (rect.height - height) / 2); frame.size.height = min(height, rect.height)
+        return frame
+    }
+    override func titleRect(forBounds rect: NSRect) -> NSRect { textFrame(rect) }
+    override func drawInterior(withFrame cellFrame: NSRect, in controlView: NSView) { super.drawInterior(withFrame: textFrame(cellFrame), in: controlView) }
+    override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
+        super.select(withFrame: textFrame(rect), in: controlView, editor: textObj, delegate: delegate, start: selStart, length: selLength)
+    }
+    override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, event: NSEvent?) {
+        super.edit(withFrame: textFrame(rect), in: controlView, editor: textObj, delegate: delegate, event: event)
     }
 }

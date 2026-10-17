@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>La mémoire de WebKit expliquée</title>
+<body style="font:18px/1.6 sans-serif;margin:40px">
+<h1>La mémoire de WebKit expliquée</h1>
+<p>WebKit lance un processus WebContent par groupe de pages. Les onglets d'un même site peuvent partager ce processus, ce qui économise de la mémoire mais empêche de libérer un onglet seul.</p>
+<p>Quand un onglet reste longtemps en arrière-plan, Orée l'endort : l'image de sa dernière apparence remplace la page, et le processus peut être arrêté sans que personne ne le remarque.</p>
+<p>Les mesures montrent qu'une page lourde comme un tableau de bord consomme plus de trois cents mégaoctets, tandis qu'une page d'article reste sous quatre-vingts.</p>

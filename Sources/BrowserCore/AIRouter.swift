@@ -27,15 +27,16 @@ public enum AIRouter {
         let text = fold(question)
         let words = text.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
         let route = route(text: text, words: words, pageReadable: pageReadable)
-        let follow = hasConversation && isFollowUp(text: text, words: words)
+        // Une conversation en cours se poursuit : sans cela, une question de plus de cinq mots sans « il » ni « celle-ci » perdait tout le contexte (essai réel).
+        let follow = hasConversation
         switch route {
         case .direct:
             // Sans page. Une page à lire reste possible (read_page) et une recherche aussi, mais le modèle n'en reçoit ni le texte ni l'obligation.
-            return AIPlan(route: .direct, includePage: false, tools: base + (pageReadable ? ["read_page"] : []) + ["search_web", "calculate", "search_history"], maxSearches: 1, maxTokens: 900, maxSteps: 4, keepsConversation: follow)
+            return AIPlan(route: .direct, includePage: false, tools: base + (pageReadable ? ["read_page"] : []) + ["search_web"] + extraTools(text: text), maxSearches: 1, maxTokens: 900, maxSteps: 4, keepsConversation: follow)
         case .page:
-            return AIPlan(route: .page, includePage: true, tools: base + ["scroll", "search_web"], maxSearches: 1, maxTokens: 1100, maxSteps: 6, keepsConversation: follow)
+            return AIPlan(route: .page, includePage: true, tools: base + ["scroll", "search_web"] + extraTools(text: text), maxSearches: 1, maxTokens: 1100, maxSteps: 6, keepsConversation: follow)
         case .web:
-            return AIPlan(route: .web, includePage: false, tools: base + ["search_web", "open_url"] + (pageReadable ? ["read_page"] : []), maxSearches: isComplex(words: words) ? 3 : 2, maxTokens: 1100, maxSteps: 8, keepsConversation: follow)
+            return AIPlan(route: .web, includePage: false, tools: base + ["search_web", "open_url"] + extraTools(text: text) + (pageReadable ? ["read_page"] : []), maxSearches: isComplex(words: words) ? 3 : 2, maxTokens: 1100, maxSteps: 8, keepsConversation: follow)
         case .agent:
             return AIPlan(route: .agent, includePage: true, tools: AgentParser.tools.filter { $0 != "read_page" }, maxSearches: 3, maxTokens: 800, maxSteps: 15, keepsConversation: true)
         }
@@ -74,6 +75,15 @@ public enum AIRouter {
                               "inscris", "inscris moi", "renvoie", "renvoyer", "supprime", "supprimer", "efface", "effacer", "publie", "poste", "abonne", "reserve", "reserver", "achete", "acheter", "commande", "commander", "ajoute au panier", "envoie", "envoyer", "telecharge", "telecharger",
                               "coche", "selectionne", "saisis", "tape", "valide", "soumets", "postule", "scrolle", "defile", "defiler", "fais defiler", "descends", "fill", "click", "open"]
     static let searchRequests = ["cherche", "chercher", "recherche", "rechercher", "trouve", "trouver", "google", "sur le web", "sur internet", "en ligne", "search", "look up"]
+    /// Les outils qui ne servent que sur indice (chacun coûte des jetons à chaque tour) : le calcul quand il y a des chiffres, la mémoire et l'historique quand la question parle de ce qui a été lu ou visité.
+    static let memoryCues = ["j ai lu", "j'ai lu", "ai lu", "j ai vu", "j'ai vu", "ai vu", "visite", "visité", "consulte", "tout a l heure", "l autre jour", "souviens", "rappelle", "retrouve", "historique", "favoris", "deja", "avant", "precedemment", "lu "]
+    static func extraTools(text: String) -> [String] {
+        var tools: [String] = []
+        if text.contains(where: \.isNumber) { tools.append("calculate") }
+        if memoryCues.contains(where: text.contains) { tools += ["recall", "search_history"] }
+        return tools
+    }
+
     static let pageWords = ["page", "article", "site", "onglet", "texte", "document", "ici", "resume", "resumer", "resumez", "synthese", "points cles", "traduis", "traduire", "cette", "ce site", "celui ci", "celle ci", "ci dessus", "auteur", "titre", "paragraphe", "section"]
     static let freshWords = ["aujourd hui", "aujourd'hui", "demain", "hier", "cette semaine", "ce soir", "actuel", "actuelle", "actuellement", "dernier", "derniere", "derniers", "dernieres", "nouvelles", "recent", "recente", "recemment",
                              "nouveau", "nouvelle", "nouveautes", "actualite", "actualites", "news", "meteo", "cours", "prix", "tarif", "score", "resultat", "resultats", "classement", "horaires",

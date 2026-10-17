@@ -23,6 +23,9 @@ enum LucioleSelectionScript {
         ("if (window.__oreeLuciole) window.__oreeLuciole.track(on); return 'ok';", ["on": on])
     }
 
+    /// Les morceaux de page à ne pas recouvrir (médias, boutons, champs : poids 3 ; texte : poids 1), en pixels CSS de la fenêtre d'affichage. Lecture seule.
+    static let occupiedCall: (body: String, arguments: [String: Any]) = ("return window.__oreeLuciole ? window.__oreeLuciole.occupied() : null;", [:])
+
     private static let source = #"""
     (() => {
       if (!/^https?:$/.test(location.protocol) || window.__oreeLuciole) return;
@@ -66,7 +69,19 @@ enum LucioleSelectionScript {
       };
       window.addEventListener('scroll', follow, { passive: true, capture: true });
       window.addEventListener('resize', follow, { passive: true });
-      window.__oreeLuciole = { read: readNow, track(on) { tracking = !!on; if (tracking) post({ type: 'view', view: view() }); } };
+      const occupied = () => {
+        const out = [], vw = window.innerWidth, vh = window.innerHeight;
+        const add = (el, w) => {
+          const r = el.getBoundingClientRect();
+          if (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > vh || r.right < 0 || r.left > vw) return;
+          const s = getComputedStyle(el); if (s.visibility === 'hidden' || s.display === 'none' || +s.opacity === 0) return;
+          out.push({ x: Math.max(r.left, 0), y: Math.max(r.top, 0), w: Math.min(r.right, vw) - Math.max(r.left, 0), h: Math.min(r.bottom, vh) - Math.max(r.top, 0), k: w });
+        };
+        document.querySelectorAll('img, video, canvas, iframe, audio, picture, svg[width], button, input, select, textarea, [role=button], [role=dialog]').forEach(el => { if (out.length < 300) add(el, 3); });
+        document.querySelectorAll('p, li, h1, h2, h3, h4, blockquote, pre, td, figcaption').forEach(el => { if (out.length < 500 && el.children.length < 6) add(el, 1); });
+        return JSON.stringify(out);
+      };
+      window.__oreeLuciole = { read: readNow, occupied, track(on) { tracking = !!on; if (tracking) post({ type: 'view', view: view() }); } };
     })();
     """#
 }

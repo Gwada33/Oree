@@ -54,6 +54,24 @@ import Foundation
         #expect(right.frames[1].minY - right.frames[0].minY >= 34 && right.frames[2].minY - right.frames[1].minY >= 34)       // les gestes ne se chevauchent pas
         #expect((right.frames + left.frames).allSatisfy { $0.minX >= 0 && $0.maxX <= page.width })
     }
+    @Test func theCardMovesAwayFromTextMediaAndButtons() {
+        let capsule = LucioleGeometry.capsule(in: page)
+        let size = CGSize(width: 380, height: 300)
+        let spots = LucioleGeometry.bubbleSpots(size: size, page: page, capsule: capsule)
+        #expect(spots.count == 6 && spots.allSatisfy { $0.minX >= 0 && $0.maxX <= page.width && $0.minY >= 0 })
+        // Rien ne gêne : la place habituelle (au-dessus de la capsule, à gauche).
+        #expect(LucioleGeometry.leastCovering(spots: spots, occupied: [], capsule: capsule) == 0)
+        // Une vidéo occupe cette place : la carte va ailleurs, et ne couvre pas la vidéo.
+        let video = LucioleGeometry.Occupied(rect: spots[0].insetBy(dx: 10, dy: 10), weight: 3)
+        let index = LucioleGeometry.leastCovering(spots: spots, occupied: [video], capsule: capsule)
+        #expect(index != 0 && spots[index].intersection(video.rect).isNull)
+        // Du texte partout sauf à droite : elle va à droite.
+        let text = (0..<30).map { LucioleGeometry.Occupied(rect: CGRect(x: 100, y: 60 + Double($0) * 22, width: 700, height: 20), weight: 1) }
+        let chosen = LucioleGeometry.leastCovering(spots: spots, occupied: text, capsule: capsule)
+        #expect(spots[chosen].minX > 700)
+        #expect(spots.allSatisfy { LucioleGeometry.leastCovering(spots: [$0], occupied: [], capsule: capsule) == 0 })
+    }
+
     @Test func suggestionsStackAboveTheCapsule() {
         let capsule = LucioleGeometry.capsule(in: page)
         let frames = LucioleGeometry.suggestions(widths: [200, 240, 180], above: capsule)

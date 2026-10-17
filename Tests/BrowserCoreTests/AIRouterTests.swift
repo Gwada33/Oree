@@ -56,7 +56,7 @@ struct AIRouterTests {
     func followUp() {
         #expect(AIRouter.plan(question: "Et à Madrid ?", pageReadable: false, hasConversation: true).keepsConversation)
         #expect(AIRouter.plan(question: "Pourquoi ?", pageReadable: false, hasConversation: true).keepsConversation)
-        #expect(!AIRouter.plan(question: "Quelle est la capitale de l'Espagne selon l'histoire moderne ?", pageReadable: false, hasConversation: true).keepsConversation)
+        #expect(AIRouter.plan(question: "Quelle est la capitale de l'Espagne selon l'histoire moderne ?", pageReadable: false, hasConversation: true).keepsConversation)    // une conversation en cours se poursuit
         #expect(!AIRouter.plan(question: "Et à Madrid ?", pageReadable: false, hasConversation: false).keepsConversation)
     }
 

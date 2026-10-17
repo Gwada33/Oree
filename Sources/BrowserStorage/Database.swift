@@ -238,6 +238,24 @@ public final class AppDatabase: @unchecked Sendable {
             }
         }
 
+        // La mémoire ambiante : les pages lues (extrait de texte) et leur index de recherche.
+        migrator.registerMigration("v16_pageMemory") { db in
+            try db.create(table: "pageMemory") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("url", .text).notNull().unique()
+                t.column("host", .text).notNull()
+                t.column("title", .text).notNull()
+                t.column("body", .text).notNull()
+                t.column("readAt", .datetime).notNull().indexed()
+                t.column("visits", .integer).notNull().defaults(to: 1)
+            }
+            try db.create(virtualTable: "pageMemory_fts", using: FTS5()) { t in
+                t.synchronize(withTable: "pageMemory")
+                t.column("title")
+                t.column("body")
+            }
+        }
+
         return migrator
     }
 }

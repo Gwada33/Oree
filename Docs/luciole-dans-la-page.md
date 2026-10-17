@@ -9,7 +9,7 @@ Réglage : Réglages › Assistant › « Luciole s'affiche » (dans la page par
 | Moment | Ce qu'on voit | Où c'est |
 |---|---|---|
 | Appel (⌘J) | Luciole quitte la barre d'outils et s'ouvre en capsule de verre (champ, œil de partage, envoi) ; trois suggestions au-dessus | `LucioleOverlayView` |
-| Sélection | Trois mots sélectionnés + 300 ms : Luciole vole au bout de la ligne et propose Expliquer (E), Traduire (T), Garder (G) | `LucioleSelectionScript`, `SelectionPassage` |
+| Sélection | Clic droit sur trois mots ou plus › Expliquer, Traduire ou Garder avec Luciole (l'éventail automatique est en option, éteint par défaut) ; avec l'option, trois mots + 300 ms : Luciole vole au bout de la ligne et propose Expliquer (E), Traduire (T), Garder (G) | `LucioleSelectionScript`, `SelectionPassage` |
 | Réponse ancrée | Bulle de 380 pt à côté du passage, surlignage et fil de lumière dessinés par la couche (jamais dans le site) ; Markdown mis en forme | `LucioleGeometry`, `MarkdownRenderer` |
 | Action | Pastille numérotée sur chaque élément touché, pointillés lumineux, pastille « étape n sur 15 · Arrêter · esc » | `AgentCursor.onReveal`, `LucioleOverlayView` |
 | Validation | Page assombrie avec un trou et un anneau autour de l'élément ; carte dense ; Annuler par défaut, Valider après 1,2 s, Entrée ne valide jamais | `LucioleDimView`, `LucioleDecisionCard` |
@@ -17,6 +17,13 @@ Réglage : Réglages › Assistant › « Luciole s'affiche » (dans la page par
 | Repos | Après une tâche qui a agi : saut de joie, retour dans la barre d'outils, bulle de 4 s ; le chemin reste 60 s | `retractToRest` |
 | Page protégée | Luciole détourne les yeux : une ligne sous la barre d'outils, pas de capsule | `protectedLine` |
 | État du modèle | Carte (injoignable, clé manquante…) avec « Réessayer » ; plus de panneau | `LucioleDecisionCard.show(model:)` |
+
+## Une seule Luciole, et des cartes qui évitent le contenu
+
+- Une seule mascotte à l'écran : celle de la capsule (ou du passage) part travailler dans la page et y revient ; la couche cache la sienne pendant ce temps. Aller et retour vers la barre d'outils sont animés par une copie libre (le verre rogne ce qui en sort).
+- La carte de réponse choisit parmi six emplacements celui qui recouvre le moins de texte, de médias, de boutons et de champs (`LucioleGeometry.leastCovering`, lecture de la page par le script de lecture) ; elle ne bouge pas pendant qu'une réponse s'écrit, et ne couvre jamais la capsule.
+- Les liens de la réponse s'ouvrent dans Orée ; une adresse écrite en toutes lettres devient un lien court. Les sources montrent le numéro et le site.
+- Voir aussi `Docs/memoire-ambiante.md`.
 
 ## Sécurité (ce qui ne bouge pas)
 

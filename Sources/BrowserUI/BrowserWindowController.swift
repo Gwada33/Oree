@@ -171,6 +171,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }()
     let sidePanel = SidePanelView()
     let readingRepo = ReadingListRepository()
+    let pageMemory = PageMemoryRepository()
+    var memoryCaptureTasks: [UUID: Task<Void, Never>] = [:]
     let noteRepo = NoteRepository()
     var notesPopover: NSPopover?
     var notesView: NotesPanelView?

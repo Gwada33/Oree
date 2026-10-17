@@ -530,6 +530,17 @@ extension BrowserWindowController {
             windowWidth: { [weak self] in self?.window?.contentView?.bounds.width ?? 1200 },
             isPrivate: { [weak self] in self?.activeTab?.isPrivate ?? false },
             onLayout: { [weak self] pushed in self?.pushPage(by: pushed) },
+            recall: { [weak self] query in
+                guard let self else { return [] }
+                let words = PageMemoryPolicy.keywords(from: query)
+                // La recherche exige tous les mots : on essaie tous les mots, puis en retirant le dernier, jusqu'à trouver.
+                var tried = words
+                while !tried.isEmpty {
+                    if let hits = try? self.pageMemory.search(words: tried), !hits.isEmpty { return hits.map { (title: $0.title, host: $0.host, url: $0.url, snippet: $0.snippet, readAt: $0.readAt) } }
+                    tried.removeLast()
+                }
+                return []
+            },
             searchHistory: { [weak self] query in
                 guard let self else { return [] }
                 let history = ((try? self.historyRepo.search(matching: query, limit: 8)) ?? []).map { (title: $0.title, url: $0.url) }
@@ -555,9 +566,10 @@ extension BrowserWindowController {
         created.onRestPose = { [weak self] pose in
             guard let self, SettingsStore.shared.lucioleInPage else { return }
             if let pose { self.assistantMascot.apply(pose) }
+            if pose == nil { self.assistantMascot.alphaValue = 0; return }                 // elle part : plus rien ne reste dans la barre d'outils, la copie qui vole prend le relais
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = Motion.reduced ? 0 : 0.3
-                self.assistantMascot.animator().alphaValue = pose == nil ? 0 : 1          // « Luciole quitte la barre d'outils » : elle est dans la page
+                context.duration = Motion.reduced ? 0 : 0.25
+                self.assistantMascot.animator().alphaValue = 1
             }
         }
         created.onVisibilityChange = { [weak self] open in self?.assistantButton.isActive = open; self?.journalPanel("ai", open: open) }

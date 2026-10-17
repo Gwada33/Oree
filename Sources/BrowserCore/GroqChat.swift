@@ -63,6 +63,7 @@ public enum GroqChat {
             tool("calculate", "Calcule exactement une expression (+ - * / ^ % et parenthèses).", ["expression": ["type": "string"]], required: ["expression"]),
             tool("add_note", "Ajoute un texte à la note de la personne.", ["text": ["type": "string"]], required: ["text"]),
             tool("wait", "Attend que la page ait fini de changer (1 à 5 secondes).", ["seconds": ["type": "number"]]),
+            tool("recall", "Retrouve une page que la personne a lue (mémoire d'Orée) : donne quelques mots-clés du sujet.", ["query": ["type": "string"]], required: ["query"]),
             tool("done", "Donne la réponse finale à la personne.", ["answer": ["type": "string"]], required: ["answer"]),
         ]
     }

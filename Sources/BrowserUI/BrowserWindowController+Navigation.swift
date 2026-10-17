@@ -506,7 +506,26 @@ extension BrowserWindowController {
         })
     }
 
+    /// La mémoire ambiante : une page restée ouverte et visible une douzaine de secondes est considérée comme lue ; on en garde un extrait (voir `PageMemoryPolicy`).
+    func scheduleMemoryCapture(for tab: Tab) {
+        guard SettingsStore.shared.ambientMemory, !tab.isPrivate else { return }
+        memoryCaptureTasks[tab.id]?.cancel()
+        let address = tab.currentURL
+        memoryCaptureTasks[tab.id] = Task { @MainActor [weak self, weak tab] in
+            try? await Task.sleep(for: .seconds(12))
+            guard !Task.isCancelled, let self, let tab, tab.currentURL == address, tab.id == self.activeTab?.id, let web = tab.webView,
+                  let json = await web.safeEvaluate(PageMemoryScript.source, world: PageMemoryScript.world) as? String,
+                  let object = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] else { return }
+            let page = PageMemoryPolicy.memorable(url: address, title: (object["title"] as? String) ?? tab.displayTitle, text: (object["text"] as? String) ?? "", isPrivate: tab.isPrivate,
+                                                  hasSecretField: (object["secret"] as? Bool) ?? true, exemptHosts: SettingsStore.shared.protectionExemptHosts)
+            guard let page, let host = page.url.host else { return }
+            try? self.pageMemory.remember(url: page.url.absoluteString, host: host, title: page.title, text: page.text)
+            try? self.pageMemory.purge(olderThanDays: SettingsStore.shared.ambientMemoryDays)
+        }
+    }
+
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if let tab = tab(for: webView) { scheduleMemoryCapture(for: tab) }
         guard let tab = tab(for: webView) else { return }
         journalNavDone(tab, ok: true)
         tab.tabButton.setTitle(tab.displayTitle, host: tab.badgeHost)

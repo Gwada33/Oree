@@ -203,14 +203,18 @@ private let ask = "Quelle est la capitale du Portugal ?"          // une connais
         #expect(action.requests[0].messages.contains { $0.content.contains("CE DONT TU TE SOUVIENS") && $0.content.contains("<memoire>\n• hier") && $0.content.contains("</memoire>") })
     }
 
-    @Test func theConversationIsKeptOnlyForAFollowUp() async {
+    @Test func theConversationContinuesWithinAnOngoingDiscussion() async {
         let context = ["Vous : météo à Lyon", "Luciole : il pleut"]
         let follow = FakeEnv([#"{"tool":"done","answer":"ok"}"#])
         _ = await AgentLoop(environment: follow).run(task: "Et à Paris ?", context: context)
         #expect(follow.requests[0].messages.contains { $0.content.contains("Conversation précédente") && $0.content.contains("météo à Lyon") })
-        let fresh = FakeEnv([#"{"tool":"done","answer":"ok"}"#])
-        _ = await AgentLoop(environment: fresh).run(task: "Explique-moi la photosynthèse des plantes vertes en détail", context: context)
-        #expect(!(fresh.requests[0].messages.contains { $0.content.contains("Conversation précédente") }))
+        // Une question longue sans « il » ni « celle-ci » garde elle aussi le fil : avant, elle le perdait (« entre chaque message il perd son contexte »).
+        let long = FakeEnv([#"{"tool":"done","answer":"ok"}"#])
+        _ = await AgentLoop(environment: long).run(task: "Explique-moi la photosynthèse des plantes vertes en détail", context: context)
+        #expect(long.requests[0].messages.contains { $0.content.contains("Conversation précédente") && $0.content.contains("météo à Lyon") })
+        let first = FakeEnv([#"{"tool":"done","answer":"ok"}"#])
+        _ = await AgentLoop(environment: first).run(task: "Explique-moi la photosynthèse des plantes vertes en détail", context: [])
+        #expect(!(first.requests[0].messages.contains { $0.content.contains("Conversation précédente") }))
     }
 
     // MARK: Registre : pas de double exécution

@@ -75,6 +75,9 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     private let thread = CAShapeLayer(), threadHalo = CAShapeLayer()
     /// Les rectangles du passage (repère de la couche), pour la bulle, le surlignage et le fil ; nil : pas de passage.
     private var anchorRects: [CGRect] = []
+    /// Le contenu de la page (médias, boutons, champs, texte) que la carte évite ; l'emplacement choisi reste fixe pendant qu'une réponse s'écrit.
+    private var occupied: [LucioleGeometry.Occupied] = []
+    private var spotIndex = 0
 
     private let capsule = LucioleGlass(radius: 33)
     private let capsuleMascot = LucioleView(size: 54)
@@ -90,10 +93,9 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     private let bubbleMascot = LucioleView(size: 22)
     private let bubbleTitle = NSTextField(labelWithString: "Luciole")
     private let bubbleScroll = NSScrollView()
-    private let bubbleText = NSTextField(wrappingLabelWithString: "")
+    private let bubbleText = LucioleTextView()
     private let sourceRow = NSStackView()
     private let followField = NSTextField()
-    private let noteLabel = NSTextField(labelWithString: "")
     private let closeButton = SurfaceView(fill: nil, cornerRadius: 14)
     private let openPageButton = LucioleGlassButton(title: "Ouvrir en page", symbol: "doc.richtext", height: 30, font: Theme.sans(12, .medium))
     private var bubbleHeight: CGFloat = 0
@@ -211,20 +213,21 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         bubbleTitle.font = Theme.sans(12, .semibold); bubbleTitle.textColor = Theme.muted
         // Une seule Luciole à l'écran : la mascotte de l'en-tête a disparu (la bulle sort de la capsule ou du passage, où elle se trouve déjà).
         bubbleMascot.isHidden = true
-        for v in [bubbleMascot, bubbleTitle, bubbleScroll, sourceRow, followField, noteLabel, closeButton] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; c.addSubview(v) }
+        for v in [bubbleMascot, bubbleTitle, bubbleScroll, sourceRow, followField, closeButton] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; c.addSubview(v) }
         let x = NSImageView(image: NSImage.oreeSymbol("xmark", size: 11, weight: .semibold) { Theme.muted }); x.translatesAutoresizingMaskIntoConstraints = false
         closeButton.addSubview(x)
         closeButton.setAccessibilityElement(true); closeButton.setAccessibilityRole(.button); closeButton.setAccessibilityLabel("Fermer Luciole")
         closeButton.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(closeTapped)))
-        bubbleText.isSelectable = true; bubbleText.translatesAutoresizingMaskIntoConstraints = true
+        bubbleText.translatesAutoresizingMaskIntoConstraints = true
+        bubbleText.onLink = { [weak self] url in self?.onOpenSource?(url) }
         bubbleScroll.drawsBackground = false; bubbleScroll.hasVerticalScroller = true; bubbleScroll.autohidesScrollers = true; bubbleScroll.borderType = .noBorder
         bubbleScroll.documentView = FlippedDocument()
         bubbleScroll.documentView?.addSubview(bubbleText)
         sourceRow.orientation = .horizontal; sourceRow.spacing = 6; sourceRow.alignment = .centerY
+        followField.cell = CenteredFieldCell(textCell: ""); followField.cell?.isEditable = true; followField.cell?.isScrollable = true
         followField.placeholderString = "Continuer ici…"; followField.font = Theme.sans(13); followField.isBordered = false; followField.drawsBackground = true
         followField.backgroundColor = Theme.hover; followField.focusRingType = .none; followField.delegate = self; followField.wantsLayer = true
         followField.layer?.cornerRadius = 12; followField.setAccessibilityLabel("Continuer la conversation")
-        noteLabel.font = Theme.sans(11); noteLabel.textColor = Theme.muted; noteLabel.lineBreakMode = .byTruncatingTail
         openPageButton.onClick = { [weak self] in if let text = self?.model?.answer { self?.onOpenPage?(text) } }
         NSLayoutConstraint.activate([
             bubbleMascot.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16), bubbleMascot.topAnchor.constraint(equalTo: c.topAnchor, constant: 14),
@@ -239,8 +242,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
             sourceRow.topAnchor.constraint(equalTo: bubbleScroll.bottomAnchor, constant: 8), sourceRow.heightAnchor.constraint(greaterThanOrEqualToConstant: 0),
             followField.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16), followField.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -16),
             followField.topAnchor.constraint(equalTo: sourceRow.bottomAnchor, constant: 10), followField.heightAnchor.constraint(equalToConstant: 34),
-            noteLabel.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 18), noteLabel.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -18),
-            noteLabel.topAnchor.constraint(equalTo: followField.bottomAnchor, constant: 8), noteLabel.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -12),
+            followField.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -14),
         ])
     }
 
@@ -378,9 +380,16 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         guard !Motion.reduced, let button, let window else { return }
         let from = convert(window.contentView?.convert(button, from: nil) ?? button, from: nil)
         let start = CGPoint(x: from.midX, y: from.midY)
-        guard let host = capsuleMascot.layer, let target = capsuleMascot.superview else { return }
         let end = CGPoint(x: capsule.frame.minX + 8 + 27, y: capsule.frame.midY)
         let dx = start.x - end.x, dy = start.y - end.y
+        // Une copie libre dans la couche : la mascotte de la capsule est rognée par le verre, un vol qui en sort resterait invisible jusqu'à l'arrivée.
+        let copy = LucioleView(size: 54)
+        copy.apply(.wake); copy.translatesAutoresizingMaskIntoConstraints = true
+        copy.frame = CGRect(x: end.x - 27, y: end.y - 27, width: 54, height: 54)
+        addSubview(copy)
+        guard let host = copy.layer else { copy.removeFromSuperview(); return }
+        capsuleMascot.alphaValue = 0
+        flights += 1
         let curve = CAMediaTimingFunction(controlPoints: 0.45, 0, 0.15, 1)
         let move = CABasicAnimation(keyPath: "transform.translation"); move.fromValue = NSValue(size: NSSize(width: dx, height: dy)); move.toValue = NSValue(size: .zero)
         let scale = CABasicAnimation(keyPath: "transform.scale"); scale.fromValue = 28.0 / 54.0; scale.toValue = 1
@@ -388,7 +397,12 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         tilt.values = [0, lean, 0]; tilt.keyTimes = [0, 0.4, 1]
         let group = CAAnimationGroup(); group.animations = [move, scale, tilt]; group.duration = 0.8; group.timingFunction = curve
         host.add(group, forKey: "flight")
-        _ = target
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            copy.removeFromSuperview()
+            guard let self else { return }
+            self.flights -= 1
+            if self.presented, self.mode == .capsule { self.capsuleMascot.alphaValue = 1 }
+        }
     }
 
     private func startAura() {
@@ -412,7 +426,6 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         send.alphaValue = model.composerEnabled ? 1 : 0.4
         shareButton.alphaValue = model.contextLocked ? 0.35 : (model.contextShared ? 1 : 0.55)
         shareButton.setAccessibilityLabel(model.contextShared ? "Luciole lit la page : ne plus la partager" : "Luciole ne lit pas la page : la partager")
-        noteLabel.stringValue = model.note
         updateSuggestions(model)
         updateBubble(model)
         updateDecision(model)
@@ -543,20 +556,21 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         if !hasContent, !bubble.isHidden { bubble.disappear() }
         guard hasContent else { return }
         if let line = model.protectedLine {
-            bubbleText.attributedStringValue = NSAttributedString(string: line, attributes: [.font: Theme.sans(13), .foregroundColor: Theme.text])
+            bubbleText.set(NSAttributedString(string: line, attributes: [.font: Theme.sans(13), .foregroundColor: Theme.text]))
         } else if model.answer.isEmpty {
-            bubbleText.attributedStringValue = NSAttributedString(string: "Luciole réfléchit…", attributes: [.font: Theme.sans(13), .foregroundColor: Theme.muted])
+            bubbleText.set(NSAttributedString(string: "Luciole réfléchit…", attributes: [.font: Theme.sans(13), .foregroundColor: Theme.muted]))
         } else {
-            bubbleText.attributedStringValue = MarkdownRenderer.attributed(model.answer + (model.running ? " ▍" : ""))
+            bubbleText.set(MarkdownRenderer.attributed(model.answer + (model.running ? " ▍" : "")))
         }
         sourceRow.arrangedSubviews.forEach { sourceRow.removeArrangedSubview($0); $0.removeFromSuperview() }
         for (i, source) in model.sources.prefix(6).enumerated() {
             guard let url = URL(string: source) else { continue }
-            let pill = LucioleGlassButton(title: "\(i + 1)", symbol: nil, height: 26, font: Theme.serifItalic(15))
+            let host = (url.host ?? "").replacingOccurrences(of: "www.", with: "")
+            let pill = LucioleGlassButton(title: "\(i + 1)  \(host.count > 22 ? String(host.prefix(21)) + "…" : host)", symbol: nil, height: 26, font: Theme.sans(12, .medium))
             pill.onClick = { [weak self] in self?.onOpenSource?(url) }
             pill.setAccessibilityLabel("Source \(i + 1) : \(url.host ?? source)")
             pill.translatesAutoresizingMaskIntoConstraints = false
-            pill.widthAnchor.constraint(equalToConstant: 30).isActive = true; pill.heightAnchor.constraint(equalToConstant: 26).isActive = true
+            pill.widthAnchor.constraint(equalToConstant: max(pill.idealWidth + 6, 56)).isActive = true; pill.heightAnchor.constraint(equalToConstant: 26).isActive = true
             sourceRow.addArrangedSubview(pill)
         }
         if MarkdownRenderer.deservesAPage(model.answer), !model.running {
@@ -566,7 +580,6 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         }
         sourceRow.isHidden = sourceRow.arrangedSubviews.isEmpty
         followField.isHidden = model.protectedLine != nil
-        noteLabel.stringValue = model.protectedLine != nil ? "" : model.note
         bubble.setAccessibilityElement(true); bubble.setAccessibilityRole(.group); bubble.setAccessibilityLabel("Réponse de Luciole")
     }
 
@@ -575,7 +588,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     #if DEBUG
     /// Dev : où sont les surfaces (pour les essais automatiques).
     var report: String {
-        "overlay=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)) hidden=\(isHidden) presented=\(presented) capsule=\(capsule.frame.integral) hidden=\(capsule.isHidden) alpha=\(capsule.alphaValue) bubble=\(bubble.frame.integral) hidden=\(bubble.isHidden) pills=\(pills.count) fan=\(fan.count) fanTip=\(fanTip.map { "\(Int($0.x)),\(Int($0.y))" } ?? "-") anchors=\(anchorRects.count) flight=\(capsuleMascot.layer?.animation(forKey: "flight") != nil) mode=\(mode) superview=\(superview.map { String(describing: type(of: $0)) } ?? "-")"
+        "overlay=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)) hidden=\(isHidden) presented=\(presented) capsule=\(capsule.frame.integral) hidden=\(capsule.isHidden) alpha=\(capsule.alphaValue) bubble=\(bubble.frame.integral) hidden=\(bubble.isHidden) pills=\(pills.count) fan=\(fan.count) fanTip=\(fanTip.map { "\(Int($0.x)),\(Int($0.y))" } ?? "-") anchors=\(anchorRects.count) free=\(subviews.filter { $0 is LucioleView }.count) spot=\(spotIndex) occ=\(occupied.count) flight=\(capsuleMascot.layer?.animation(forKey: "flight") != nil) mode=\(mode) superview=\(superview.map { String(describing: type(of: $0)) } ?? "-")"
     }
     #endif
 
@@ -596,11 +609,10 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         guard !bubble.isHidden || model?.running == true || !(model?.answer.isEmpty ?? true) || !decisionCard.isHidden || !actionPill.isHidden else { return }
         // La bulle : 380 pt de large ; la hauteur suit le texte, dans la limite de la place au-dessus de la capsule.
         let textWidth = LucioleGeometry.bubbleWidth - 36
-        let text = bubbleText.attributedStringValue
+        let text = bubbleText.attributedString()
         // La mesure du champ lui-même (celle d'un NSAttributedString oublie l'espacement entre paragraphes et l'interligne des tableaux).
-        bubbleText.preferredMaxLayoutWidth = textWidth
-        let needed = ceil(bubbleText.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: textWidth, height: 100_000)).height ?? text.size().height) + 6
-        let chrome: CGFloat = 14 + 22 + 8 + 8 + (sourceRow.isHidden ? 0 : 26 + 8) + 10 + (followField.isHidden ? 0 : 34) + 8 + 14 + 12
+        let needed = bubbleText.fittingHeight(width: textWidth) + 6
+        let chrome: CGFloat = 14 + 22 + 8 + 8 + (sourceRow.isHidden ? 0 : 26 + 8) + 10 + (followField.isHidden ? 0 : 34) + 14
         let maxText = max(80, capsuleFrame.minY - 40 - chrome - 20)
         let textHeight = min(needed, maxText)
         bubbleHeight = textHeight + chrome
@@ -634,8 +646,8 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         let anchor = LucioleGeometry.anchor(of: anchorRects, page: page)
         var placed = LucioleGeometry.bubble(height: Double(bubbleHeight), anchor: anchor, page: page, avoiding: mode == .answerOnly ? nil : capsuleFrame)
         if anchor == nil, mode == .capsule {                // sans passage : la bulle sort de la capsule, alignée sur Luciole, au lieu de flotter dans un coin
-            let frame = CGRect(x: capsuleFrame.minX, y: max(capsuleFrame.minY - 12 - bubbleHeight, 16), width: LucioleGeometry.bubbleWidth, height: bubbleHeight)
-            placed = (frame, .corner)
+            let spots = LucioleGeometry.bubbleSpots(size: CGSize(width: LucioleGeometry.bubbleWidth, height: bubbleHeight), page: page, capsule: capsuleFrame)
+            placed = (spots[min(spotIndex, spots.count - 1)], .corner)
         }
         bubble.frame = placed.frame
         drawAnchor(anchor: anchor, bubble: placed.frame, drawThread: placed.side != .corner && !bubble.isHidden)
@@ -652,6 +664,16 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         let curve = CGMutablePath()
         curve.move(to: line.start); curve.addQuadCurve(to: line.end, control: line.control)
         thread.path = curve; threadHalo.path = curve
+    }
+
+    /// Choisit l'emplacement de la carte qui recouvre le moins de page (voir `LucioleGeometry.leastCovering`).
+    func setOccupied(_ items: [LucioleGeometry.Occupied]) {
+        occupied = items
+        guard bounds.width > 0 else { return }
+        let capsuleFrame = LucioleGeometry.capsule(in: bounds.size)
+        let spots = LucioleGeometry.bubbleSpots(size: CGSize(width: LucioleGeometry.bubbleWidth, height: max(bubbleHeight, 200)), page: bounds.size, capsule: capsuleFrame)
+        spotIndex = LucioleGeometry.leastCovering(spots: spots, occupied: items, capsule: capsuleFrame)
+        relayout()
     }
 
     func setAnchor(_ rects: [CGRect]) { anchorRects = rects; relayout() }
@@ -759,4 +781,40 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         }
     }
     private func removeKeyMonitor() { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil }
+}
+
+/// Le texte d'une réponse : sélectionnable, avec des liens qui s'ouvrent dans Orée (jamais dans le navigateur par défaut) ; ni fond, ni marge.
+@MainActor
+final class LucioleTextView: NSTextView, NSTextViewDelegate {
+    var onLink: ((URL) -> Void)?
+
+    init() {
+        let storage = NSTextStorage()
+        let manager = NSLayoutManager(); storage.addLayoutManager(manager)
+        let container = NSTextContainer(size: NSSize(width: 340, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true; container.lineFragmentPadding = 0
+        manager.addTextContainer(container)
+        super.init(frame: .zero, textContainer: container)
+        isEditable = false; isSelectable = true; drawsBackground = false
+        textContainerInset = .zero; isVerticallyResizable = true; isHorizontallyResizable = false
+        linkTextAttributes = [.foregroundColor: Theme.accent, .underlineStyle: NSUnderlineStyle.single.rawValue, .cursor: NSCursor.pointingHand]
+        delegate = self
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func set(_ text: NSAttributedString) { textStorage?.setAttributedString(text) }
+
+    func fittingHeight(width: CGFloat) -> CGFloat {
+        guard let container = textContainer, let manager = layoutManager else { return 0 }
+        container.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        manager.ensureLayout(for: container)
+        return ceil(manager.usedRect(for: container).height)
+    }
+
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:))
+        guard let url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return true }
+        onLink?(url)
+        return true
+    }
 }

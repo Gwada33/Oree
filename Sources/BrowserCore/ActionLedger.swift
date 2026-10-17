@@ -22,7 +22,7 @@ public struct ActionLedger: Sendable {
         case refuse(String)                           // inutile ou voué à l'échec : le modèle en est informé
     }
 
-    public static let readOnly: Set<String> = ["search_web", "read_page", "open_url", "search_history", "calculate"]
+    public static let readOnly: Set<String> = ["search_web", "read_page", "open_url", "search_history", "calculate", "recall"]
     public static let maxFailures = 2
     public static let maxStalled = 3
 

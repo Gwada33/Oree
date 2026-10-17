@@ -70,3 +70,43 @@ public enum LucioleGeometry {
         return (frames, onRight)
     }
 }
+
+
+public extension LucioleGeometry {
+    /// Un morceau de la page qu'une carte ne doit pas recouvrir : `weight` 3 pour un média, un bouton ou un champ, 1 pour du texte.
+    struct Occupied: Equatable, Sendable {
+        public var rect: CGRect; public var weight: Double
+        public init(rect: CGRect, weight: Double) { self.rect = rect; self.weight = weight }
+    }
+
+    /// Les emplacements où poser une carte de `size` : au-dessus de la capsule (à gauche, puis à droite), puis dans les colonnes de gauche et de droite.
+    static func bubbleSpots(size: CGSize, page: CGSize, capsule: CGRect) -> [CGRect] {
+        let top = 70.0, bottom = capsule.minY - 12 - size.height
+        func clamp(_ y: Double) -> Double { min(max(y, 16), max(page.height - size.height - 16, 16)) }
+        return [
+            CGRect(x: capsule.minX, y: max(bottom, 16), width: size.width, height: size.height),
+            CGRect(x: capsule.maxX - size.width, y: max(bottom, 16), width: size.width, height: size.height),
+            CGRect(x: page.width - size.width - 20, y: clamp(top), width: size.width, height: size.height),
+            CGRect(x: 20, y: clamp(top), width: size.width, height: size.height),
+            CGRect(x: page.width - size.width - 20, y: clamp((page.height - size.height) / 2), width: size.width, height: size.height),
+            CGRect(x: 20, y: clamp((page.height - size.height) / 2), width: size.width, height: size.height),
+        ]
+    }
+
+    /// L'emplacement qui recouvre le moins de page (surface pondérée) ; le premier si plusieurs sont aussi bons (la carte garde sa place habituelle quand rien ne la gêne).
+    /// La capsule compte comme un obstacle très lourd : une carte ne la couvre jamais.
+    static func leastCovering(spots: [CGRect], occupied: [Occupied], capsule: CGRect?, tolerance: Double = 0.15) -> Int {
+        func cost(_ spot: CGRect) -> Double {
+            var total = 0.0
+            for item in occupied { let overlap = spot.intersection(item.rect); if !overlap.isNull { total += Double(overlap.width * overlap.height) * item.weight } }
+            if let capsule { let overlap = spot.intersection(capsule); if !overlap.isNull { total += Double(overlap.width * overlap.height) * 100 } }
+            return total
+        }
+        let costs = spots.map(cost)
+        guard let best = costs.min(), let first = costs.first else { return 0 }
+        // Le premier emplacement garde la place s'il est presque aussi bon que le meilleur (pas de saut pour un gain minime).
+        let spotArea = Double(spots.first.map { $0.width * $0.height } ?? 1)
+        if first - best <= spotArea * tolerance * 0.2 { return 0 }
+        return costs.firstIndex(of: best) ?? 0
+    }
+}

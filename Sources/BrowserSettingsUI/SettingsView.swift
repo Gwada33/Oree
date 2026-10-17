@@ -79,6 +79,19 @@ final class SettingsViewModel: ObservableObject {
     @Published var eventJournal = false { didSet { settings.eventJournalEnabled = eventJournal; refreshJournalStatus() } }
     @Published var eventJournalDays = 30 { didSet { settings.eventJournalDays = eventJournalDays } }
     @Published var journalStatus = ""
+    @Published var ambientMemory = true { didSet { settings.ambientMemory = ambientMemory } }
+    @Published var ambientMemoryDays = 30 { didSet { settings.ambientMemoryDays = ambientMemoryDays } }
+    @Published var memoryStatus = ""
+    func refreshMemoryStatus() { let n = (try? PageMemoryRepository().count()) ?? 0; memoryStatus = n == 0 ? "Rien n'est gardé pour l'instant." : "\(n) page\(n > 1 ? "s" : "") gardée\(n > 1 ? "s" : "") sur ce Mac." }
+    func forgetMemory() {
+        let alert = NSAlert()
+        alert.messageText = "Effacer la mémoire d'Orée ?"
+        alert.informativeText = "Les extraits des pages lues seront supprimés de ce Mac. Cela ne touche ni l'historique, ni les favoris, ni vos discussions avec Luciole."
+        alert.addButton(withTitle: "Effacer"); alert.addButton(withTitle: "Annuler")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        try? PageMemoryRepository().forgetAll(); refreshMemoryStatus()
+    }
     @Published var energyMode: EnergyMode = .automatic { didSet { settings.energyMode = energyMode } }
     @Published var sendGPC = true { didSet { settings.sendGlobalPrivacyControl = sendGPC } }
     @Published var minimumFontSize = 0 { didSet { settings.minimumFontSize = minimumFontSize } }
@@ -210,6 +223,7 @@ final class SettingsViewModel: ObservableObject {
         mouseGestures = current.mouseGestures
         eventJournal = current.eventJournalEnabled
         eventJournalDays = current.eventJournalDays
+        ambientMemory = current.ambientMemory; ambientMemoryDays = current.ambientMemoryDays
         energyMode = current.energyMode
         sendGPC = current.sendGlobalPrivacyControl
         minimumFontSize = current.minimumFontSize
@@ -770,6 +784,17 @@ public struct SettingsView: View {
                 Toggle("Retrouver mes favoris et mon historique récent dans la recherche Spotlight", isOn: $model.spotlight)
                 Text("Seuls le titre et le site (pas le contenu des pages) sont donnés à Spotlight : 300 pages récentes et tous les favoris. Rien en navigation privée. Effacer l'historique les retire aussi, et couper ce réglage vide l'index.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Mémoire d'Orée") {
+                Toggle("Garder un extrait des pages que je lis, pour que Luciole les retrouve (« l'article d'hier sur… »)", isOn: $model.ambientMemory)
+                    .onAppear { model.refreshMemoryStatus() }
+                Text("Seuls le titre, le site et un extrait du texte (8 000 caractères au plus) d'une page restée ouverte une douzaine de secondes. Jamais en navigation privée, ni sur une page de connexion, de paiement, de compte ou avec un mot de passe, ni sur une banque ou un webmail. L'adresse est gardée sans ses paramètres. Sur ce Mac seulement ; Luciole n'y accède que quand vous lui demandez de retrouver quelque chose.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if model.ambientMemory {
+                    Picker("Durée de garde", selection: $model.ambientMemoryDays) { Text("7 jours").tag(7); Text("30 jours").tag(30); Text("90 jours").tag(90) }
+                }
+                if !model.memoryStatus.isEmpty { Text(model.memoryStatus).font(.caption).foregroundStyle(.secondary) }
+                HStack { Button("Effacer la mémoire", role: .destructive) { model.forgetMemory() }; Button("Actualiser") { model.refreshMemoryStatus() } }
             }
             Section("Journal d’événements") {
                 Toggle("Garder un journal de la façon dont j’utilise Orée, sur ce Mac", isOn: $model.eventJournal)

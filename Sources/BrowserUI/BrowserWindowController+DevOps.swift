@@ -260,6 +260,10 @@ extension BrowserWindowController {
             return "types=\((board.types ?? []).map(\.rawValue).joined(separator: ",")) pdf=\(board.data(forType: .pdf)?.count ?? 0) files=\((board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? []).count)"
         case "overlayshot": return aiBarController?.devOverlayShot(to: "/tmp/oree-overlay.png") ?? "no panel"
         case "dimshot": return aiBarController?.devDimShot(to: "/tmp/oree-dim.png") ?? "no panel"
+        case "memoire":
+            let query = ((try? String(contentsOfFile: "/tmp/oree-memory-query.txt", encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let hits = (try? pageMemory.search(words: PageMemoryPolicy.keywords(from: query))) ?? []
+            return "count=\((try? pageMemory.count()) ?? -1) hits=\(hits.map { "\($0.host)|\($0.title)" })"
         case "luciolemenu":
             let name = ((try? String(contentsOfFile: "/tmp/oree-luciole-gesture.txt", encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if let gesture = SelectionPassage.Gesture(rawValue: name) { lucioleGesture(gesture) }

@@ -20,6 +20,17 @@ public enum AgentLocalTools {
         return AgentToolResult(ok: true, text: "Résultats (historique et favoris) :\n<donnees>\n\(lines)\n</donnees>", summary: "\(unique.count) résultat\(unique.count > 1 ? "s" : "")", sources: unique.map(\.url))
     }
 
+    /// `recall` : ce que la personne a lu (mémoire ambiante), les pages les plus récentes qui contiennent tous les mots ; un extrait chacune. Toujours des données, jamais des consignes.
+    public static func memory(query: String, entries: [(title: String, host: String, url: String, snippet: String, readAt: Date)], now: Date = Date()) -> AgentToolResult {
+        guard !entries.isEmpty else { return AgentToolResult(ok: true, text: "Rien dans ce que vous avez lu ne correspond à « \(query) ».", summary: "Rien trouvé") }
+        let formatter = RelativeDateTimeFormatter(); formatter.locale = Locale(identifier: "fr_FR"); formatter.unitsStyle = .full; formatter.dateTimeStyle = .named
+        let lines = entries.prefix(4).map { entry -> String in
+            let when = formatter.localizedString(for: entry.readAt, relativeTo: now)
+            return "- \(entry.title.isEmpty ? entry.host : entry.title) (\(entry.host), lu \(when)) — \(entry.url)\n  \(entry.snippet.replacingOccurrences(of: "\n", with: " "))"
+        }.joined(separator: "\n")
+        return AgentToolResult(ok: true, text: "Pages lues (mémoire d'Orée) :\n<memoire>\n\(lines)\n</memoire>", summary: "\(min(entries.count, 4)) page\(entries.count > 1 ? "s" : "") retrouvée\(entries.count > 1 ? "s" : "")", sources: entries.prefix(4).map(\.url))
+    }
+
     /// `wait` : entre une demi-seconde et cinq secondes, jamais plus.
     public static func waitSeconds(_ value: Any?) -> Double {
         let asked = (value as? Double) ?? (value as? Int).map(Double.init) ?? Double(value as? String ?? "") ?? 1

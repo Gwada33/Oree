@@ -117,6 +117,7 @@
 | **Sélectionner, c'est demander** | Sélectionnez un passage : Expliquer, Traduire ou Garder apparaissent à côté. La réponse s'écrit à côté du passage, surligné et relié par un fil de lumière. | ✅ (page de test) | ⭐⭐ |
 | **Valider en voyant** | Avant tout envoi, paiement ou connexion, la page s'assombrit autour du bouton et une carte montre en clair ce qui va partir. Rien ne part sans votre clic, Entrée ne valide jamais. | ✅ | ⭐⭐ |
 | **Le chemin de l'agent** | Chaque action de Luciole laisse une étape numérotée sur la page ; une pastille « Arrêter » reste en haut. | ✅ (tâche de 2 étapes) | ⭐⭐ |
+| **Mémoire d'Orée** | Luciole retrouve la page que vous avez lue hier (« l'article sur WebKit »). Jamais en navigation privée, ni connexion, paiement ou mot de passe ; sur ce Mac seulement ; effaçable en un clic. | ✅ (page de test ; recherche par mots, pas par sens) | ⭐⭐ |
 | **Réponses mises en page** | Tableaux, listes, titres, code ; « Ouvrir en page » pour lire en grand. | ✅ | ⭐ |
 
 ---

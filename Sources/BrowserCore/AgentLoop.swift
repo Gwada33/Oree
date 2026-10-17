@@ -16,7 +16,7 @@ public enum AgentReply: Equatable, Sendable {
 }
 
 public enum AgentParser {
-    public static let tools = ["search_web", "open_url", "read_page", "click", "type", "select", "scroll", "fill_form", "ask_user", "history_nav", "search_history", "calculate", "add_note", "wait", "done"]
+    public static let tools = ["search_web", "open_url", "read_page", "click", "type", "select", "scroll", "fill_form", "ask_user", "history_nav", "search_history", "calculate", "add_note", "wait", "recall", "done"]
 
     /// Tous les objets JSON `{…}` du texte, dans l'ordre (le modèle peut enchaîner plusieurs appels dans une réponse, un par ligne), en respectant les chaînes.
     static func objects(in text: String) -> [String] {
@@ -174,6 +174,7 @@ public final class AgentLoop {
         case "ask_user": return "Question pour vous"
         case "history_nav": return ["back": "Retour", "forward": "Avance", "reload": "Rechargement"][args["direction"] as? String ?? ""] ?? "Navigation"
         case "search_history": return "Recherche dans l'historique : \(args["query"] as? String ?? "…")"
+        case "recall": return "Je cherche dans ce que vous avez lu : \(args["query"] as? String ?? "…")"
         case "calculate": return "Calcul : \(args["expression"] as? String ?? "…")"
         case "add_note": return "Ajout à votre note"
         case "wait": return "Attente de la page"
@@ -212,7 +213,7 @@ public final class AgentLoop {
     }
 
     /// Les outils dont le modèle doit lire le résultat avant de continuer : un enchaînement d'appels s'arrête après eux.
-    static let needsReading: Set<String> = ["search_web", "open_url", "read_page", "ask_user", "history_nav", "search_history", "calculate"]
+    static let needsReading: Set<String> = ["search_web", "open_url", "read_page", "ask_user", "history_nav", "search_history", "calculate", "recall"]
 
     // MARK: Conversation
 

@@ -108,6 +108,7 @@ final class ChromeIconButton: HoverView {
     var onClick: (() -> Void)?
     var symbol: String { didSet { refreshImage() } }
     var isActive = false { didSet { needsDisplay = true; refreshImage() } }
+    var drawsActiveWash = true
     var isEnabled = true { didSet { alphaValue = isEnabled ? 1 : 0.35 } }
     /// 0...1 shows a progress ring around the icon (downloads); nil = no ring; `ringIndeterminate` spins it.
     var ringProgress: Double? { didSet { updateRing() } }
@@ -200,6 +201,7 @@ final class ChromeIconButton: HoverView {
     /// Remplace l'icône par une vue (la mascotte de Luciole, qui dort dans la barre d'outils) ; la vue est centrée et ne prend pas la souris.
     func setCustomContent(_ view: NSView) {
         icon.isHidden = true
+        drawsActiveWash = false                     // un carré sombre à la place de Luciole, quand elle est partie dans la page, serait un second « Luciole qui reste là »
         view.translatesAutoresizingMaskIntoConstraints = false
         addSubview(view)
         NSLayoutConstraint.activate([view.centerXAnchor.constraint(equalTo: centerXAnchor), view.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 1.5)])      // le dessin de Luciole a plus de matière en haut (ailes, antennes) : on le descend d'un point et demi pour l'aligner sur les autres icônes
@@ -211,7 +213,7 @@ final class ChromeIconButton: HoverView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let wash: NSColor? = isActive ? Theme.accentSoft : (isEnabled && hover > 0.001 ? Theme.hover.scaled(hover) : nil)
+        let wash: NSColor? = (isActive && drawsActiveWash) ? Theme.accentSoft : (isEnabled && hover > 0.001 ? Theme.hover.scaled(hover) : nil)
         if let wash {
             wash.setFill()
             NSBezierPath(roundedRect: bounds, xRadius: Theme.radiusSmall + 2, yRadius: Theme.radiusSmall + 2).fill()

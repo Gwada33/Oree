@@ -18,6 +18,7 @@ final class AIPanelController {
         var windowWidth: () -> CGFloat
         var isPrivate: () -> Bool                  // l'onglet actif est privé : rien n'est gardé
         var onLayout: (CGFloat) -> Void           // largeur dont la page doit s'écarter (0 : rien)
+        var recall: (String) -> [(title: String, host: String, url: String, snippet: String, readAt: Date)]      // la mémoire ambiante (jamais appelé en navigation privée)
         var searchHistory: (String) -> [(title: String, url: String)]     // historique et favoris (jamais appelé en navigation privée)
         var addNote: (String) -> Void
         var openAnswerPage: (_ title: String, _ html: String) -> Void   // la réponse mise en page, dans un nouvel onglet
@@ -328,6 +329,23 @@ final class AIPanelController {
         }
     }
 
+    /// Où ne pas poser la carte : médias, boutons, champs et texte de la page affichée, lus par le script de lecture (lecture seule).
+    private func refreshOccupied() {
+        guard inPage, overlayOpen, let web = hooks.activeWebView() else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let call = LucioleSelectionScript.occupiedCall
+            guard let json = await web.safeCall(call.body, arguments: call.arguments, world: LucioleSelectionScript.world) as? String,
+                  let list = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [[String: Double]] else { return }
+            let items = list.compactMap { d -> LucioleGeometry.Occupied? in
+                guard let x = d["x"], let y = d["y"], let w = d["w"], let h = d["h"] else { return nil }
+                let rect = self.overlayRects(fromDoc: [CGRect(x: x + self.scroll.x, y: y + self.scroll.y, width: w, height: h)], in: web).first ?? .zero
+                return LucioleGeometry.Occupied(rect: rect, weight: d["k"] ?? 1)
+            }
+            self.overlay.setOccupied(items)
+        }
+    }
+
     private func overlayRects(fromDoc rects: [CGRect], in web: WKWebView) -> [CGRect] {
         overlay.prepareGeometry()
         let zoom = max(web.pageZoom, 0.1)
@@ -381,6 +399,7 @@ final class AIPanelController {
         let tab = currentTab!
         runTab = tab
         pathClear?.cancel(); reveals = []
+        refreshOccupied()
         if overlayOpen, let web = hooks.activeWebView() { let track = LucioleSelectionScript.trackCall(true); Task { _ = await web.safeCall(track.body, arguments: track.arguments, world: LucioleSelectionScript.world) } }       // le défilement est connu avant le premier geste
         let run = UUID()
         runID = run
@@ -998,6 +1017,7 @@ extension AIPanelController: AgentEnvironment {
         cursor.follow(eventPose ?? .idle)
         if case .finished(let reason) = event {
             schedulePathClear()
+            refreshOccupied()
             if reason == .done, overlayOpen, !reveals.isEmpty { Task { [weak self] in try? await Task.sleep(for: .seconds(1.6)); self?.retractToRest() } }
             // La pose de fin (contente, ou en erreur) reste un instant, puis Luciole revient au repos.
             eventPoseReset = Task { [weak self] in
@@ -1036,6 +1056,10 @@ extension AIPanelController: AgentEnvironment {
             AIUsageMeter.shared.record { $0.pageReads += 1 }
             guard pageIsReadable, let web = hooks.activeWebView(), let map = await PageMapScript.capture(web) else { return AgentToolResult(ok: false, text: "Aucune page lisible.", summary: "Page non lisible") }
             return AgentToolResult(ok: true, text: map.render(maxElements: 0, maxText: 2400, focus: currentTask), summary: "Lecture de la page")
+        case "recall":
+            guard !hooks.isPrivate() else { return AgentToolResult(ok: false, text: "La mémoire n'est pas consultée depuis un onglet privé.", summary: "Onglet privé") }
+            guard let query = args["query"] as? String, !query.isEmpty else { return AgentToolResult(ok: false, text: "Il manque « query ».", summary: "Requête vide") }
+            return AgentLocalTools.memory(query: query, entries: hooks.recall(query))
         case "calculate":
             return AgentLocalTools.calculate(args["expression"] as? String ?? "")
         case "search_history":
