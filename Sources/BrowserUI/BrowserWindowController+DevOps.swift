@@ -259,6 +259,7 @@ extension BrowserWindowController {
             let board = NSPasteboard.general
             return "types=\((board.types ?? []).map(\.rawValue).joined(separator: ",")) pdf=\(board.data(forType: .pdf)?.count ?? 0) files=\((board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? []).count)"
         case "overlayshot": return aiBarController?.devOverlayShot(to: "/tmp/oree-overlay.png") ?? "no panel"
+        case "dimshot": return aiBarController?.devDimShot(to: "/tmp/oree-dim.png") ?? "no panel"
         case "luciolegesture":
             let name = ((try? String(contentsOfFile: "/tmp/oree-luciole-gesture.txt", encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             aiBarController?.devGesture(name); return "gesture \(name)"

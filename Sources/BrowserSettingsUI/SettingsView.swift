@@ -1408,10 +1408,10 @@ struct AssistantSection: View {
         Section("Affichage de Luciole") {
             Picker("Luciole s'affiche", selection: $provider.inPage) {
                 Text("Panneau latéral").tag(false)
-                Text("Dans la page (en cours de mise au point)").tag(true)
+                Text("Dans la page").tag(true)
             }.pickerStyle(.menu)
             Toggle("Proposer Expliquer, Traduire et Garder quand je sélectionne un passage", isOn: $provider.selectionFan).disabled(!provider.inPage)
-            Text("S'applique à la prochaine ouverture (⌘J). Dans la page, les confirmations et les questions s'ouvrent encore dans le panneau latéral.").font(.caption).foregroundStyle(.secondary)
+            Text("S'applique à la prochaine ouverture (⌘J). Dans la page, seuls l'installation et les erreurs du modèle s'affichent encore dans le panneau latéral.").font(.caption).foregroundStyle(.secondary)
         }
         Section("Cerveau de l'assistant") {
             Picker("Fournisseur", selection: $provider.provider) {

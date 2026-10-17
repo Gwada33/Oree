@@ -17,6 +17,17 @@ struct LucioleOverlayModel {
     var contextShared: Bool
     var contextLocked: Bool
     var protectedLine: String?
+    // Décision (validation ou question) : la carte est construite par Orée ; `decisionRect` est l'élément concerné, en coordonnées de la couche.
+    var confirm: ConfirmRequest?
+    var confirmArmed = true
+    var question: String?
+    var decisionRect: CGRect?
+    // Action sur la page : titre de la tâche, étape en cours, plafond, libellés des étapes ; le chemin et l'étape en cours (coordonnées de la couche).
+    var actionTitle: String?
+    var actionStep = 0
+    var actionTotal = 15
+    var actionLines: [String] = []
+    var path: [(step: Int, rect: CGRect)] = []
 }
 
 /// Luciole qui vit DANS la page : une couche native transparente posée au-dessus de la WKWebView de l'onglet actif. Elle ne laisse passer les clics que sur ses
@@ -30,6 +41,17 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     var onOpenSource: ((URL) -> Void)?
     var onOpenPage: ((String) -> Void)?
     var onGesture: ((SelectionPassage.Gesture) -> Void)?
+    var onConfirm: ((Bool) -> Void)?
+    var onAnswer: ((String?) -> Void)?
+    private let decisionCard = LucioleDecisionCard()
+    private let actionPill = LucioleGlass(radius: 21, dense: true)
+    private let pillDot = NSView(), pillTitle = NSTextField(labelWithString: ""), pillStep = NSTextField(labelWithString: "")
+    private let stopButton = LucioleGlassButton(title: "Arrêter", symbol: "stop.fill", height: 30, font: Theme.sans(12.5, .semibold), keyHint: "esc")
+    private let traceBubble = LucioleGlass(radius: 20)
+    private let traceLabel = NSTextField(wrappingLabelWithString: "")
+    private var stepViews: [NSView] = []
+    private let pathLine = CAShapeLayer(), pathGlow = CAShapeLayer()
+    private var traceOpen = false
 
     /// Ce que la couche montre : la capsule d'appel, la seule bulle de réponse ancrée à un passage (venue d'un geste), ou l'éventail seul.
     private enum Mode { case capsule, answerOnly }
@@ -84,6 +106,13 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         thread.strokeColor = Theme.accent.cgColor; thread.lineWidth = 2; thread.lineCap = .round
         threadHalo.strokeColor = Theme.accent.withAlphaComponent(0.35).cgColor; threadHalo.lineWidth = 7; threadHalo.lineCap = .round
         fanMascot.isHidden = true; addSubview(fanMascot)
+        for l in [pathGlow, pathLine] { l.fillColor = nil; l.lineCap = .round; l.lineDashPattern = [1, 7]; layer?.insertSublayer(l, at: 0) }
+        pathLine.strokeColor = Theme.accent.cgColor; pathLine.lineWidth = 3
+        pathGlow.strokeColor = Theme.accent.withAlphaComponent(0.35).cgColor; pathGlow.lineWidth = 9
+        buildActionPill()
+        for v in [decisionCard, actionPill, traceBubble] { addSubview(v); v.isHidden = true }
+        decisionCard.onPrimary = { [weak self] text in guard let self else { return }; if self.decisionCard.kind == .question { self.onAnswer?(text) } else { self.onConfirm?(true) } }
+        decisionCard.onCancel = { [weak self] in guard let self else { return }; if self.decisionCard.kind == .question { self.onAnswer?(nil) } else { self.onConfirm?(false) } }
         setAccessibilityElement(false)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -128,6 +157,32 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         capsule.setAccessibilityElement(false)
     }
 
+    private func buildActionPill() {
+        let c = actionPill.content
+        pillDot.wantsLayer = true; pillDot.layer?.backgroundColor = Theme.accent.cgColor; pillDot.layer?.cornerRadius = 4
+        pillTitle.font = Theme.sans(13.5, .semibold); pillTitle.textColor = Theme.text; pillTitle.lineBreakMode = .byTruncatingTail
+        pillStep.font = Theme.sans(12); pillStep.textColor = Theme.muted
+        for v in [pillDot, pillTitle, pillStep, stopButton] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; c.addSubview(v) }
+        NSLayoutConstraint.activate([
+            pillDot.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16), pillDot.centerYAnchor.constraint(equalTo: c.centerYAnchor), pillDot.widthAnchor.constraint(equalToConstant: 8), pillDot.heightAnchor.constraint(equalToConstant: 8),
+            pillTitle.leadingAnchor.constraint(equalTo: pillDot.trailingAnchor, constant: 10), pillTitle.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+            pillStep.leadingAnchor.constraint(equalTo: pillTitle.trailingAnchor, constant: 10), pillStep.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+            stopButton.leadingAnchor.constraint(greaterThanOrEqualTo: pillStep.trailingAnchor, constant: 12), stopButton.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -6),
+            stopButton.centerYAnchor.constraint(equalTo: c.centerYAnchor), stopButton.widthAnchor.constraint(equalToConstant: 104), stopButton.heightAnchor.constraint(equalToConstant: 30),
+        ])
+        pillTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        stopButton.onClick = { [weak self] in self?.onStop?() }
+        actionPill.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(togglePillTrace)))
+        actionPill.setAccessibilityElement(true); actionPill.setAccessibilityRole(.button)
+        traceLabel.font = Theme.sans(12.5); traceLabel.textColor = Theme.text; traceLabel.translatesAutoresizingMaskIntoConstraints = false
+        traceBubble.content.addSubview(traceLabel)
+        NSLayoutConstraint.activate([traceLabel.leadingAnchor.constraint(equalTo: traceBubble.content.leadingAnchor, constant: 16), traceLabel.trailingAnchor.constraint(equalTo: traceBubble.content.trailingAnchor, constant: -16),
+                                     traceLabel.topAnchor.constraint(equalTo: traceBubble.content.topAnchor, constant: 12), traceLabel.bottomAnchor.constraint(equalTo: traceBubble.content.bottomAnchor, constant: -12)])
+        traceBubble.setAccessibilityElement(true); traceBubble.setAccessibilityRole(.list); traceBubble.setAccessibilityLabel("Étapes de Luciole")
+    }
+
+    @objc private func togglePillTrace() { traceOpen.toggle(); if !traceOpen { traceBubble.disappear() } else { traceBubble.isHidden = false; traceBubble.appear() }; relayout() }
+
     private func buildBubble() {
         let c = bubble.content
         bubbleTitle.font = Theme.sans(12, .semibold); bubbleTitle.textColor = Theme.muted
@@ -170,7 +225,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = superview.map { convert(point, from: $0) } ?? point
-        let interactive: [NSView] = [capsule, bubble] + pills + fan
+        let interactive: [NSView] = [capsule, bubble, decisionCard, actionPill, traceBubble] + pills + fan
         return interactive.contains { !$0.isHidden && $0.frame.contains(local) } ? super.hitTest(point) : nil     // partout ailleurs : la page reçoit le clic
     }
 
@@ -291,7 +346,77 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         noteLabel.stringValue = model.note
         updateSuggestions(model)
         updateBubble(model)
+        updateDecision(model)
+        updateAction(model)
         relayout()
+    }
+
+    // MARK: Décision, action, chemin
+
+    private var decisionKey = ""
+    private func updateDecision(_ model: LucioleOverlayModel) {
+        let key = model.confirm.map { "c:\($0.title)|\($0.rows.map { "\($0.key)=\($0.value)" }.joined(separator: ";"))" } ?? model.question.map { "q:\($0)" } ?? ""
+        decisionRect = model.decisionRect
+        if key.isEmpty {
+            if !decisionCard.isHidden { decisionCard.disappear() }
+            decisionKey = ""
+        } else {
+            if key != decisionKey {
+                decisionKey = key
+                if let request = model.confirm { decisionCard.show(confirm: request, armed: model.confirmArmed) } else if let question = model.question { decisionCard.show(question: question) }
+                decisionCard.isHidden = false; decisionCard.appear()
+                if let window { NSAccessibility.post(element: window, notification: .announcementRequested, userInfo: [.announcement: decisionCard.announcement, .priority: NSAccessibilityPriorityLevel.high.rawValue]) }
+                window?.makeFirstResponder(nil); decisionCard.focusDefault()
+            } else if model.confirm != nil { decisionCard.setArmed(model.confirmArmed) }
+        }
+        capsule.alphaValue = key.isEmpty ? 1 : 0.35
+        capsule.isHidden = capsule.isHidden || mode != .capsule
+    }
+    private var decisionRect: CGRect?
+
+    private func updateAction(_ model: LucioleOverlayModel) {
+        if let title = model.actionTitle, model.running {
+            actionPill.isHidden = false
+            if pillTitle.stringValue.isEmpty { actionPill.appear() }
+            pillTitle.stringValue = title
+            pillStep.stringValue = "étape \(model.actionStep) sur \(model.actionTotal)"
+            actionPill.setAccessibilityLabel("\(title), étape \(model.actionStep) sur \(model.actionTotal). Cliquer pour voir les étapes.")
+            traceLabel.stringValue = model.actionLines.enumerated().map { "\($0.offset + 1)  \($0.element)" }.joined(separator: "\n")
+            if !Motion.reduced, pillDot.layer?.animation(forKey: "pulse") == nil {
+                let pulse = CABasicAnimation(keyPath: "opacity"); pulse.fromValue = 1; pulse.toValue = 0.3; pulse.duration = 0.9; pulse.autoreverses = true; pulse.repeatCount = .infinity
+                pillDot.layer?.add(pulse, forKey: "pulse")
+            }
+        } else if !actionPill.isHidden {
+            actionPill.disappear(); pillTitle.stringValue = ""; pillDot.layer?.removeAllAnimations()
+            traceOpen = false; traceBubble.disappear()
+        }
+        updatePath(model)
+    }
+
+    /// Le chemin : une pastille de verre numérotée sur chaque élément touché, reliées dans l'ordre par des pointillés lumineux ; l'étape en cours pulse.
+    private func updatePath(_ model: LucioleOverlayModel) {
+        stepViews.forEach { $0.removeFromSuperview() }; stepViews = []
+        guard !model.path.isEmpty else { pathLine.path = nil; pathGlow.path = nil; return }
+        let line = CGMutablePath()
+        for (i, item) in model.path.enumerated() {
+            let center = CGPoint(x: item.rect.midX, y: item.rect.midY)
+            if i == 0 { line.move(to: center) } else { line.addLine(to: center) }
+        }
+        pathLine.path = line; pathGlow.path = line
+        for (i, item) in model.path.enumerated() {
+            let badge = LucioleGlass(radius: 15, dense: false)
+            badge.frame = CGRect(x: item.rect.midX - 15, y: item.rect.minY - 17, width: 30, height: 30)      // posée sur le bord haut de l'élément, qui reste lisible
+            let label = NSTextField(labelWithString: "\(item.step)"); label.font = Theme.serifItalic(16); label.textColor = Theme.text; label.alignment = .center
+            label.frame = CGRect(x: 0, y: 4, width: 30, height: 22); badge.content.addSubview(label)
+            label.translatesAutoresizingMaskIntoConstraints = true
+            badge.setAccessibilityElement(true); badge.setAccessibilityLabel("Étape \(item.step)")
+            addSubview(badge); stepViews.append(badge)
+            let isCurrent = i == model.path.count - 1 && model.running
+            if isCurrent, !Motion.reduced {
+                let pulse = CABasicAnimation(keyPath: "transform.scale"); pulse.fromValue = 1; pulse.toValue = 1.18; pulse.duration = 0.8; pulse.autoreverses = true; pulse.repeatCount = .infinity
+                badge.layer?.add(pulse, forKey: "pulse")
+            } else if !Motion.reduced { badge.appear() }
+        }
     }
 
     private func updateSuggestions(_ model: LucioleOverlayModel) {
@@ -317,7 +442,9 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func updateBubble(_ model: LucioleOverlayModel) {
-        let hasContent = model.protectedLine != nil || !model.answer.isEmpty || model.running
+        let deciding = model.confirm != nil || model.question != nil
+        let acting = model.actionTitle != nil && model.answer.isEmpty
+        let hasContent = model.protectedLine != nil || ((!model.answer.isEmpty || model.running) && !deciding && !acting)
         if hasContent, bubble.isHidden { bubble.isHidden = false; bubble.appear() }
         if !hasContent, !bubble.isHidden { bubble.disappear() }
         guard hasContent else { return }
@@ -384,6 +511,28 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         bubbleScroll.documentView?.autoresizingMask = []
         if let heightConstraint = bubbleScroll.constraints.first(where: { $0.firstAttribute == .height }) { heightConstraint.constant = textHeight }
         else { bubbleScroll.heightAnchor.constraint(equalToConstant: textHeight).isActive = true }
+        // Pastille d'action (en haut, au centre), liste des étapes dépliée dessous.
+        let pillWidth = min(560, page.width * 0.7)
+        actionPill.frame = CGRect(x: (page.width - pillWidth) / 2, y: 14, width: pillWidth, height: 42)
+        let lines = traceLabel.stringValue.split(separator: "\n").count
+        traceBubble.frame = CGRect(x: actionPill.frame.minX, y: actionPill.frame.maxY + 8, width: pillWidth, height: CGFloat(min(lines, 12)) * 20 + 28)
+        traceBubble.isHidden = !(traceOpen && !actionPill.isHidden)
+        // La carte de décision, près de l'élément (ou en bas à droite sans élément), reliée à lui par des pointillés.
+        if !decisionCard.isHidden {
+            decisionCard.frame = CGRect(x: 0, y: 0, width: LucioleGeometry.bubbleWidth, height: 1000)
+            decisionCard.layoutSubtreeIfNeeded()
+            let height = max(decisionCard.content.fittingSize.height, 160)
+            let placed = LucioleGeometry.bubble(height: Double(height), anchor: decisionRect, page: page, avoiding: nil)
+            decisionCard.frame = placed.frame
+            if let rect = decisionRect, placed.side != .corner {
+                let link = LucioleGeometry.thread(from: placed.frame, to: rect)
+                let curve = CGMutablePath(); curve.move(to: link.start); curve.addQuadCurve(to: link.end, control: link.control)
+                thread.path = curve; threadHalo.path = curve; thread.lineDashPattern = [2, 6]; threadHalo.lineDashPattern = [2, 6]
+            }
+            bubble.isHidden = true
+            return
+        }
+        thread.lineDashPattern = nil; threadHalo.lineDashPattern = nil
         let anchor = LucioleGeometry.anchor(of: anchorRects, page: page)
         let placed = LucioleGeometry.bubble(height: Double(bubbleHeight), anchor: anchor, page: page, avoiding: mode == .answerOnly ? nil : capsuleFrame)
         bubble.frame = placed.frame
@@ -466,6 +615,11 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.window else { return event }
             let plain = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            if !self.decisionCard.isHidden, self.presented {                                          // une décision est attendue : Échap annule, Entrée ne valide jamais
+                if event.keyCode == 53 { self.decisionCard.onCancel?(); return nil }
+                if event.keyCode == 36 || event.keyCode == 76 { self.decisionCard.returnPressed(); return nil }
+                return event
+            }
             if event.keyCode == 53, self.presented || !self.fan.isEmpty {                        // Échap
                 if !self.presented { self.hideFan(); return nil }
                 if self.model?.running == true { self.onStop?() } else { self.onClose?() }

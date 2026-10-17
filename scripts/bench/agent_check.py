@@ -44,7 +44,17 @@ def js(expr): return ui("eval", expr)
 def shot(name):
     """AI_SHOTS=<dossier> : une capture de la fenêtre de test (pour relire le design)."""
     out = os.environ.get("AI_SHOTS")
-    if out: os.makedirs(out, exist_ok=True); time.sleep(1.2); ui("snapshot", os.path.join(out, name + ".png"))
+    if out:
+        os.makedirs(out, exist_ok=True); time.sleep(1.2); target = os.path.join(out, name + ".png"); ui("snapshot", target)
+        if os.environ.get("HB_LUCIOLE_PAGE"):                      # la couche de verre n'est pas dans la capture de fenêtre : on y colle son rendu (sans le flou du verre)
+            try:
+                from PIL import Image
+                ui("tab", "overlayshot", "0"); page = Image.open(target).convert("RGBA"); ov = Image.open("/tmp/oree-overlay.png").convert("RGBA")
+                ui("tab", "dimshot", "0")
+                if os.path.exists("/tmp/oree-dim.png"):
+                    dm = Image.open("/tmp/oree-dim.png").convert("RGBA"); kk = page.width / 1280; dm = dm.resize((int(1280 * kk), int(dm.height / dm.width * 1280 * kk))); page.alpha_composite(dm, (0, int(52 * kk)))
+                k = page.width / 1280; ov = ov.resize((int(1280 * k), int(ov.height / ov.width * 1280 * k))); page.alpha_composite(ov, (0, int(52 * k))); page.convert("RGB").save(target)
+            except Exception as error: print("  (composition impossible :", error, ")")
 
 def resolve(text):
     open("/tmp/oree-ai-query.txt", "w").write(text); ui("tab", "airesolve", "0")
@@ -53,7 +63,7 @@ def main():
     server, before = serve(), pids()
     tmp = tempfile.mkdtemp(prefix="agentcheck-"); ext = os.path.join(tmp, "ext"); os.makedirs(ext)
     if os.path.exists(TRACE): os.remove(TRACE)
-    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_AI_SCRIPTED=1", f"HB_AI_TRACE={TRACE}"] + (["HB_LUCIOLE_PAGE=1"] if os.environ.get("HB_LUCIOLE_PAGE") else [])   # HB_LUCIOLE_PAGE=1 : Luciole dans la page (le repli vers le panneau doit tout garder visible)
+    env = ["HB_FRESH_SESSION=1", f"HB_DB_PATH={tmp}/db.sqlite", f"HB_EXT_DIR={ext}", "HB_AI_SCRIPTED=1", "HB_AI_PROVIDER=groq", f"HB_AI_TRACE={TRACE}"] + (["HB_LUCIOLE_PAGE=1"] if os.environ.get("HB_LUCIOLE_PAGE") else [])   # HB_LUCIOLE_PAGE=1 : Luciole dans la page (le repli vers le panneau doit tout garder visible)
     subprocess.run(["open", "-g", "-n", *[x for e in env for x in ("--env", e)], APP, "--args", "--automation"]); time.sleep(5)
     mine = pids() - before
     results = []

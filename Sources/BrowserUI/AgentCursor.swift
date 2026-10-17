@@ -32,6 +32,8 @@ final class AgentCursor: NSView, AgentPresence {
     private var target: CGPoint = .zero
     private var placed = false
     private var atElement = false        // elle est près d'un élément (geste en cours, question ou validation) : elle n'en bouge pas d'elle-même
+    /// L'élément visé (pixels CSS de la fenêtre d'affichage) : la couche de Luciole dans la page en fait un pas du chemin ou le trou de la validation.
+    var onReveal: ((CGRect, WKWebView) -> Void)?
     private var generation = 0            // chaque nouvelle tâche (ou arrêt) invalide un départ programmé
 
     override var isFlipped: Bool { true }
@@ -117,6 +119,7 @@ final class AgentCursor: NSView, AgentPresence {
     }
 
     func reveal(rect: CGRect, in web: WKWebView, kind: PresenceKind) async {
+        onReveal?(rect, web)
         generation += 1
         layoutSubtreeIfNeeded()
         let box = convert(rect, in: web)

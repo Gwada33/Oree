@@ -387,10 +387,10 @@ public final class SettingsStore: @unchecked Sendable {
     }
 
     /// Gestes de souris (bouton droit + trait) : désactivés par défaut, ils changent ce que fait le clic droit.
-    /// Luciole vit dans la page (couche au-dessus de la page) plutôt que dans le panneau latéral. Par défaut : le panneau, tant que la page ne sait pas
-    /// encore tout faire (validation, question, états du modèle y sont rendus par le panneau).
+    /// Luciole vit dans la page (couche au-dessus de la page) plutôt que dans le panneau latéral. Par défaut : dans la page. Seuls les états du modèle
+    /// (à installer, téléchargement, erreur) s'affichent encore dans le panneau, qui s'ouvre alors en renfort.
     public var lucioleInPage: Bool {
-        get { ProcessInfo.processInfo.environment["HB_LUCIOLE_PAGE"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.lucioleInPage") as? Bool ?? false) }
+        get { ProcessInfo.processInfo.environment["HB_LUCIOLE_PAGE"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.lucioleInPage") as? Bool ?? true) }
         set { defaults.set(newValue, forKey: "settings.lucioleInPage") }
     }
 

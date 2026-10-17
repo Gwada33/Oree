@@ -27,6 +27,10 @@ final class AIPanelController {
 
     private let panel = AIPanelView()
     private let overlay = LucioleOverlayView()
+    private let dim = LucioleDimView()
+    /// Les éléments touchés pendant la tâche (repère du document, px CSS), avec le numéro de l'étape : le chemin sur la page.
+    private var reveals: [(step: Int, doc: CGRect)] = []
+    private var pathClear: Task<Void, Never>?
     /// Luciole dans la page (réglage) : la couche remplace le panneau. Tant que la page ne sait pas montrer une validation, une question ou un état du modèle,
     /// le panneau latéral s'ouvre pour ces moments-là (`panelFallback`) : une confirmation n'est jamais invisible.
     private var overlayOpen = false
@@ -117,6 +121,9 @@ final class AIPanelController {
             self.inheritFrom = self.currentTab; self.hooks.openTab(url); self.inheritFrom = nil
         }
         overlay.onGesture = { [weak self] gesture in self?.gesture(gesture) }
+        overlay.onConfirm = { [weak self] ok in self?.resolveConfirm(ok) }
+        overlay.onAnswer = { [weak self] text in self?.resolveQuestion(text) }
+        cursor.onReveal = { [weak self] rect, web in self?.recordReveal(rect, in: web) }
         overlay.onOpenPage = { [weak self] source in self?.hooks.openAnswerPage("Réponse de Luciole", Markdown.page(title: "Réponse de Luciole", source: source)) }
         widthConstraint = panel.widthAnchor.constraint(equalToConstant: CGFloat(width))
         NSLayoutConstraint.activate([
@@ -201,7 +208,7 @@ final class AIPanelController {
     func close() {
         if overlayOpen {
             overlayOpen = false
-            endAnchor()
+            endAnchor(); pathClear?.cancel(); reveals = []; dim.hide()
             overlay.dismiss()
             if panelFallback { panelFallback = false; panel.isHidden = true; hooks.onLayout(0) }
             onVisibilityChange?(false)
@@ -267,6 +274,7 @@ final class AIPanelController {
         guard inPage, tab.id == currentTab, let web = hooks.activeWebView(),
               let object = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any], let type = object["type"] as? String else { return }
         if let view = object["view"] as? [String: Any] { scroll = CGPoint(x: (view["sx"] as? Double) ?? 0, y: (view["sy"] as? Double) ?? 0) }
+        if !reveals.isEmpty { refresh() }                                                                    // le chemin et le trou de la validation suivent aussi
         if !anchoredDoc.isEmpty { overlay.setAnchor(overlayRects(fromDoc: anchoredDoc, in: web)) }         // défilement, zoom, redimensionnement : le surlignage et le fil suivent
         switch type {
         case "clear":
@@ -338,6 +346,8 @@ final class AIPanelController {
         if currentTab == nil { currentTab = UUID() }      // aucune page ouverte (ou essai) : une conversation quand même
         let tab = currentTab!
         runTab = tab
+        pathClear?.cancel(); reveals = []
+        if overlayOpen, let web = hooks.activeWebView() { let track = LucioleSelectionScript.trackCall(true); Task { _ = await web.safeCall(track.body, arguments: track.arguments, world: LucioleSelectionScript.world) } }       // le défilement est connu avant le premier geste
         let run = UUID()
         runID = run
         failure = nil
@@ -655,7 +665,7 @@ final class AIPanelController {
 
     /// La couche dans la page. Une validation, une question ou un état du modèle (à installer, téléchargement, erreur) ouvrent le panneau latéral en renfort.
     private func updateOverlay(state: AIAvailability, pose: LucioleState, mode: AIPanelView.Mode, model: AIPanelView.ModelScreen?, running: Bool, hasPending: Bool, host: String?, locked: Bool) {
-        let needsPanel = hasPending || model != nil
+        let needsPanel = model != nil          // les états du modèle (à installer, téléchargement, erreur) passent encore par le panneau ; validations et questions sont dans la page
         if needsPanel != panelFallback {
             panelFallback = needsPanel
             panel.isHidden = !needsPanel
@@ -665,14 +675,70 @@ final class AIPanelController {
         if case .empty(_, _, let list) = mode { suggestions = list }
         let last = messages.last(where: { $0.role == .assistant })
         let canRead = shareContext && !locked
-        let stage = LucioleStage.stage(for: .init(isOpen: true, pageProtected: pageIsProtected, running: running, pendingConfirm: hasPending, hasAnswer: !(last?.text.isEmpty ?? true)))
+        let acted = last?.trace.contains { !$0.text.hasPrefix("Recherche") && !$0.text.hasPrefix("Lecture") && !$0.text.hasPrefix("Question") } ?? false
+        var confirm: ConfirmRequest?, question: String?
+        if let p = pending, runTab == currentTab { switch p.kind { case .confirm(let request): confirm = request; case .question(let q): question = q } }
+        let stage = LucioleStage.stage(for: .init(isOpen: true, pageProtected: pageIsProtected, running: running, actingOnPage: acted, pendingConfirm: confirm != nil, pendingQuestion: question != nil,
+                                                  hasAnswer: !(last?.text.isEmpty ?? true)))
         let note = provider == .lmstudio ? (LMStudio.isLoopback(SettingsStore.shared.lmStudioBase) ? "Sur ce Mac · Luciole peut se tromper" : "LM Studio (réseau) · Luciole peut se tromper")
             : provider.isCloud ? "\(provider.displayName) · Luciole peut se tromper" : "Sur ce Mac · Luciole peut se tromper"
-        overlay.apply(LucioleOverlayModel(
+        // Le voile (validation) et le chemin vivent dans le repère de la page.
+        attachCursor(); attachDim()
+        let web = hooks.activeWebView()
+        let target = reveals.last.flatMap { reveal in web.map { overlayRects(fromDoc: [reveal.doc], in: $0).first } ?? nil }
+        if confirm != nil, let web, let last = reveals.last { dim.show(hole: dimRect(fromDoc: last.doc, in: web)) } else if confirm != nil { dim.show(hole: nil) } else { dim.hide() }
+        let path: [(step: Int, rect: CGRect)] = web.map { web in reveals.map { (step: $0.step, rect: overlayRects(fromDoc: [$0.doc], in: web).first ?? .zero) } } ?? []
+        var model = LucioleOverlayModel(
             stage: stage, pose: pose, placeholder: pageIsProtected ? "Indisponible sur cette page protégée" : (running ? "Luciole travaille… Échap pour arrêter" : "Demandez à Luciole…"),
             composerEnabled: state.canAsk && !pageIsProtected && !hasPending, running: running, suggestions: suggestions,
             answer: last?.text ?? "", sources: last?.sources ?? [], note: note, hasConversation: !messages.isEmpty, contextShared: canRead, contextLocked: locked,
-            protectedLine: pageIsProtected ? "Je détourne les yeux : les réglages d'Orée, les paiements et les mots de passe restent hors de portée de Luciole." : nil))
+            protectedLine: pageIsProtected ? "Je détourne les yeux : les réglages d'Orée, les paiements et les mots de passe restent hors de portée de Luciole." : nil)
+        model.confirm = confirm; model.confirmArmed = pending?.armed ?? true; model.question = question; model.decisionRect = target
+        if acted, running { model.actionTitle = last?.title ?? "Luciole travaille"; model.actionStep = last?.trace.count ?? 0; model.actionLines = last?.trace.map(\.text) ?? [] }
+        model.path = path
+        overlay.apply(model)
+    }
+
+    // MARK: Chemin et validation dans la page
+
+    /// Un élément vient d'être visé (px CSS de la fenêtre d'affichage) : une étape de plus sur le chemin, et la cible d'une éventuelle validation.
+    private func recordReveal(_ rect: CGRect, in web: WKWebView) {
+        guard overlayOpen else { return }
+        let doc = rect.offsetBy(dx: scroll.x, dy: scroll.y)
+        let step = messages.last?.trace.count ?? (reveals.count + 1)
+        if let previous = reveals.last, previous.doc.equalTo(doc) { reveals[reveals.count - 1].step = step } else { reveals.append((step: step, doc: doc)) }
+        if reveals.count > 12 { reveals.removeFirst() }
+        pathClear?.cancel()
+        let track = LucioleSelectionScript.trackCall(true)
+        Task { _ = await web.safeCall(track.body, arguments: track.arguments, world: LucioleSelectionScript.world) }
+        refresh()
+    }
+
+    private func attachDim() {
+        guard dim.superview == nil, let host = hooks.pageHost() else { return }
+        host.addSubview(dim, positioned: .below, relativeTo: cursor.superview === host ? cursor : nil)
+        NSLayoutConstraint.activate([dim.topAnchor.constraint(equalTo: host.topAnchor), dim.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+                                     dim.leadingAnchor.constraint(equalTo: host.leadingAnchor), dim.trailingAnchor.constraint(equalTo: host.trailingAnchor)])
+        host.layoutSubtreeIfNeeded()
+    }
+
+    private func dimRect(fromDoc rect: CGRect, in web: WKWebView) -> CGRect {
+        dim.superview?.layoutSubtreeIfNeeded()
+        let zoom = max(web.pageZoom, 0.1)
+        let inWeb = NSRect(x: (rect.minX - scroll.x) * zoom, y: web.isFlipped ? (rect.minY - scroll.y) * zoom : web.bounds.height - (rect.maxY - scroll.y) * zoom, width: rect.width * zoom, height: rect.height * zoom)
+        return dim.convert(web.convert(inWeb, to: nil), from: nil)
+    }
+
+    /// Le chemin reste visible 60 s après la fin de la tâche, puis s'efface.
+    private func schedulePathClear() {
+        pathClear?.cancel()
+        pathClear = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(60))
+            guard !Task.isCancelled, let self else { return }
+            self.reveals = []
+            if self.anchoredDoc.isEmpty, let web = self.hooks.activeWebView() { let off = LucioleSelectionScript.trackCall(false); _ = await web.safeCall(off.body, arguments: off.arguments, world: LucioleSelectionScript.world) }
+            self.refresh()
+        }
     }
 
     // MARK: Automatisation
@@ -683,7 +749,7 @@ final class AIPanelController {
         let trace = last?.trace.map { "\($0.state):\($0.text)" + ($0.detail.map { " — " + $0 } ?? "") }.joined(separator: " | ") ?? ""
         var prefix = ""
         #if DEBUG
-        if overlayOpen || overlay.fanIsVisible { prefix = "OVERLAY[\(overlay.report)] panelFallback=\(panelFallback) SEL[\(debugSelection)] " }
+        if overlayOpen || overlay.fanIsVisible { prefix = "DIM[hidden=\(dim.isHidden) bounds=\(dim.bounds.integral) super=\(dim.superview.map { String(describing: type(of: $0)) } ?? "-")] OVERLAY[\(overlay.report)] panelFallback=\(panelFallback) SEL[\(debugSelection)] " }
         #endif
         return prefix + "open=\(isOpen) state=\(availability) running=\(isRunning) width=\(Int(width)) pose=\(panel.mascot.state.rawValue) wait=\(rateLimitWait.map(String.init) ?? "-") pending=\(pending.map { "\($0.kind)" } ?? "none") cursor=[\(cursor.report)] think=\(last?.thinking.count ?? 0) trace=[\(trace)] line=\(failure ?? "")| answer=\((last?.text ?? "").replacingOccurrences(of: "\n", with: " ⏎ "))"
     }
@@ -691,6 +757,15 @@ final class AIPanelController {
     #if DEBUG
     /// Dev (debug seulement) : comme une touche E, T ou G pendant que l'éventail est visible.
     func devGesture(_ name: String) { if let g = SelectionPassage.Gesture(rawValue: name) { gesture(g) } }
+
+    /// Dev (debug seulement) : le voile de la validation seul, en PNG transparent.
+    func devDimShot(to path: String) -> String {
+        dim.layoutSubtreeIfNeeded()
+        guard let rep = dim.bitmapImageRepForCachingDisplay(in: dim.bounds) else { return "no rep" }
+        dim.cacheDisplay(in: dim.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return "no png" }
+        try? png.write(to: URL(fileURLWithPath: path)); return path
+    }
 
     /// Dev (debug seulement) : la couche seule en PNG transparent (le verre n'y est pas rendu : seuls les contenus le sont).
     func devOverlayShot(to path: String) -> String {
@@ -850,6 +925,7 @@ extension AIPanelController: AgentEnvironment {
         attachCursor()
         cursor.follow(eventPose ?? .idle)
         if case .finished = event {
+            schedulePathClear()
             // La pose de fin (contente, ou en erreur) reste un instant, puis Luciole revient au repos.
             eventPoseReset = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1.6))
