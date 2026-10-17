@@ -202,7 +202,7 @@ final class ChromeIconButton: HoverView {
         icon.isHidden = true
         view.translatesAutoresizingMaskIntoConstraints = false
         addSubview(view)
-        NSLayoutConstraint.activate([view.centerXAnchor.constraint(equalTo: centerXAnchor), view.centerYAnchor.constraint(equalTo: centerYAnchor)])
+        NSLayoutConstraint.activate([view.centerXAnchor.constraint(equalTo: centerXAnchor), view.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 1.5)])      // le dessin de Luciole a plus de matière en haut (ailes, antennes) : on le descend d'un point et demi pour l'aligner sur les autres icônes
     }
 
     private func refreshImage() {

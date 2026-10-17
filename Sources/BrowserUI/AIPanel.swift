@@ -131,6 +131,8 @@ final class AIPanelController {
         overlay.onAnswer = { [weak self] text in self?.resolveQuestion(text) }
         overlay.onModelPrimary = { [weak self] in if let action = self?.modelPrimaryAction { self?.modelAction(action) } }
         cursor.onReveal = { [weak self] rect, web in self?.recordReveal(rect, in: web) }
+        cursor.onPresence = { [weak self] working in self?.overlay.setMascotHidden(working) }
+        cursor.homeProvider = { [weak self] in self?.homePoint() }
         overlay.onOpenPage = { [weak self] source in self?.hooks.openAnswerPage("Réponse de Luciole", Markdown.page(title: "Réponse de Luciole", source: source)) }
         widthConstraint = panel.widthAnchor.constraint(equalToConstant: CGFloat(width))
         NSLayoutConstraint.activate([
@@ -218,10 +220,12 @@ final class AIPanelController {
         if overlayOpen {
             overlayOpen = false
             endAnchor(); pathClear?.cancel(); reveals = []; restShown = false; restBubbleText = nil; dim.hide()
+            let button = hooks.assistantFrame()
+            overlay.flyMascotHome(to: button)                       // elle repart vers la barre d'outils avec la même courbe qu'à l'arrivée
             overlay.dismiss()
             if panelFallback { panelFallback = false; panel.isHidden = true; hooks.onLayout(0) }
             onVisibilityChange?(false)
-            onRestPose?(.sleep)
+            if Motion.reduced || button == nil { onRestPose?(.sleep) } else { Task { [weak self] in try? await Task.sleep(for: .seconds(0.6)); if self?.overlayOpen == false { self?.onRestPose?(.sleep) } } }
             if isRunning { stop() }
             return
         }
@@ -304,6 +308,23 @@ final class AIPanelController {
             overlay.showFan(tip: CGPoint(x: last.maxX, y: last.midY), from: hooks.assistantFrame())
             onRestPose?(nil)
         default: break
+        }
+    }
+
+    /// Le geste vient du clic droit : on demande au script de lecture la sélection et ses rectangles, puis la suite est la même qu'avec l'éventail.
+    func gestureFromMenu(_ gesture: SelectionPassage.Gesture) {
+        guard inPage, !pageIsProtected, let web = hooks.activeWebView(), !isRunning else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let call = LucioleSelectionScript.readCall
+            guard let json = await web.safeCall(call.body, arguments: call.arguments, world: LucioleSelectionScript.world) as? String,
+                  let object = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any], let text = object["text"] as? String,
+                  let rects = object["rects"] as? [[String: Double]], !rects.isEmpty else { return }
+            if let view = object["view"] as? [String: Any] { self.scroll = CGPoint(x: (view["sx"] as? Double) ?? 0, y: (view["sy"] as? Double) ?? 0) }
+            let doc = rects.map { CGRect(x: ($0["x"] ?? 0) + self.scroll.x, y: ($0["y"] ?? 0) + self.scroll.y, width: $0["w"] ?? 0, height: $0["h"] ?? 0) }
+            self.passage = Passage(text: text, docRects: doc)
+            if let last = self.overlayRects(fromDoc: [doc.last!], in: web).first { self.overlay.setFanTipForMenu(CGPoint(x: last.maxX, y: last.midY), from: self.hooks.assistantFrame()) }
+            self.gesture(gesture)
         }
     }
 
@@ -726,6 +747,17 @@ final class AIPanelController {
         refresh()
     }
 
+    /// Là où Luciole était avant de partir travailler dans la page (et où elle revient) : sa mascotte dans la capsule ou au bout du passage, sinon la barre d'outils.
+    private func homePoint() -> CGPoint? {
+        guard overlayOpen || restShown else { return nil }
+        let window: CGPoint
+        if let mascot = overlay.mascotCenterInWindow() { window = mascot }
+        else if let button = hooks.assistantFrame() { window = CGPoint(x: button.midX, y: button.midY) }
+        else { return nil }
+        cursor.layoutSubtreeIfNeeded()
+        return cursor.convert(window, from: nil)
+    }
+
     private func attachDim() {
         guard dim.superview == nil, let host = hooks.pageHost() else { return }
         host.addSubview(dim, positioned: .below, relativeTo: cursor.superview === host ? cursor : nil)
@@ -748,9 +780,11 @@ final class AIPanelController {
         let last = messages.last(where: { $0.role == .assistant })
         restBubbleText = Self.restLine(from: last?.text ?? "")
         overlayOpen = false; restShown = true
+        let button = hooks.assistantFrame()
+        overlay.flyMascotHome(to: button)
         overlay.presentRest()
         onVisibilityChange?(false)
-        onRestPose?(.happy); restPoseLater()
+        Task { [weak self] in try? await Task.sleep(for: .seconds(Motion.reduced || button == nil ? 0 : 0.65)); if self?.overlayOpen == false { self?.onRestPose?(.happy); self?.restPoseLater() } }
         refresh()
         Task { [weak self] in try? await Task.sleep(for: .seconds(4)); self?.restBubbleText = nil; self?.refresh() }
     }

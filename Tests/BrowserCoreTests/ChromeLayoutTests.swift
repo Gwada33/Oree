@@ -21,14 +21,14 @@ import Foundation
         #expect(everyItemOnce(layout))
     }
 
-    @Test func paletteCannotBeHidden() {
+    @Test func paletteButtonCanBeHidden() {
         var layout = ChromeLayout.standard
         layout.move(.more, to: .hidden)
-        #expect(layout.zone(of: .more) == .toolbarTrailing)
+        #expect(layout.zone(of: .more) == .hidden)                                 // la palette reste à ⌘K : son bouton n'est plus obligatoire
         var broken = ChromeLayout.standard
         broken.zones[.toolbarTrailing]?.removeAll { $0 == .more }
         broken.zones[.hidden] = [.more]
-        #expect(broken.normalized().zone(of: .more) == .toolbarTrailing)
+        #expect(broken.normalized().zone(of: .more) == .hidden)
     }
 
     @Test func normalizingRepairsDuplicatesAndMissingItems() {

@@ -394,9 +394,10 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.lucioleInPage") }
     }
 
-    /// Les gestes de Luciole (Expliquer, Traduire, Garder) apparaissent d'eux-mêmes quand on sélectionne un passage (seulement « dans la page »).
+    /// Les gestes de Luciole (Expliquer, Traduire, Garder) apparaissent d'eux-mêmes quand on sélectionne un passage (seulement « dans la page »). Éteint par défaut :
+    /// sélectionner sert souvent à copier ; les gestes sont alors dans le clic droit.
     public var lucioleSelectionFan: Bool {
-        get { defaults.object(forKey: "settings.lucioleSelectionFan") as? Bool ?? true }
+        get { ProcessInfo.processInfo.environment["HB_LUCIOLE_FAN"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.lucioleSelectionFan") as? Bool ?? false) }
         set { defaults.set(newValue, forKey: "settings.lucioleSelectionFan") }
     }
 

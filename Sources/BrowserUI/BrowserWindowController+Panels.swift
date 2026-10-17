@@ -570,6 +570,9 @@ extension BrowserWindowController {
         return created
     }
 
+    /// Clic droit sur une sélection › Expliquer / Traduire / Garder avec Luciole.
+    func lucioleGesture(_ gesture: SelectionPassage.Gesture) { aiBar().gestureFromMenu(gesture) }
+
     /// Le script de lecture de Luciole a vu une sélection, sa disparition ou un défilement.
     func handleLucioleSelection(tab: Tab, json: String) {
         guard tab.id == activeTab?.id, SettingsStore.shared.lucioleInPage else { return }

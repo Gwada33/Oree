@@ -10,7 +10,13 @@ enum LucioleSelectionScript {
     static let world = WKContentWorld.world(name: "oree-luciole")
     static let handlerName = "oreeLuciole"
 
-    static func makeUserScript() -> WKUserScript { WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world) }
+    /// `auto` : l'éventail apparaît tout seul à la fin d'une sélection. Sinon (le défaut) le script se tait : il ne répond que quand le clic droit lui demande la sélection.
+    static func makeUserScript(auto: Bool) -> WKUserScript {
+        WKUserScript(source: "window.__oreeLucioleAuto = \(auto);\n" + source, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world)
+    }
+
+    /// Le passage sélectionné et ses rectangles, à la demande (clic droit › Expliquer avec Luciole).
+    static let readCall: (body: String, arguments: [String: Any]) = ("return window.__oreeLuciole ? window.__oreeLuciole.read() : null;", [:])
 
     /// Le suivi du défilement continue après que la sélection a disparu, tant que la réponse ancrée reste affichée.
     static func trackCall(_ on: Bool) -> (body: String, arguments: [String: Any]) {
@@ -36,7 +42,15 @@ enum LucioleSelectionScript {
         hasSel = true;
         post({ type: 'sel', text: text.slice(0, 3000), rects: rectsOf(sel.getRangeAt(0)), view: view() });
       };
-      document.addEventListener('selectionchange', () => {
+      const readNow = () => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || sel.rangeCount === 0 || inField()) return null;
+        const text = String(sel);
+        if (text.trim().split(/\s+/).length < 3 || text.length > 3000) return null;
+        hasSel = true;
+        return JSON.stringify({ type: 'sel', text: text.slice(0, 3000), rects: rectsOf(sel.getRangeAt(0)), view: view() });
+      };
+      if (window.__oreeLucioleAuto) document.addEventListener('selectionchange', () => {
         clearTimeout(timer);
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed) { if (hasSel) { hasSel = false; post({ type: 'clear' }); } return; }
@@ -52,7 +66,7 @@ enum LucioleSelectionScript {
       };
       window.addEventListener('scroll', follow, { passive: true, capture: true });
       window.addEventListener('resize', follow, { passive: true });
-      window.__oreeLuciole = { track(on) { tracking = !!on; if (tracking) post({ type: 'view', view: view() }); } };
+      window.__oreeLuciole = { read: readNow, track(on) { tracking = !!on; if (tracking) post({ type: 'view', view: view() }); } };
     })();
     """#
 }

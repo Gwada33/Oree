@@ -113,6 +113,12 @@ final class OreeWebView: WKWebView {
             let short = selection.count > 24 ? String(selection.prefix(24)) + "…" : selection
             add("Rechercher « \(short) »") { owner?.newTab(urlString: selection, isPrivate: isPrivate) }
             if !isPrivate { add("Ajouter à ma note") { owner?.openNotes(append: selection) } }
+            if !isPrivate, SettingsStore.shared.lucioleInPage, SelectionPassage.isWorthOffering(selection) {      // Luciole, sans rien imposer : les gestes sont là, au clic droit
+                menu.addItem(.separator())
+                for gesture in SelectionPassage.Gesture.allCases {
+                    add("\(gesture.title) avec Luciole") { owner?.lucioleGesture(gesture) }
+                }
+            }
         }
         if hit.editable == true {
             add("Coller") { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }

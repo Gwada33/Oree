@@ -59,7 +59,8 @@ public enum ChromeItem: String, CaseIterable, Codable, Sendable {
     }
 
     /// La palette de commandes ne peut pas être cachée : c'est le chemin de secours vers tous les réglages.
-    public var isRequired: Bool { self == .more }
+    /// Plus aucun bouton n'est obligatoire : la palette reste à ⌘K même sans son bouton (les trois petits points), que l'on peut masquer.
+    public var isRequired: Bool { false }
 }
 
 public enum ChromeZone: String, CaseIterable, Codable, Sendable {
@@ -132,7 +133,6 @@ public struct ChromeLayout: Codable, Equatable, Sendable {
         for item in ChromeItem.allCases where !seen.contains(item) {
             result.zones[Self.standard.zone(of: item), default: []].append(item)
         }
-        if result.zone(of: .more) == .hidden { result.move(.more, to: .toolbarTrailing) }
         result.pinned = pinned.filter(\.isContextual)
         return result
     }

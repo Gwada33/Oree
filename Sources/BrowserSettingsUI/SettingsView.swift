@@ -1410,7 +1410,7 @@ struct AssistantSection: View {
                 Text("Panneau latéral").tag(false)
                 Text("Dans la page").tag(true)
             }.pickerStyle(.menu)
-            Toggle("Proposer Expliquer, Traduire et Garder quand je sélectionne un passage", isOn: $provider.selectionFan).disabled(!provider.inPage)
+            Toggle("Proposer d'elle-même Expliquer, Traduire et Garder dès que je sélectionne un passage (sinon : clic droit sur la sélection)", isOn: $provider.selectionFan).disabled(!provider.inPage)
             Text("S'applique à la prochaine ouverture (⌘J). Dans la page, seuls l'installation et les erreurs du modèle s'affichent encore dans le panneau latéral.").font(.caption).foregroundStyle(.secondary)
         }
         Section("Cerveau de l'assistant") {

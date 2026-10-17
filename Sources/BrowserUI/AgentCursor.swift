@@ -34,6 +34,10 @@ final class AgentCursor: NSView, AgentPresence {
     private var atElement = false        // elle est près d'un élément (geste en cours, question ou validation) : elle n'en bouge pas d'elle-même
     /// L'élément visé (pixels CSS de la fenêtre d'affichage) : la couche de Luciole dans la page en fait un pas du chemin ou le trou de la validation.
     var onReveal: ((CGRect, WKWebView) -> Void)?
+    /// Une seule Luciole à l'écran : d'où elle part et où elle revient (le centre de la mascotte de la couche, de la capsule ou de la barre d'outils), en coordonnées de cette vue.
+    var homeProvider: (() -> CGPoint?)?
+    /// Vrai quand elle est au travail dans la page : la couche cache alors sa propre mascotte, pour qu'il n'y ait jamais deux Luciole.
+    var onPresence: ((Bool) -> Void)?
     private var generation = 0            // chaque nouvelle tâche (ou arrêt) invalide un départ programmé
 
     override var isFlipped: Bool { true }
@@ -68,7 +72,10 @@ final class AgentCursor: NSView, AgentPresence {
     }
 
     /// Son coin de repos : en haut à droite de la page, du côté du panneau.
-    private var dock: CGPoint { CGPoint(x: max(bounds.maxX - 34 - 18, 4), y: 14) }
+    private var dock: CGPoint {
+        if let home = homeProvider?() { return CGPoint(x: home.x - 17, y: home.y - 17) }
+        return CGPoint(x: max(bounds.maxX - 34 - 18, 4), y: 14)
+    }
 
     /// La pose suit un événement réel de la tâche. Elle apparaît dans son coin à la première (une tâche qui démarre) et n'en bouge plus tant qu'aucun geste ne l'appelle.
     func follow(_ pose: LucioleState) {
@@ -124,7 +131,9 @@ final class AgentCursor: NSView, AgentPresence {
         layoutSubtreeIfNeeded()
         let box = convert(rect, in: web)
         guard box.width > 0, box.height > 0 else { return }
+        let wasHidden = isHidden
         isHidden = false
+        if wasHidden { onPresence?(true) }
         atElement = true
         target = CGPoint(x: box.midX, y: box.midY)
         tagLabel.stringValue = kind.verb
@@ -135,7 +144,10 @@ final class AgentCursor: NSView, AgentPresence {
         home.x = max(home.x, 4)
         let tagFrame = NSRect(x: home.x + 36, y: home.y + 6, width: tagSize.width, height: tagSize.height)
         let ringFrame = box.insetBy(dx: -3, dy: -3)
-        if !placed { mascot.frame.origin = CGPoint(x: bounds.maxX + 6, y: home.y); mascot.alphaValue = 0 }       // elle arrive du panneau, à droite
+        if !placed {
+            if homeProvider?() != nil { mascot.frame.origin = dock; mascot.alphaValue = 1 }                           // elle part de là où elle était (capsule, passage, barre d'outils)
+            else { mascot.frame.origin = CGPoint(x: bounds.maxX + 6, y: home.y); mascot.alphaValue = 0 }              // sans couche : elle arrive du panneau, à droite
+        }
         ring.frame = ringFrame
         tagBox.frame = tagFrame
         placed = true
@@ -210,8 +222,8 @@ final class AgentCursor: NSView, AgentPresence {
         let leave = { [weak self] in
             guard let self else { return }
             self.ring.alphaValue = 0; self.tagBox.alphaValue = 0
-            self.mascot.animator().frame.origin = CGPoint(x: self.bounds.maxX + 6, y: self.mascot.frame.minY)
-            self.mascot.animator().alphaValue = 0
+            if self.homeProvider?() != nil { self.mascot.animator().frame.origin = self.dock }                  // elle revient où elle était : la couche reprend sa mascotte
+            else { self.mascot.animator().frame.origin = CGPoint(x: self.bounds.maxX + 6, y: self.mascot.frame.minY); self.mascot.animator().alphaValue = 0 }
         }
         if Motion.reduced { hideNow(); return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
@@ -231,7 +243,9 @@ final class AgentCursor: NSView, AgentPresence {
     /// Arrêt immédiat (Stop, fermeture du panneau) : tout disparaît tout de suite.
     func hideNow() {
         generation += 1
+        let wasShown = !isHidden
         isHidden = true; placed = false; atElement = false
         ring.alphaValue = 0; tagBox.alphaValue = 0; mascot.alphaValue = 0
+        if wasShown { onPresence?(false) }
     }
 }

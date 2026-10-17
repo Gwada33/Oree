@@ -101,6 +101,8 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     private var mouseMonitor: Any?
     private var presented = false
     private var anchorFrame: NSRect?
+    private var answerOnlyTipActive = false
+    private var flights = 0                      // vols de retour en cours : la couche reste affichée jusqu'à leur fin
 
     override var isFlipped: Bool { true }
 
@@ -207,6 +209,8 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     private func buildBubble() {
         let c = bubble.content
         bubbleTitle.font = Theme.sans(12, .semibold); bubbleTitle.textColor = Theme.muted
+        // Une seule Luciole à l'écran : la mascotte de l'en-tête a disparu (la bulle sort de la capsule ou du passage, où elle se trouve déjà).
+        bubbleMascot.isHidden = true
         for v in [bubbleMascot, bubbleTitle, bubbleScroll, sourceRow, followField, noteLabel, closeButton] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; c.addSubview(v) }
         let x = NSImageView(image: NSImage.oreeSymbol("xmark", size: 11, weight: .semibold) { Theme.muted }); x.translatesAutoresizingMaskIntoConstraints = false
         closeButton.addSubview(x)
@@ -225,7 +229,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         NSLayoutConstraint.activate([
             bubbleMascot.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16), bubbleMascot.topAnchor.constraint(equalTo: c.topAnchor, constant: 14),
             bubbleMascot.widthAnchor.constraint(equalToConstant: 22), bubbleMascot.heightAnchor.constraint(equalToConstant: 22),
-            bubbleTitle.leadingAnchor.constraint(equalTo: bubbleMascot.trailingAnchor, constant: 6), bubbleTitle.centerYAnchor.constraint(equalTo: bubbleMascot.centerYAnchor),
+            bubbleTitle.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 18), bubbleTitle.centerYAnchor.constraint(equalTo: bubbleMascot.centerYAnchor),
             closeButton.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -10), closeButton.centerYAnchor.constraint(equalTo: bubbleMascot.centerYAnchor),
             closeButton.widthAnchor.constraint(equalToConstant: 28), closeButton.heightAnchor.constraint(equalToConstant: 28),
             x.centerXAnchor.constraint(equalTo: closeButton.centerXAnchor), x.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
@@ -276,7 +280,6 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
 
     /// Une vue cachée n'est pas mise en page : sa taille reste nulle et les conversions de coordonnées se retrouvent en miroir. On la dispose avant de convertir.
     func prepareGeometry() {
-        guard bounds.isEmpty else { return }
         let wasHidden = isHidden
         isHidden = false
         superview?.layoutSubtreeIfNeeded()
@@ -295,6 +298,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         mode = .capsule
         presented = true; anchorFrame = toolbarButton
         isHidden = false
+        prepareGeometry()                       // sans cela, à la toute première ouverture la couche n'a pas de taille et le vol part de nulle part
         layoutSubtreeIfNeeded(); relayout()
         capsule.appear()
         flyMascot(from: toolbarButton)
@@ -309,9 +313,52 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         }
     }
 
+    /// Le centre de la mascotte visible dans la couche (coordonnées de la fenêtre) : d'où l'agent part et où il revient. nil : elle dort dans la barre d'outils.
+    func mascotCenterInWindow() -> CGPoint? {
+        if presented, mode == .capsule, !capsule.isHidden { return capsuleMascot.convert(CGPoint(x: capsuleMascot.bounds.midX, y: capsuleMascot.bounds.midY), to: nil) }
+        if !fanMascot.isHidden { return fanMascot.convert(CGPoint(x: fanMascot.bounds.midX, y: fanMascot.bounds.midY), to: nil) }
+        return nil
+    }
+
+    /// Pendant que l'agent travaille dans la page, sa Luciole (celle du curseur) est la seule visible : celle de la couche s'efface.
+    func setMascotHidden(_ hidden: Bool) {
+        for m in [capsuleMascot, fanMascot] { m.alphaValue = hidden ? 0 : 1 }
+    }
+
+    /// Le vol de retour vers la barre d'outils : une copie de la mascotte part d'où elle est, même courbe que l'aller, avec la même inclinaison.
+    func flyMascotHome(to button: NSRect?, completion: (() -> Void)? = nil) {
+        guard let start = mascotCenterInWindow(), let button, let window, !Motion.reduced else { completion?(); return }
+        let from = convert(start, from: nil)
+        let to = convert(window.contentView?.convert(button, from: nil) ?? button, from: nil)
+        let size: CGFloat = presented && mode == .capsule ? 54 : 42
+        let copy = LucioleView(size: size)
+        copy.apply(.happy)
+        copy.frame = CGRect(x: from.x - size / 2, y: from.y - size / 2, width: size, height: size)
+        copy.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(copy)
+        guard let host = copy.layer else { copy.removeFromSuperview(); completion?(); return }
+        let dx = CGFloat(to.midX - from.x), dy = CGFloat(to.midY - from.y)
+        let move = CABasicAnimation(keyPath: "transform.translation"); move.fromValue = NSValue(size: .zero); move.toValue = NSValue(size: NSSize(width: dx, height: dy))
+        let scale = CABasicAnimation(keyPath: "transform.scale"); scale.fromValue = 1; scale.toValue = 28.0 / size
+        let tilt = CAKeyframeAnimation(keyPath: "transform.rotation.z"); let lean = CGFloat(max(-0.35, min(0.35, dx / 900)))
+        tilt.values = [0, lean, 0]; tilt.keyTimes = [0, 0.4, 1]
+        let group = CAAnimationGroup(); group.animations = [move, scale, tilt]; group.duration = 0.7; group.timingFunction = CAMediaTimingFunction(controlPoints: 0.45, 0, 0.15, 1)
+        group.fillMode = .forwards; group.isRemovedOnCompletion = false
+        host.add(group, forKey: "flightHome")
+        copy.alphaValue = 1
+        flights += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            copy.removeFromSuperview(); completion?()
+            guard let self else { return }
+            self.flights -= 1
+            if self.flights == 0, !self.presented, self.fan.isEmpty { self.isHidden = true }
+        }
+    }
+
     func dismiss() {
         guard presented else { return }
         presented = false
+        if answerOnlyTipActive { answerOnlyTipActive = false; fanMascot.isHidden = true; fanMascot.alphaValue = 1 }
         if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
         mouseMonitor = nil
         clearAnchor()
@@ -320,7 +367,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         bubble.disappear()
         capsule.disappear { [weak self] in
             guard let self, !self.presented else { return }
-            self.isHidden = self.fan.isEmpty
+            self.isHidden = self.fan.isEmpty && self.flights == 0
             self.pills.forEach { $0.removeFromSuperview() }; self.pills = []; self.shownSuggestions = []
             self.stopAura()
         }
@@ -528,7 +575,7 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
     #if DEBUG
     /// Dev : où sont les surfaces (pour les essais automatiques).
     var report: String {
-        "overlay=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)) hidden=\(isHidden) presented=\(presented) capsule=\(capsule.frame.integral) hidden=\(capsule.isHidden) alpha=\(capsule.alphaValue) bubble=\(bubble.frame.integral) hidden=\(bubble.isHidden) pills=\(pills.count) fan=\(fan.count) fanTip=\(fanTip.map { "\(Int($0.x)),\(Int($0.y))" } ?? "-") anchors=\(anchorRects.count) mode=\(mode) superview=\(superview.map { String(describing: type(of: $0)) } ?? "-")"
+        "overlay=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)) hidden=\(isHidden) presented=\(presented) capsule=\(capsule.frame.integral) hidden=\(capsule.isHidden) alpha=\(capsule.alphaValue) bubble=\(bubble.frame.integral) hidden=\(bubble.isHidden) pills=\(pills.count) fan=\(fan.count) fanTip=\(fanTip.map { "\(Int($0.x)),\(Int($0.y))" } ?? "-") anchors=\(anchorRects.count) flight=\(capsuleMascot.layer?.animation(forKey: "flight") != nil) mode=\(mode) superview=\(superview.map { String(describing: type(of: $0)) } ?? "-")"
     }
     #endif
 
@@ -585,7 +632,11 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         }
         thread.lineDashPattern = nil; threadHalo.lineDashPattern = nil
         let anchor = LucioleGeometry.anchor(of: anchorRects, page: page)
-        let placed = LucioleGeometry.bubble(height: Double(bubbleHeight), anchor: anchor, page: page, avoiding: mode == .answerOnly ? nil : capsuleFrame)
+        var placed = LucioleGeometry.bubble(height: Double(bubbleHeight), anchor: anchor, page: page, avoiding: mode == .answerOnly ? nil : capsuleFrame)
+        if anchor == nil, mode == .capsule {                // sans passage : la bulle sort de la capsule, alignée sur Luciole, au lieu de flotter dans un coin
+            let frame = CGRect(x: capsuleFrame.minX, y: max(capsuleFrame.minY - 12 - bubbleHeight, 16), width: LucioleGeometry.bubbleWidth, height: bubbleHeight)
+            placed = (frame, .corner)
+        }
         bubble.frame = placed.frame
         drawAnchor(anchor: anchor, bubble: placed.frame, drawThread: placed.side != .corner && !bubble.isHidden)
     }
@@ -639,6 +690,13 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
         }
     }
 
+    /// Un geste venu du clic droit : la mascotte vole de la barre d'outils au bout du passage (sans éventail), puis la bulle s'ancre.
+    func setFanTipForMenu(_ tip: CGPoint, from toolbarButton: NSRect?) {
+        guard !presented else { return }
+        showFan(tip: tip, from: toolbarButton)
+        for button in fan { button.isHidden = true; button.alphaValue = 0 }
+    }
+
     func hideFan() {
         guard !fan.isEmpty || fanTip != nil else { return }
         fanTip = nil
@@ -663,7 +721,14 @@ final class LucioleOverlayView: NSView, NSTextFieldDelegate {
 
     /// Une bulle ancrée sans capsule : la réponse à un geste (Expliquer, Traduire).
     func presentAnswerOnly() {
+        let tip = fanTip
         hideFan()
+        if let tip {                                                    // la même Luciole reste au bout du passage pendant que la réponse s'écrit
+            answerOnlyTipActive = true
+            fanMascot.frame = CGRect(x: tip.x - 21, y: tip.y - 21, width: 42, height: 42)
+            fanMascot.isHidden = false; fanMascot.alphaValue = 1
+            fanMascot.apply(LucioleStage.answer.pose)
+        }
         mode = .answerOnly
         presented = true
         isHidden = false

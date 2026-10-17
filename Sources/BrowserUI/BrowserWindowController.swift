@@ -658,7 +658,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// when ad blocking is on, the cosmetic CSS matching this URL.
     func userScripts(for url: URL?, isPrivate: Bool = false) -> [WKUserScript] {
         var scripts: [WKUserScript] = [CredentialScript.makeUserScript(), AutofillScript.makeUserScript(), MediaScript.makeUserScript()]
-        if SettingsStore.shared.lucioleInPage, SettingsStore.shared.lucioleSelectionFan, !isPrivate { scripts.append(LucioleSelectionScript.makeUserScript()) }      // le script de lecture de Luciole : seulement « dans la page »
+        if SettingsStore.shared.lucioleInPage, !isPrivate { scripts.append(LucioleSelectionScript.makeUserScript(auto: SettingsStore.shared.lucioleSelectionFan)) }      // le script de lecture de Luciole : seulement « dans la page »
         if SettingsStore.shared.eventJournalEnabled, !isPrivate { scripts.append(JournalScript.makeUserScript()) }
         if SettingsStore.shared.autoRejectCookieBanners, !ProtectionPolicy.isExempt(host: url?.host, list: SettingsStore.shared.protectionExemptHosts) { scripts.append(CookieBannerScript.makeUserScript()) }      // le journal : jamais dans un onglet privé
         if SettingsStore.shared.sendGlobalPrivacyControl { scripts.append(PrivacyTools.gpcUserScript()) }
