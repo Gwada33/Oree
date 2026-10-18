@@ -25,7 +25,15 @@ public struct CloudKeychain: Sendable {
         return key
     }
 
-    public var hasKey: Bool { load() != nil }
+    /// Y a-t-il une clé ? Une requête sur les seuls attributs : elle ne déchiffre rien, donc le Trousseau ne demande jamais d'autorisation. Lire la valeur (`load`) la demande, et une app
+    /// re-signée à chaque version la redemande : l'ancienne version de cette ligne gelait le fil principal 6 à 8 s à la première ouverture de Luciole (diagnostics du 17 octobre).
+    public var hasKey: Bool {
+        var query = base
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        return SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess
+    }
 
     @discardableResult
     public func save(_ key: String) -> Bool {
