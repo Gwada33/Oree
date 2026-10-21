@@ -186,6 +186,7 @@ final class AIPanelController {
         if provider == .lmstudio {
             switch lmStudio.reachable { case nil: return .connecting; case false?: return .unreachable; case true?: return lmStudio.models.isEmpty ? .unreachable : .ready }
         }
+        if provider == .claudeCode { return ClaudeCodeClient.executable() != nil ? .ready : .unreachable }
         return cloudKeyPresent ? .ready : .unreachable
     }
     private var isRunning: Bool { agentTask != nil }
@@ -635,6 +636,9 @@ final class AIPanelController {
                 ? .init(title: "Aucun modèle chargé dans LM Studio.", text: "Le serveur répond, mais il ne propose aucun modèle de conversation. Chargez-en un dans LM Studio, puis réessayez.", primary: ("Réessayer", .retry))
                 : .init(title: "LM Studio n'est pas joignable.", text: "Lancez LM Studio, chargez un modèle et démarrez le serveur local (onglet Developer › Start Server). Adresse essayée : \(base). Erreur : \(lmStudioError.isEmpty ? "aucune réponse" : lmStudioError). Si LM Studio est sur une autre machine : Réglages Système › Confidentialité et sécurité › Réseau local › activez Orée. Le reste d'Orée fonctionne normalement.", primary: ("Réessayer", .retry))
         }
+        if provider == .claudeCode, ClaudeCodeClient.executable() == nil {
+            return .init(title: "Claude Code est introuvable.", text: "Installez Claude Code (claude.com/claude-code), tapez « claude » dans le Terminal pour vous connecter, puis réessayez. Luciole répondra alors avec votre abonnement Claude.", primary: ("Réessayer", .retry))
+        }
         if provider.isCloud, !cloudKeyPresent {
             return .init(title: "Ajoutez votre clé \(provider.displayName).", text: "Réglages › Assistant IA › \(provider.displayName) : collez votre clé API. Elle reste dans le Trousseau de ce Mac.")
         }
@@ -708,7 +712,7 @@ final class AIPanelController {
         panel.show(.init(
             pose: pose, chipText: chipText, chipDot: dot, contextText: contextText, contextLetter: host, contextShared: shareContext, contextLocked: locked,
             mode: mode, placeholder: placeholder, composerEnabled: state.canAsk && !pageIsProtected && !hasPending, running: running, showsStop: !(pending.map { if case .confirm = $0.kind { true } else { false } } ?? false),
-            note: provider == .lmstudio ? (LMStudio.isLoopback(SettingsStore.shared.lmStudioBase) ? "LM Studio : tout reste sur ce Mac · Luciole peut se tromper" : "LM Studio (réseau) : les pages lues sont envoyées à \(SettingsStore.shared.lmStudioBase.host ?? "ce serveur") · Luciole peut se tromper") : provider.isCloud ? "\(provider.displayName) (nuage) : les pages lues lui sont envoyées · Luciole peut se tromper" : "Tout reste sur ce Mac · Luciole peut se tromper"))
+            note: provider == .lmstudio ? (LMStudio.isLoopback(SettingsStore.shared.lmStudioBase) ? "LM Studio : tout reste sur ce Mac · Luciole peut se tromper" : "LM Studio (réseau) : les pages lues sont envoyées à \(SettingsStore.shared.lmStudioBase.host ?? "ce serveur") · Luciole peut se tromper") : provider.sendsPagesAway ? "\(provider.displayName) (nuage) : les pages lues lui sont envoyées · Luciole peut se tromper" : "Tout reste sur ce Mac · Luciole peut se tromper"))
         panel.setTranscript(list, writing: running, pending: hasPending ? pending : nil)
         if overlayOpen || restShown { updateOverlay(state: state, pose: pose, mode: mode, model: model, running: running, hasPending: hasPending, host: host, locked: locked) }
         if let p = pending, !p.armed {            // « Valider » devient actif après 1,2 s : on redessine à ce moment-là
@@ -730,7 +734,7 @@ final class AIPanelController {
         let stage = LucioleStage.stage(for: .init(isOpen: true, pageProtected: pageIsProtected, running: running, actingOnPage: acted, pendingConfirm: confirm != nil, pendingQuestion: question != nil,
                                                   hasAnswer: !(last?.text.isEmpty ?? true)))
         let note = provider == .lmstudio ? (LMStudio.isLoopback(SettingsStore.shared.lmStudioBase) ? "Sur ce Mac · Luciole peut se tromper" : "LM Studio (réseau) · Luciole peut se tromper")
-            : provider.isCloud ? "\(provider.displayName) · Luciole peut se tromper" : "Sur ce Mac · Luciole peut se tromper"
+            : provider.sendsPagesAway ? "\(provider.displayName) · Luciole peut se tromper" : "Sur ce Mac · Luciole peut se tromper"
         // Le voile (validation) et le chemin vivent dans le repère de la page.
         attachCursor(); attachDim()
         let web = hooks.activeWebView()
@@ -975,6 +979,12 @@ extension AIPanelController: AgentEnvironment {
         do {
             mutateAnswer { $0 = "" }                      // un nouveau tour : on repart d'un texte vide
             setThinking("")
+            if provider == .claudeCode {
+                let text = try await ClaudeCodeClient(model: model).complete(request)
+                showPartial(text, thinking: "")
+                Self.logTurn(request, text)
+                return text
+            }
             let client = CloudClient(provider: provider, model: model, endpoint: SettingsStore.shared.aiEndpoint(for: provider))
             let text = try await client.complete(request, onText: { [weak self] partial, thinking in
                 self?.setRateLimitWait(nil)
@@ -988,6 +998,7 @@ extension AIPanelController: AgentEnvironment {
         } catch is CancellationError { throw CancellationError() }
         catch let error as URLError where error.code == .cancelled { throw CancellationError() }
         catch let error as CloudClient.Failure { setRateLimitWait(nil); throw AgentFailure(message: error.message) }
+        catch let error as ClaudeCodeClient.Failure { setRateLimitWait(nil); throw AgentFailure(message: error.message) }
         catch { setRateLimitWait(nil); throw AgentFailure(message: "\(provider.displayName) est injoignable : \(error.localizedDescription)") }
     }
 

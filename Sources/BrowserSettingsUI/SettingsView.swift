@@ -1455,6 +1455,19 @@ struct AssistantSection: View {
                 if !provider.lmStatus.isEmpty { Text(provider.lmStatus).font(.caption).foregroundStyle(.secondary) }
                 Text("LM Studio prête à Orée les modèles que vous avez téléchargés chez lui : lancez son serveur local (onglet Developer), chargez un modèle, puis actualisez. Avec l'adresse par défaut (localhost), rien ne quitte votre Mac. Choisissez un modèle qui sait appeler des outils (par exemple gpt-oss ou Qwen) : sans cela, Luciole répond en texte mais n'agit pas.")
                     .font(.caption).foregroundStyle(.secondary)
+            } else if provider.provider == .claudeCode {
+                Picker("Modèle", selection: $provider.model) {
+                    Text("Haiku (le plus rapide, le moins coûteux pour votre limite)").tag("haiku")
+                    Text("Sonnet (plus capable, plus lent)").tag("sonnet")
+                    Text("Opus (le plus capable, le plus lent)").tag("opus")
+                }
+                if let path = ClaudeCodeLocator.executable()?.path {
+                    Text("Claude Code trouvé : \(path)").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Claude Code est introuvable : installez-le (claude.com/claude-code), puis tapez « claude » dans le Terminal pour vous connecter.").font(.caption).foregroundStyle(.red)
+                }
+                Text("Luciole répond avec votre abonnement Claude, sans clé : Orée lance le programme « claude » de ce Mac. Chaque réponse compte dans votre limite d'utilisation (tapez /usage dans Claude Code pour la voir) et prend ~4 s de plus qu'avec un service rapide. Le texte de la page que vous demandez de lire et vos questions sont envoyés à Anthropic. Pour votre usage personnel ; ce n'est pas un moyen de distribuer l'app avec un abonnement partagé.")
+                    .font(.caption).foregroundStyle(.secondary)
             } else if provider.provider.isCloud {
                 TextField("Modèle \(provider.provider.displayName)", text: $provider.model)
                 HStack {

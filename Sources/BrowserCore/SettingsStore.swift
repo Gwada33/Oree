@@ -114,6 +114,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let aiGroqModel = "settings.aiGroqModel"
         static let aiMistralModel = "settings.aiMistralModel"
         static let aiLMStudioModel = "settings.aiLMStudioModel"
+        static let aiClaudeCodeModel = "settings.aiClaudeCodeModel"
         static let aiLMStudioURL = "settings.aiLMStudioURL"
         static let calmMotion = "settings.calmMotion"
         static let sidebarMode = "settings.sidebarMode"
@@ -556,7 +557,7 @@ public final class SettingsStore: @unchecked Sendable {
     public func setAIModel(_ model: String, for provider: AIProvider) {
         defaults.set(model.trimmingCharacters(in: .whitespaces), forKey: modelKey(provider))
     }
-    private func modelKey(_ provider: AIProvider) -> String { switch provider { case .mistral: Key.aiMistralModel; case .lmstudio: Key.aiLMStudioModel; default: Key.aiGroqModel } }
+    private func modelKey(_ provider: AIProvider) -> String { switch provider { case .mistral: Key.aiMistralModel; case .lmstudio: Key.aiLMStudioModel; case .claudeCode: Key.aiClaudeCodeModel; default: Key.aiGroqModel } }
 
     /// L'adresse de base de LM Studio (par défaut `http://localhost:1234/v1`). `HB_LMSTUDIO_URL` : essais seulement.
     public var lmStudioBase: URL {

@@ -3,26 +3,29 @@ import Foundation
 /// Le fournisseur d'IA : un fournisseur en nuage (Groq, Mistral : appels d'outils natifs, rapides et fiables) ou LM Studio, qui tourne sur ce Mac ou sur le réseau.
 /// Orée n'embarque aucun modèle : un moteur local futur serait un cas de plus ici, derrière la même requête (`ModelRequest`).
 public enum AIProvider: String, CaseIterable, Codable, Sendable {
-    case lmstudio, mistral, groq
+    case lmstudio, mistral, groq, claudeCode
 
     public var title: String {
-        switch self { case .lmstudio: "LM Studio (sur ce Mac)"; case .mistral: "Mistral (nuage)"; case .groq: "Groq (nuage)" }
+        switch self { case .lmstudio: "LM Studio (sur ce Mac)"; case .mistral: "Mistral (nuage)"; case .groq: "Groq (nuage)"; case .claudeCode: "Claude Code (votre abonnement Claude)" }
     }
     /// Les pages lues partent chez un tiers : exige une clé et un avertissement.
     public var isCloud: Bool { self == .mistral || self == .groq }
+    /// Les pages lues partent chez un tiers, avec ou sans clé : Claude Code n'a pas de clé à Orée (il utilise la connexion du programme `claude`) mais envoie la page chez Anthropic.
+    public var sendsPagesAway: Bool { isCloud || self == .claudeCode }
     /// Passe par une API de type OpenAI (tous les fournisseurs actuels).
     public var usesAPI: Bool { true }
-    public var displayName: String { switch self { case .lmstudio: "LM Studio"; case .mistral: "Mistral"; case .groq: "Groq" } }
+    public var displayName: String { switch self { case .lmstudio: "LM Studio"; case .mistral: "Mistral"; case .groq: "Groq"; case .claudeCode: "Claude" } }
     /// API compatible OpenAI. Seule adresse à laquelle la clé est envoyée.
     public var endpoint: URL {
         switch self {
         case .mistral: URL(string: "https://api.mistral.ai/v1/chat/completions")!
         case .lmstudio: LMStudio.chatURL(base: LMStudio.defaultBase)
         case .groq: URL(string: "https://api.groq.com/openai/v1/chat/completions")!
+        case .claudeCode: URL(string: "claude-code://local")!         // jamais appelé : Claude Code passe par un processus, pas par une adresse
         }
     }
     public var keychainService: String { "com.nolhan.hyperbrowser.\(rawValue)" }
-    public var defaultModel: String { switch self { case .mistral: "mistral-small-latest"; case .lmstudio: ""; case .groq: "openai/gpt-oss-20b" } }
+    public var defaultModel: String { switch self { case .mistral: "mistral-small-latest"; case .lmstudio: ""; case .groq: "openai/gpt-oss-20b"; case .claudeCode: "haiku" } }
 
     /// Le fournisseur réellement utilisé : le choix de la personne, à défaut le premier fournisseur en nuage dont une clé est déjà là (Mistral, puis Groq), sinon Groq
     /// (le panneau demande alors sa clé). Un ancien choix « modèle intégré » n'existe plus : il se lit comme « pas de choix ».
