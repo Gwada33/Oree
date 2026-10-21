@@ -45,3 +45,10 @@ Le pointeur n'est jamais enregistré point par point : le script de la page rés
 - Les pages (re)chargées avant l'activation n'ont pas le script : elles commencent à être observées au prochain chargement. Les événements d'onglets et de navigation n'ont pas besoin du script.
 - Le journal ne dit rien de la qualité d'un résultat (une page lente peut être la bonne) : il mesure des durées et des gestes, pas des intentions.
 - Un journal d'une seule journée donne un premier signal sur vos habitudes, pas assez pour les cas rares ; ce qu'il apprend ne vaut que pour vous.
+
+## Banc de rejeu du préchargement
+
+`python3 scripts/journal/prefetch_replay.py journal-oree-AAAA-MM-JJ.jsonl` compare la règle « précharger après T ms de survol » à un petit modèle (régression logistique, numpy seulement) appris sur les 70 % premiers du journal et testé sur les 30 % derniers.
+Le modèle n'utilise que ce qui est connu au moment du survol (genre et place du lien, site, forme de la page, vitesse du pointeur), jamais la durée finale ni le clic.
+Premier essai (21 octobre 2026, 5 705 survols, ~1 000 cliqués, un seul utilisateur) : classement AUC 0,69 ; à couverture égale la règle ne perd rien (précharger tout ce qui dure ≥ 150 ms couvre 97 % des clics) ; à budget serré le modèle couvre bien plus (≈ 507 préchargements : 60 % des clics contre 30 %).
+À relancer à chaque nouvel export : le modèle ne vaut la peine que si l'écart se confirme avec 5 000 à 10 000 survols cliqués.
