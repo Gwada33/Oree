@@ -45,6 +45,7 @@ public enum WebKitTuning {
     @discardableResult
     public static func applyFeatures(to preferences: WKPreferences) -> [String] {
         let wanted = defaultFeatures + overrides("HB_WK_FEATURES")
+        applyProperties(to: preferences)
         guard !wanted.isEmpty,
               let featuresList = (WKPreferences.self as AnyObject).perform(NSSelectorFromString("_features"))?.takeUnretainedValue() as? [NSObject]
         else { return [] }
@@ -61,6 +62,21 @@ public enum WebKitTuning {
             applied.append(key)
         }
         return applied
+    }
+
+    /// Réglages privés de `WKPreferences` qui ne sont pas des « features » (propriétés Objective-C), posés par clé ; une clé inconnue est ignorée.
+    /// Essais : HB_WK_PREFS="_dnsPrefetchingEnabled=1".
+    static var tunedProperties: [(String, Bool)] { SettingsStore.shared.webkitTuning ? [] : [] }
+
+    static func applyProperties(to preferences: WKPreferences) {
+        for (key, value) in tunedProperties + overrides("HB_WK_PREFS") {
+            guard let property = class_getProperty(WKPreferences.self, key) else { continue }
+            let custom = property_copyAttributeValue(property, "S")
+            defer { free(custom) }
+            let setter = NSSelectorFromString(custom.map { String(cString: $0) } ?? "set\(key.prefix(1).uppercased())\(key.dropFirst()):")
+            guard preferences.responds(to: setter), let imp = preferences.method(for: setter) else { continue }
+            unsafeBitCast(imp, to: (@convention(c) (AnyObject, Selector, Bool) -> Void).self)(preferences, setter, value)
+        }
     }
 
     /// Process-pool switches, set by key on the private `_WKProcessPoolConfiguration`.
