@@ -704,10 +704,18 @@ final class Tab: NSObject {
         // there. Waiting for "nothing moved for 150 ms" instead holds the ghost up to 2.5 s on pages that never stop moving
         // (carousels, clocks, trackers), during which the page looks frozen (no scripts in the ghost).
         let matchDeadline = Date().addingTimeInterval(6)
+        // Une fois la vraie page complète, on ne la fait plus attendre qu'1,5 s (journal d'usage : avec 6 s de plus, un réveil par clic durait 7,4 s en médiane, contre 1 s sans fantôme).
+        // Une page qui se charge encore garde sa limite de 6 s : elle vaut mieux que le fantôme.
+        let settleAfterComplete = 1.5
+        var completeSince: Date?
         var lastMatch = "never complete", scrollFixes = 0, lastScroll: Date?, stablePolls = 0, firstMatch: Date?, previousReal: [GhostItem] = []
-        while Date() < matchDeadline {
+        while Date() < matchDeadline, completeSince.map({ Date().timeIntervalSince($0) < settleAfterComplete }) ?? true {
             guard ghostView === ghost, isAwaitingWakeReveal else { return }
-            if ghost.isReady, await evaluateWithTimeout("document.readyState", in: webView, world: GhostScript.world, seconds: 1) == "complete" {
+            let state = ghost.isReady ? await evaluateWithTimeout("document.readyState", in: webView, world: GhostScript.world, seconds: 1) : nil
+            // « interactive » suffit (le DOM est là) : attendre « complete » c'est attendre chaque image et chaque traqueur, et sur une machine chargée cela dure des secondes.
+            // Le contenu doit quand même concorder et rester stable avant l'échange.
+            if state == "complete" || state == "interactive" {
+                if completeSince == nil { completeSince = Date() }
                 let g = GhostMatcher.parse(await evaluateWithTimeout(GhostScript.visibleItems, in: ghost.webView, world: GhostScript.world, seconds: 1) ?? "")
                 let r = GhostMatcher.parse(await evaluateWithTimeout(GhostScript.visibleItems, in: webView, world: GhostScript.world, seconds: 1) ?? "")
                 let similarity = GhostMatcher.similarity(ghost: g, real: r)
@@ -730,9 +738,9 @@ final class Tab: NSObject {
             }
             try? await Task.sleep(for: .milliseconds(100))
         }
-        if readiness == nil { Log.tabs.notice("Ghost: no match in 6 s (\(lastMatch, privacy: .public))") }
+        if readiness == nil { Log.tabs.notice("Ghost: no match (\(Int(Date().timeIntervalSince(started) * 1000)) ms): \(lastMatch, privacy: .public)") }
         for _ in 0..<3 where readiness == nil {
-            readiness = await callAsyncWithTimeout(GhostScript.ready, arguments: ["timeoutMs": 2500], seconds: 3.1)
+            readiness = await callAsyncWithTimeout(GhostScript.ready, arguments: ["timeoutMs": completeSince == nil ? 2500 : 800], seconds: completeSince == nil ? 3.1 : 1.4)
             guard ghostView === ghost, isAwaitingWakeReveal else { return }
             if let r = readiness, r.hasPrefix("timeout"), r.contains("/loading/") { continue }
             break

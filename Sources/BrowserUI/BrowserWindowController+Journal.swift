@@ -157,6 +157,10 @@ extension BrowserWindowController {
     }
 
     func journalWake(_ tab: Tab, ms: Int) {
+        #if DEBUG
+        // Dev (debug seulement) : le dernier réveil, pour les bancs (le journal système ne garde plus ces lignes).
+        if ProcessInfo.processInfo.environment["HB_WAKE_REPORT"] != nil { try? "ms=\(ms) ghost=\(tab.journalWakeGhost) trigger=\(tab.journalWakeTrigger)".write(toFile: "/tmp/oree-wake.txt", atomically: true, encoding: .utf8) }
+        #endif
         guard journal.enabled, !tab.isPrivate else { return }
         let trigger = tab.journalWakeTrigger; tab.journalWakeTrigger = "select"
         journal.emit("tab.wake", ["ms": .int(ms), "trigger": .string(trigger), "ghost": .bool(tab.journalWakeGhost)], tab: tab)

@@ -237,3 +237,14 @@ Ouvrez une page longue, défilez, allez sur un autre onglet, endormez le premier
 ## Suite
 5. Score de fidélité ; gel noyau `SIGSTOP`/`SIGCONT` (flag `oree.hibernation.kernelFreeze`).
 6. Chiffrement AES-GCM, banc automatique d'invisibilité.
+
+
+## Réveil avec fantôme : mesures du 22 octobre 2026
+
+Journal d'usage (Mac 8 Go en mode économie d'énergie, pression mémoire « warning » 68 % du temps) : un réveil par clic durait **1,0 s en médiane sans fantôme** et **7,4 s avec** (p90 9,8 s). Les réveils au survol ne comptent pas : ils incluent le temps avant que l'onglet soit regardé.
+Instance d'essai sur machine au repos : 1,1 à 4,8 s (médiane ≈ 1,9 s). Sous charge (8 boucles actives) : médiane 2,9 s, maximum 8,9 s : la cause est le temps de chargement de la vraie page, que le fantôme attend (état « complete », puis 6 s de concordance au plus).
+
+Correctif (`Tab.hydrate`) : une fois la page « interactive » ou « complete », elle n'attend plus que 1,5 s une concordance (avant : jusqu'à 6 s au total), puis 0,8 s de calme au lieu de 2,5 s. Une page encore en chargement garde son délai.
+Sous charge : maximum 8,9 → 6,3 s, IKEA 7,8 → 5,7 s, MDN 8,9 → 5,6 s, médiane inchangée (2,9 s). Le saut visuel de l'échange ne s'aggrave pas (IKEA 5,1 → 3,5 %, MDN 0 %, Stack Overflow 32,9 → 5,5 % sur un essai ; un seul passage par site, donc bruité).
+
+Mesurer : `OREE_TEST_APP=… python3 scripts/bench/ghost_swap_check.py --timing [url…]` (l'instance est lancée directement, avec des clés de test ; `HB_WAKE_REPORT=1` écrit le dernier réveil dans `/tmp/oree-wake.txt`, build de debug).
