@@ -37,6 +37,8 @@ public enum WebKitTuning {
         ("RequestIdleCallbackEnabled", true), ("DynamicSiteInterventionsEnabled", true), ("FindInVideoEnabled", true), ("TextTracksInMSEEnabled", true),
         ("ImageAnalysisDuringFindInPageEnabled", true), ("InputTypeMonthEnabled", true), ("InputTypeWeekEnabled", true), ("SelectShowPickerEnabled", true),
         ("CloseWatcherEnabled", true), ("LoginStatusAPIEnabled", true),
+        // Usage : code QR reconnu dans le menu d'une image, adresse du lien dans l'infobulle, infobulle sur un texte tronqué.
+        ("ContextMenuQRCodeDetectionEnabled", true), ("ShowsURLsInToolTipsEnabled", true), ("ShowsToolTipOverTruncatedText", true),
         ("CSSLineClampEnabled", true), ("CSSOverflowClipMarginEnabled", true), ("CSSTextJustifyEnabled", true), ("CSSTextSpacingTrimEnabled", true),
         ("CSSFontVariantEmojiEnabled", true), ("CSSAppearanceBaseEnabled", true), ("CSSScrollStateContainerQueriesEnabled", true),
     ]
@@ -66,7 +68,7 @@ public enum WebKitTuning {
 
     /// Réglages privés de `WKPreferences` qui ne sont pas des « features » (propriétés Objective-C), posés par clé ; une clé inconnue est ignorée.
     /// Essais : HB_WK_PREFS="_dnsPrefetchingEnabled=1".
-    static let tunedProperties: [(String, Bool)] = []                 // rien de retenu : voir scripts/bench/webkit_pool_ab.py
+    static var tunedProperties: [(String, Bool)] { SettingsStore.shared.webkitTuning ? [("_allowsPictureInPictureMediaPlayback", true)] : [] }   // image dans l'image pour les vidéos HTML
 
     static func applyProperties(to preferences: WKPreferences) {
         for (key, value) in tunedProperties + overrides("HB_WK_PREFS") {
