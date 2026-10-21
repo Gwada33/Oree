@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>HLS</title><body style="margin:0;background:#222">
+<video id="v" muted playsinline controls crossorigin="anonymous" style="width:960px;height:540px;margin:20px"></video>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
+<script>var v=document.getElementById('v'),u='https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+if(window.Hls&&Hls.isSupported()){var h=new Hls({startLevel:1,capLevelToPlayerSize:false});h.on(Hls.Events.MANIFEST_PARSED,function(){h.currentLevel=1});h.loadSource(u);h.attachMedia(v);window.__mode='MSE hls.js'}else{v.src=u;window.__mode='natif'}
+v.muted=true;v.play();</script>

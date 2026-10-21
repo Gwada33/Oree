@@ -154,6 +154,10 @@ enum VideoUpscaleScript {
           ctx.drawImage(v, 0, 0); ctx.getImageData(0, 0, 1, 1);         // une vidéo d'une autre origine sans CORS ou protégée : SecurityError ici, avant d'avoir rien envoyé
           e = { native: true, running: true, note: '', canvas: null, sent: 0, busy: false, lastSend: 0, seq: 0 };
           entries.set(v, e);
+          // Une vidéo protégée (DRM) se recopie sans erreur mais en noir pur : on contrôle une miniature toutes les 5 images et on s'arrête si elle reste noire (sinon on cacherait l'image réelle derrière du noir).
+          const probe = document.createElement('canvas'); probe.width = 16; probe.height = 9; const pctx = probe.getContext('2d', { willReadFrequently: true });
+          const isBlack = () => { pctx.drawImage(canvas, 0, 0, 16, 9); const d = pctx.getImageData(0, 0, 16, 9).data; for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 6) return false; return true; };
+          let tick = 0, blacks = 0;
           const encode = (blob) => new Promise((resolve) => { const r = new FileReader(); r.onloadend = () => resolve(String(r.result).split(',')[1] || ''); r.readAsDataURL(blob); });
           const frame = () => {
             const cur = entries.get(v); if (!cur || !cur.running) return;
@@ -163,6 +167,7 @@ enum VideoUpscaleScript {
               if (canvas.width !== v.videoWidth || canvas.height !== v.videoHeight) { canvas.width = v.videoWidth; canvas.height = v.videoHeight; }
               const g = geometry(v), mt = v.currentTime;
               try { ctx.drawImage(v, 0, 0); } catch (err) { stopNative(v, 'illisible (' + (err && err.name || 'erreur') + ')'); report(); return; }
+              if (++tick % 5 === 1) { blacks = isBlack() ? blacks + 1 : 0; if (blacks >= 12) { stopNative(v, 'protégée (image noire)'); report(); return; } }
               canvas.toBlob((blob) => {
                 if (!blob) { cur.busy = false; return; }
                 encode(blob).then((b64) => {
