@@ -93,6 +93,7 @@ final class Tab: NSObject {
     func enhancer(for web: WKWebView) -> VideoEnhancer {
         if let videoEnhancer { return videoEnhancer }
         let enhancer = VideoEnhancer(web: web)
+        enhancer.home = contentSlot
         enhancer.overlay.frame = contentSlot.bounds
         enhancer.overlay.autoresizingMask = [.width, .height]
         contentSlot.addSubview(enhancer.overlay, positioned: .above, relativeTo: web)

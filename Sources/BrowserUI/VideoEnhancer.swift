@@ -66,6 +66,14 @@ actor SuperResolutionEngine {
         var buffer: CVPixelBuffer?
         let format = (attributes[kCVPixelBufferPixelFormatTypeKey as String] as? Int).map { OSType($0) } ?? kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         guard CVPixelBufferCreate(kCFAllocatorDefault, width, height, format, attrs as CFDictionary, &buffer) == kCVReturnSuccess else { return nil }
+        // Un tampon YUV neuf est rempli de zéros, ce qui s'affiche en vert : on le remplit de noir (Y=16, CbCr=128) pour qu'une lecture trop tôt ne soit jamais verte.
+        if let buffer, CVPixelBufferGetPlaneCount(buffer) == 2, format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange {
+            CVPixelBufferLockBaseAddress(buffer, [])
+            for (plane, value) in [(0, UInt8(16)), (1, UInt8(128))] {
+                if let base = CVPixelBufferGetBaseAddressOfPlane(buffer, plane) { memset(base, Int32(value), CVPixelBufferGetBytesPerRowOfPlane(buffer, plane) * CVPixelBufferGetHeightOfPlane(buffer, plane)) }
+            }
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+        }
         return buffer
     }
 
@@ -115,6 +123,8 @@ final class VideoEnhancer {
     let overlay = EnhancerView()
     private var engineBox: AnyObject?
     private weak var web: WKWebView?
+    /// Où vit la vue en temps normal ; en plein écran WebKit sort la page dans une autre fenêtre, la vue la suit.
+    weak var home: NSView?
     private var lastShown = Date.distantPast
     private var watchdog: Timer?
     private(set) var latencies: [Double] = [], processTimes: [Double] = [], decodeTimes: [Double] = []
@@ -179,10 +189,20 @@ final class VideoEnhancer {
         }
     }
 
+    private func attachOverlay(to web: WKWebView) {
+        let inHome = home?.window != nil && web.window === home?.window
+        guard let host = inHome ? home : web.superview, overlay.superview !== host else { return }
+        overlay.removeFromSuperview()
+        overlay.frame = inHome ? host.bounds : web.frame
+        overlay.autoresizingMask = [.width, .height]
+        host.addSubview(overlay, positioned: .above, relativeTo: web.superview === host ? web : nil)
+    }
+
     @available(macOS 26.0, *)
     private func show(_ output: SuperResolutionEngine.Output) {
         let (x, y, w, h) = (output.info.x, output.info.y, output.info.w, output.info.h)
         guard let web, w > 1, h > 1 else { return }
+        attachOverlay(to: web)
         let zoom = max(web.pageZoom, 0.1)
         let inWeb = NSRect(x: x * zoom, y: web.isFlipped ? y * zoom : web.bounds.height - (y + h) * zoom, width: w * zoom, height: h * zoom)
         let target = overlay.convert(web.convert(inWeb, to: nil), from: nil)
