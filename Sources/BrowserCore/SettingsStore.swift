@@ -418,6 +418,11 @@ public final class SettingsStore: @unchecked Sendable {
         get { ProcessInfo.processInfo.environment["HB_VIDEO_UPSCALE"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.videoUpscale") as? Bool ?? false) }
         set { defaults.set(newValue, forKey: "settings.videoUpscale") }
     }
+    /// Le moteur d'agrandissement : « apple » (upscaler par apprentissage de macOS 26, affiché par Orée par-dessus la vidéo) ou « webgl » (bicubique + netteté, dans la page).
+    public var videoUpscaleEngine: String {
+        get { ProcessInfo.processInfo.environment["HB_VIDEO_ENGINE"] ?? (defaults.string(forKey: "settings.videoUpscaleEngine") ?? "apple") }
+        set { defaults.set(newValue, forKey: "settings.videoUpscaleEngine") }
+    }
     /// La netteté ajoutée (0 à 1) : 0,3 douce, 0,4 normale (défaut), 0,6 forte. Au-delà, elle accentue les défauts de compression (mesuré).
     public var videoUpscaleSharpness: Double {
         get { min(max(defaults.object(forKey: "settings.videoUpscaleSharpness") as? Double ?? 0.4, 0), 1) }

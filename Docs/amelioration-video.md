@@ -52,20 +52,42 @@ OREE_TEST_APP=… python3 scripts/bench/video_upscale_check.py  # repérage, bas
 ```
 
 
-## L'upscaler d'Apple (VideoToolbox) : mesures du 22 octobre 2026
+## Le moteur Apple (par apprentissage), branché dans Orée
 
-`VTLowLatencySuperResolutionScaler` (macOS 26+) est un agrandisseur par apprentissage, conçu pour le temps réel. Mesuré avec `scripts/bench/vtsr.swift` sur les mêmes images (×2, 960×540 → 1920×1080) :
+Réglages › Qualité des vidéos › Moteur : **Apple** (par défaut, macOS 26 ou plus) ou **Filtre** (bicubique + netteté, ci-dessus). Sans macOS 26, ou pour une source hors de 96×96 à 1280×1280, Orée revient seul au filtre.
+
+### Mesures de qualité (22 octobre 2026, `scripts/bench/upscale_check.py` avec `OREE_VTSR`)
+
+`VTLowLatencySuperResolutionScaler` : agrandisseur par apprentissage de macOS, conçu pour le temps réel. Mêmes images que ci-dessus (×2, 960×540 → 1920×1080) :
 
 | Source compressée | PSNR | SSIM | Netteté |
 |---|---|---|---|
-| Bicubique + netteté 0,3 (Orée) | 34,10 | 0,879 | 0,51 |
-| **Apple IA** | 32,73 | 0,880 | **0,84** |
+| Bicubique + netteté 0,3 (filtre) | 34,10 | 0,879 | 0,51 |
+| **Apple** | 32,73 | 0,880 | **0,84** |
 
 | Source propre | PSNR | SSIM | Netteté |
 |---|---|---|---|
-| Bicubique + netteté 0,3 (Orée) | 43,92 | 0,987 | 0,72 |
-| **Apple IA** | 35,94 | 0,950 | 1,28 |
+| Bicubique + netteté 0,3 (filtre) | 43,92 | 0,987 | 0,72 |
+| **Apple** | 35,94 | 0,950 | 1,28 |
 
-- **Vitesse : 2,7 ms par image** (≈ 370 images/s) pour 960×540 → 1920×1080 sur ce M1, bien sous les 16,6 ms du 60 images/s. Taille maximale de la source : 1280×1280.
-- **Qualité :** visiblement plus net (texte et icônes bien plus lisibles que le bicubique + CAS, voir `~/Downloads/comparaison-agrandissement.png`), mais l'image s'éloigne de l'original (PSNR plus bas, netteté > 1 = contours plus marqués que l'original) : le modèle **invente** des contours plausibles. Sur un flux compressé, la fidélité structurelle (SSIM) reste égale à celle du navigateur alors que la netteté ×3,6.
-- Ce que l'API ne fait pas : elle travaille sur des images natives (CVPixelBuffer), pas sur une vidéo dans une page. Voir la section « Intégration » de la discussion : il faut sortir les images de la page, les traiter et les réafficher.
+À l'œil (`comparaison-agrandissement.png`) : texte et icônes nettement plus lisibles qu'avec le filtre ; sur une photo, des contours plus nets mais l'original garde bien plus de texture. **Le modèle invente des contours plausibles** (PSNR plus bas ; netteté > 1 = contours plus marqués que l'original).
+
+### Comment c'est branché
+
+1. Le script de la page (monde isolé) recopie chaque image de la vidéo dans un canevas, l'encode en JPEG (qualité 0,95) et l'envoie à Orée en base64. **Les messages de WebKit ne peuvent pas porter de binaire** (un `ArrayBuffer` arrive vide, un `Uint8Array` arrive comme un dictionnaire d'un million d'entrées) : d'où le JPEG en texte, ~17 Ko à 320×180, ~57 Ko à 640×360, ~109 Ko à 960×540.
+2. `SuperResolutionEngine` (acteur) décode le JPEG, le convertit en YUV 4:2:0, l'agrandit ×2 avec l'API d'Apple (trois tampons de sortie en rotation) ; si le moteur est occupé, la plus ancienne image en attente est abandonnée.
+3. `VideoEnhancer` affiche le résultat dans une `AVSampleBufferDisplayLayer`, dans une vue posée par-dessus la page (`EnhancerView`, qui laisse passer la souris), à l'emplacement que le script donne (ses coordonnées + le décalage de ses iframes parentes, calculé de proche en proche par `postMessage`). Si plus aucune image n'arrive pendant 0,3 s (pause, onglet caché), la vue se cache et la vidéo d'origine reprend la place.
+
+### Mesures du moteur branché (`scripts/bench/video_upscale_check.py`, 23 vérifications)
+
+- Agrandissement : **1,9 ms par image** (320×180 → 640×360). Décodage JPEG + conversion : ~5 ms. **Délai de bout en bout côté natif : 7 ms** ; 150 images rejouées à 30 images/s : 150 agrandies, 0 perdue.
+- Côté page (copie + JPEG + base64), mesuré sans minuteur : **4,4 ms** à 320×180, **7,7 ms** à 640×360, **9,9 ms** à 960×540 : de quoi tenir 60 images/s jusqu'en 540p, au prix d'une bonne part du fil principal de la page.
+- Position : la vue couvre la vidéo à 960×540 à 20 px du bord ; dans une iframe à (100, 60) + vidéo à (20, 20), elle est à (120, 80).
+
+### Limites
+
+- Mesure du délai total (page → écran) : ~25 ms estimés (≈ 10 ms page + 7 ms natif + affichage), non mesurés de bout en bout ; au-dessus de ~45 ms le décalage image/son se verrait.
+- La page d'essai est cachée (fenêtre invisible) : ses minuteurs sont freinés, donc la cadence réelle à 30 ou 60 images/s côté page n'est **pas** mesurée sur un vrai lecteur ; la chaîne native, elle, l'est (images rejouées).
+- Mêmes refus que le filtre : autre origine sans CORS, DRM.
+- Le résultat s'affiche par-dessus la vidéo : un lecteur qui dessine des sous-titres ou une barre de commandes dans le même plan reste dessous (les commandes cliquables restent cliquables, la vue ne prend pas la souris, mais elles peuvent être cachées visuellement). À vérifier sur de vrais lecteurs.
+- Plein écran natif de la vidéo : non géré (la vue n'y est pas).

@@ -264,6 +264,32 @@ extension BrowserWindowController {
             let before = tab.upscaleStatus.map { "on=\($0.on) note=\($0.note) \($0.sourceW)x\($0.sourceH)→\($0.shownW)x\($0.shownH)" } ?? "aucune"
             if ((try? String(contentsOfFile: "/tmp/oree-upscale.txt", encoding: .utf8)) ?? "").hasPrefix("toggle") { tab.toggleUpscale() }
             return before
+        case "upscalecall":
+            let body = (try? String(contentsOfFile: "/tmp/oree-upscale-eval.js", encoding: .utf8)) ?? "return 'aucun script'"
+            Task { @MainActor in
+                let result = await tab.webView?.safeCall(body, arguments: [:], world: VideoUpscaleScript.world)
+                try? String(describing: result).write(toFile: "/tmp/oree-upscale-eval.txt", atomically: true, encoding: .utf8)
+            }
+            return "started"
+        case "upscaleeval":
+            let script = (try? String(contentsOfFile: "/tmp/oree-upscale-eval.js", encoding: .utf8)) ?? "'aucun script'"
+            Task { @MainActor in
+                let result = await tab.webView?.safeEvaluate(script, frame: tab.upscaleFrame, world: VideoUpscaleScript.world)
+                try? String(describing: result).write(toFile: "/tmp/oree-upscale-eval.txt", atomically: true, encoding: .utf8)
+            }
+            return "started"
+        case "upscalefeed":
+            let parts = ((try? String(contentsOfFile: "/tmp/oree-upscale-feed.txt", encoding: .utf8)) ?? "150 30").split(separator: " ").compactMap { Double($0) }
+            tab.videoEnhancer?.resetStats()
+            tab.videoEnhancer?.feed(count: Int(parts.first ?? 150), fps: parts.count > 1 ? parts[1] : 30)
+            return "feeding"
+        case "upscalestats":
+            Task { @MainActor in
+                let text = await tab.videoEnhancer?.report() ?? "aucun agrandisseur natif"
+                try? text.write(toFile: "/tmp/oree-upscale-stats.txt", atomically: true, encoding: .utf8)
+            }
+            return "started"
+        case "upscaledump": return tab.videoEnhancer?.dumpLast(to: "/tmp/oree-upscale-out.png") == true ? "écrit" : "rien"
         case "upscaleworld":
             Task { @MainActor in
                 let present = await tab.webView?.safeEvaluate("typeof window.__oreeUpscale", world: VideoUpscaleScript.world)

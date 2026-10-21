@@ -88,6 +88,21 @@ final class Tab: NSObject {
     var isDirty = false
     private var usedPrivateFreeze = false
     /// L'agrandissement des vidéos : la meilleure vidéo vue par le script (dans quel cadre, et où elle en est).
+    var videoEnhancer: VideoEnhancer?
+    /// L'agrandisseur natif de cet onglet (créé à la première image) : sa vue est posée au-dessus de la page, sans prendre la souris.
+    func enhancer(for web: WKWebView) -> VideoEnhancer {
+        if let videoEnhancer { return videoEnhancer }
+        let enhancer = VideoEnhancer(web: web)
+        enhancer.overlay.frame = contentSlot.bounds
+        enhancer.overlay.autoresizingMask = [.width, .height]
+        contentSlot.addSubview(enhancer.overlay, positioned: .above, relativeTo: web)
+        enhancer.onFailure = { [weak self] note in
+            guard let self, let web = self.webView else { return }
+            Task { @MainActor in _ = await web.safeEvaluate("window.__oreeUpscale && window.__oreeUpscale.nativeFailed(\(String(reflecting: note)))", frame: self.upscaleFrame, world: VideoUpscaleScript.world) }
+        }
+        videoEnhancer = enhancer
+        return enhancer
+    }
     var upscaleStatus: UpscaleStatus?
     var upscaleFrame: WKFrameInfo?
     func toggleUpscale() {

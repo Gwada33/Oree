@@ -83,6 +83,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var ambientMemoryDays = 30 { didSet { settings.ambientMemoryDays = ambientMemoryDays } }
     @Published var memoryStatus = ""
     @Published var videoUpscale = false { didSet { settings.videoUpscale = videoUpscale } }
+    @Published var videoUpscaleEngine = "apple" { didSet { settings.videoUpscaleEngine = videoUpscaleEngine } }
     @Published var videoUpscaleSharpness = 0.4 { didSet { settings.videoUpscaleSharpness = videoUpscaleSharpness } }
     func refreshMemoryStatus() { let n = (try? PageMemoryRepository().count()) ?? 0; memoryStatus = n == 0 ? "Rien n'est gardé pour l'instant." : "\(n) page\(n > 1 ? "s" : "") gardée\(n > 1 ? "s" : "") sur ce Mac." }
     func forgetMemory() {
@@ -226,7 +227,7 @@ final class SettingsViewModel: ObservableObject {
         eventJournal = current.eventJournalEnabled
         eventJournalDays = current.eventJournalDays
         ambientMemory = current.ambientMemory; ambientMemoryDays = current.ambientMemoryDays
-        videoUpscale = current.videoUpscale; videoUpscaleSharpness = current.videoUpscaleSharpness
+        videoUpscale = current.videoUpscale; videoUpscaleEngine = current.videoUpscaleEngine; videoUpscaleSharpness = current.videoUpscaleSharpness
         energyMode = current.energyMode
         sendGPC = current.sendGlobalPrivacyControl
         minimumFontSize = current.minimumFontSize
@@ -790,8 +791,12 @@ public struct SettingsView: View {
             }
             Section("Qualité des vidéos") {
                 Toggle("Agrandir d'office les vidéos de basse résolution (expérimental)", isOn: $model.videoUpscale)
-                Picker("Netteté ajoutée", selection: $model.videoUpscaleSharpness) { Text("Douce").tag(0.3); Text("Normale").tag(0.4); Text("Forte").tag(0.6) }.disabled(!model.videoUpscale)
-                Text("Orée agrandit l'image avec un filtre bicubique puis accentue les contours (WebGL, dans la page). Ce n'est pas de l'IA : les contours sont plus nets, mais aucun détail absent de la source n'est inventé, et sur un flux très compressé la netteté accentue aussi ses défauts. Cela ne marche pas sur les vidéos protégées ni sur celles qu'un autre site sert sans autorisation, et peut coûter des images sur un Mac chargé : Orée l'arrête alors toute seule. Désactivé, le choix se fait vidéo par vidéo (clic droit › Améliorer cette vidéo). S'applique aux pages chargées ensuite.")
+                Picker("Moteur", selection: $model.videoUpscaleEngine) {
+                    Text("Apple (apprentissage, macOS 26 ou plus)").tag("apple")
+                    Text("Filtre (bicubique + netteté)").tag("webgl")
+                }
+                Picker("Netteté ajoutée (filtre)", selection: $model.videoUpscaleSharpness) { Text("Douce").tag(0.3); Text("Normale").tag(0.4); Text("Forte").tag(0.6) }.disabled(!model.videoUpscale)
+                Text("Moteur Apple : l'upscaler par apprentissage de macOS (mesuré : 2,7 ms par image, bien plus net, mais il invente des contours plausibles) ; Orée affiche son résultat par-dessus la vidéo. Moteur filtre : bicubique puis netteté dans la page (pas d'IA, aucun détail inventé, plus fidèle mais moins net). Dans les deux cas, un flux déjà écrasé ne retrouve pas le détail perdu. Cela ne marche pas sur les vidéos protégées ni sur celles qu'un autre site sert sans autorisation, et peut coûter des images sur un Mac chargé : Orée l'arrête alors toute seule. Désactivé, le choix se fait vidéo par vidéo (clic droit › Améliorer cette vidéo). S'applique aux pages chargées ensuite.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Mémoire d'Orée") {

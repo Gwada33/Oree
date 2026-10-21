@@ -80,13 +80,13 @@ enum VideoUpscaleScript {
 
     /// Dans toutes les pages et tous leurs cadres (les lecteurs vivent souvent dans une iframe). `auto` : agrandir tout de suite les vidéos éligibles ; sinon le script se contente de les repérer
     /// et la personne en choisit une (clic droit › Améliorer cette vidéo).
-    static func makeUserScript(auto: Bool, sharpness: Double) -> WKUserScript {
+    static func makeUserScript(auto: Bool, sharpness: Double, engine: String = "webgl") -> WKUserScript {
         // Essais (debug) : la fenêtre d'une instance d'essai n'est pas visible, la page y est « cachée » ; HB_VIDEO_UPSCALE_FORCE lève cette condition.
         var force = false
         #if DEBUG
         force = ProcessInfo.processInfo.environment["HB_VIDEO_UPSCALE_FORCE"] == "1"
         #endif
-        return WKUserScript(source: "window.__oreeUpscaleAuto = \(auto); window.__oreeUpscaleSharp = \(sharpness); window.__oreeUpscaleForce = \(force);\n" + core + "\n" + glue, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: world)
+        return WKUserScript(source: "window.__oreeUpscaleAuto = \(auto); window.__oreeUpscaleSharp = \(sharpness); window.__oreeUpscaleForce = \(force); window.__oreeUpscaleEngine = '\(engine)';\n" + core + "\n" + glue, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: world)
     }
 
     /// Le script ne touche à une vidéo que si elle est lue, assez grande, et plus petite que l'espace où elle s'affiche. Une vidéo d'une autre origine sans autorisation (CORS) ou protégée
@@ -96,6 +96,25 @@ enum VideoUpscaleScript {
       if (window.__oreeUpscale || !/^https?:$/.test(location.protocol)) return;
       const post = (o) => { try { window.webkit.messageHandlers.oreeUpscale.postMessage(JSON.stringify(o)); } catch (_) {} };
       const entries = new WeakMap();           // vidéo → { canvas, upscaler, running, note }
+      // Un lecteur dans une iframe : sa position dans la fenêtre de la PAGE se calcule de proche en proche. Chaque cadre dit à ses iframes où elles sont (décalage cumulé), au chargement,
+      // quand un enfant le demande, et quand la page défile ou change de taille.
+      let offset = { x: 0, y: 0 };
+      const isTop = window.top === window;
+      function pushOffsets() {
+        document.querySelectorAll('iframe').forEach(f => {
+          try { const r = f.getBoundingClientRect(); if (f.contentWindow) f.contentWindow.postMessage({ __oreeOffset: { x: offset.x + r.left + f.clientLeft, y: offset.y + r.top + f.clientTop } }, '*'); } catch (_) {}
+        });
+      }
+      window.addEventListener('message', (e) => {
+        const d = e.data; if (!d || typeof d !== 'object') return;
+        if (d.__oreeOffset && e.source === window.parent) { offset = d.__oreeOffset; pushOffsets(); }
+        else if (d.__oreeProbe) { pushOffsets(); }
+      });
+      let pushQueued = false;
+      const pushLater = () => { if (pushQueued) return; pushQueued = true; requestAnimationFrame(() => { pushQueued = false; pushOffsets(); }); };
+      window.addEventListener('scroll', pushLater, { passive: true, capture: true });
+      window.addEventListener('resize', pushLater, { passive: true });
+      if (!isTop) { try { window.parent.postMessage({ __oreeProbe: 1 }, '*'); } catch (_) {} } else { pushOffsets(); }
       let last = '';
       function geometry(v) {
         const r = v.getBoundingClientRect(), vw = v.videoWidth, vh = v.videoHeight;
@@ -113,12 +132,57 @@ enum VideoUpscaleScript {
         const g = geometry(v); const dpr = window.devicePixelRatio || 1;
         return g.boxW >= 320 && g.boxH >= 180 && v.videoWidth * 1.15 < g.w * dpr;
       }
+      /** La prochaine image : à la cadence de la vidéo (`requestVideoFrameCallback`). Une fenêtre d'essai invisible ne présente aucune image : en essai (FORCE), on boucle sur un minuteur. */
+      function next(v, fn) {
+        if (window.__oreeUpscaleForce) setTimeout(fn, 20);
+        else if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(fn);
+        else requestAnimationFrame(fn);
+      }
       function stop(v, note) {
+        if ((entries.get(v) || {}).native) return stopNative(v, note);
         const e = entries.get(v) || {};
         e.running = false; if (e.canvas && e.canvas.parentNode) e.canvas.parentNode.removeChild(e.canvas);
         e.canvas = null; e.note = note || ''; entries.set(v, e);
       }
+      // Moteur « apple » : chaque image de la vidéo est recopiée, encodée en JPEG et envoyée à Orée, qui l'agrandit avec l'upscaler d'Apple et l'affiche par-dessus la vidéo.
+      function startNative(v) {
+        let e = entries.get(v) || {};
+        if (e.running) return;
+        try {
+          const canvas = document.createElement('canvas'); canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+          const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false });
+          ctx.drawImage(v, 0, 0); ctx.getImageData(0, 0, 1, 1);         // une vidéo d'une autre origine sans CORS ou protégée : SecurityError ici, avant d'avoir rien envoyé
+          e = { native: true, running: true, note: '', canvas: null, sent: 0, busy: false, lastSend: 0, seq: 0 };
+          entries.set(v, e);
+          const encode = (blob) => new Promise((resolve) => { const r = new FileReader(); r.onloadend = () => resolve(String(r.result).split(',')[1] || ''); r.readAsDataURL(blob); });
+          const frame = () => {
+            const cur = entries.get(v); if (!cur || !cur.running) return;
+            if (!v.isConnected || v.ended || !v.videoWidth) { stopNative(v, 'terminée'); return; }
+            if (!v.paused && !(document.hidden && !window.__oreeUpscaleForce) && v.readyState >= 2 && !cur.busy && performance.now() - cur.lastSend > 14) {
+              cur.busy = true; cur.lastSend = performance.now();
+              if (canvas.width !== v.videoWidth || canvas.height !== v.videoHeight) { canvas.width = v.videoWidth; canvas.height = v.videoHeight; }
+              const g = geometry(v), mt = v.currentTime;
+              try { ctx.drawImage(v, 0, 0); } catch (err) { stopNative(v, 'illisible (' + (err && err.name || 'erreur') + ')'); report(); return; }
+              canvas.toBlob((blob) => {
+                if (!blob) { cur.busy = false; return; }
+                encode(blob).then((b64) => {
+                  if (cur.running && b64) { try { window.webkit.messageHandlers.oreeUpscale.postMessage({ kind: 'frame', x: g.x + offset.x, y: g.y + offset.y, w: g.w, h: g.h, vw: v.videoWidth, vh: v.videoHeight, seq: ++cur.seq, sent: performance.timeOrigin + performance.now(), mt, jpeg: b64 }); cur.sent++; } catch (_) {} }
+                  cur.busy = false;
+                });
+              }, 'image/jpeg', 0.95);
+            }
+            next(v, frame);
+          };
+          next(v, frame);
+        } catch (err) { stopNative(v, 'illisible (' + (err && err.name || 'erreur') + ')'); }
+        report();
+      }
+      function stopNative(v, note) {
+        const e = entries.get(v) || {}; e.running = false; e.note = note || ''; entries.set(v, e);
+        try { window.webkit.messageHandlers.oreeUpscale.postMessage({ kind: 'stop' }); } catch (_) {}
+      }
       function start(v) {
+        if (window.__oreeUpscaleEngine === 'apple' && v.videoWidth >= 96 && v.videoHeight >= 96 && v.videoWidth <= 1280 && v.videoHeight <= 1280) return startNative(v);
         let e = entries.get(v) || {};
         if (e.running) return;
         try {
@@ -146,9 +210,9 @@ enum VideoUpscaleScript {
                 if (total > 60 && lost / total > 0.12) { stop(v, 'trop lourde pour ce Mac'); report(); return; }
               }
             }
-            if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(frame); else requestAnimationFrame(frame);
+            next(v, frame);
           };
-          if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(frame); else requestAnimationFrame(frame);
+          next(v, frame);
         } catch (err) { stop(v, 'illisible (' + (err && err.name || 'erreur') + ')'); }
         report();
       }
@@ -184,6 +248,24 @@ enum VideoUpscaleScript {
           report(); return pick.running ? 'off' : 'on';
         },
         status() { last = ''; report(); return last; },
+        /** Essai : coût, côté page, de la copie + encodage JPEG + base64 d'une image (millisecondes par image, sur `n` images, sans minuteur). */
+        async measureEncode(n) {
+          const v = document.querySelector('video'); if (!v || !v.videoWidth) return 'pas de vidéo';
+          const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; const x = c.getContext('2d', { alpha: false });
+          const t0 = performance.now(); let bytes = 0;
+          for (let i = 0; i < n; i++) {
+            x.drawImage(v, 0, 0);
+            const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
+            const b64 = await new Promise(r => { const f = new FileReader(); f.onloadend = () => r(String(f.result).split(',')[1] || ''); f.readAsDataURL(blob); });
+            bytes += b64.length;
+          }
+          return JSON.stringify({ ms: (performance.now() - t0) / n, kb: Math.round(bytes / n / 1024), size: v.videoWidth + 'x' + v.videoHeight });
+        },
+        /** Orée n'a pas pu traiter ces images (taille non prise en charge, erreur) : on revient au filtre WebGL pour cette vidéo. */
+        nativeFailed(note) {
+          document.querySelectorAll('video').forEach(v => { const e = entries.get(v); if (e && e.native && e.running) { e.running = false; e.native = false; e.note = ''; entries.set(v, e); window.__oreeUpscaleEngine = 'webgl'; start(v); } });
+          report();
+        },
       };
       scan();
     })();
@@ -202,8 +284,16 @@ struct UpscaleStatus: Equatable {
 
 final class VideoUpscaleHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let json = message.body as? String else { return }
         let frame = message.frameInfo
+        // Une image du moteur « apple » (dictionnaire) : confiée à l'agrandisseur natif de l'onglet.
+        if let body = message.body as? [String: Any] {
+            MainActor.assumeIsolated {
+                guard let tab = Tab.tabsByWebView.object(forKey: message.webView), let web = message.webView else { return }
+                if body["kind"] as? String == "frame" { tab.enhancer(for: web).receive(body) } else if body["kind"] as? String == "stop" { tab.videoEnhancer?.stop() }
+            }
+            return
+        }
+        guard let json = message.body as? String else { return }
         MainActor.assumeIsolated {
             guard let tab = Tab.tabsByWebView.object(forKey: message.webView) else { return }
             if let status = UpscaleStatus(json: json) { tab.upscaleStatus = status; tab.upscaleFrame = frame }
