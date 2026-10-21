@@ -66,7 +66,7 @@ public enum WebKitTuning {
 
     /// Réglages privés de `WKPreferences` qui ne sont pas des « features » (propriétés Objective-C), posés par clé ; une clé inconnue est ignorée.
     /// Essais : HB_WK_PREFS="_dnsPrefetchingEnabled=1".
-    static var tunedProperties: [(String, Bool)] { SettingsStore.shared.webkitTuning ? [] : [] }
+    static let tunedProperties: [(String, Bool)] = []                 // rien de retenu : voir scripts/bench/webkit_pool_ab.py
 
     static func applyProperties(to preferences: WKPreferences) {
         for (key, value) in tunedProperties + overrides("HB_WK_PREFS") {
