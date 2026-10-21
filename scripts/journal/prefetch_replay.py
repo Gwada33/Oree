@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Banc de rejeu du préchargement des liens : une règle simple (« précharger si le pointeur reste ≥ T ms ») contre un petit modèle appris sur le journal.
 
-  python3 scripts/journal/prefetch_replay.py journal-oree-AAAA-MM-JJ.jsonl
+  python3 scripts/journal/prefetch_replay.py journal-oree-AAAA-MM-JJ.jsonl [--sites]
+  --sites : test sur des sites jamais vus et sans variable propre à la personne (mesure ce qui se généralise)
 
 Ce que l'on compare est ce qui compte en vrai : pour la MÊME couverture des clics (part des clics dont la page était déjà préchargée), combien de préchargements inutiles chaque méthode coûte.
 Le test se fait sur les derniers 30 % du temps, que le modèle n'a jamais vus. À T ms de survol on ne connaît PAS la durée finale du survol : le modèle n'utilise que ce qui existe à cet instant
@@ -36,12 +37,12 @@ def build(events):
                 vmean=sp.get("vmean", 0), pauses=sp.get("pauses", 0)))
     return rows
 
-def features(rows, site_rate, prior):
+def features(rows, site_rate, prior, generic=False):
     X = []
     for r in rows:
         onehot = [1.0 if r["kind"] == k else 0.0 for k in range(len(KINDS))]
         X.append(onehot + [r["external"], r["same"], r["gx"], r["gy"], np.log1p(r["y"]), np.log1p(r["links"]), np.log1p(r["tlen"]), r["article"], r["form"],
-                           np.log1p(r["vmean"]), np.log1p(r["pauses"]), site_rate.get(r["site"], prior), 1.0 if r["site"] in site_rate else 0.0])
+                           np.log1p(r["vmean"]), np.log1p(r["pauses"])] + ([] if generic else [site_rate.get(r["site"], prior), 1.0 if r["site"] in site_rate else 0.0]))
     return np.array(X, dtype=float)
 
 def fit_logistic(X, y, steps=400, lr=0.1, l2=1e-2):
@@ -65,19 +66,26 @@ def evaluate(rows, T, scores, total_clicks):
         used += 1; got += rows[i]["clicked"]
     return dict(T=T, rule_prefetch=len(cand), rule_hits=rule_hits, model_prefetch=used, coverage=rule_hits / max(total_clicks, 1))
 
-def main(path):
+def main(path, by_site=False):
     rows = build(load(path))
     rows.sort(key=lambda r: r["t"])
-    cut = int(len(rows) * 0.7)
-    train, test = rows[:cut], rows[cut:]
+    if by_site:
+        # Généralisation : on met de côté 30 % des SITES (jamais vus à l'apprentissage) et on retire toute variable propre à la personne (le taux de clic du site).
+        sites = sorted({r["site"] for r in rows}, key=lambda x: hash(x) % 9973)
+        held = set(sites[: max(1, int(len(sites) * 0.3))])
+        train, test = [r for r in rows if r["site"] not in held], [r for r in rows if r["site"] in held]
+        print(f"MODE GÉNÉRAL : {len(sites)} sites, {len(held)} gardés pour le test (jamais vus), sans taux de clic par site")
+    else:
+        cut = int(len(rows) * 0.7)
+        train, test = rows[:cut], rows[cut:]
     pos_train, pos_test = sum(r["clicked"] for r in train), sum(r["clicked"] for r in test)
     print(f"{len(rows)} survols : {len(train)} pour apprendre ({pos_train} cliqués), {len(test)} pour tester ({pos_test} cliqués, jamais vus par le modèle)")
     prior = pos_train / max(len(train), 1)
     seen = collections.defaultdict(lambda: [0, 0])
     for r in train: seen[r["site"]][0] += r["clicked"]; seen[r["site"]][1] += 1
     site_rate = {s: (c + prior * 5) / (n + 5) for s, (c, n) in seen.items()}          # taux de clic du site, lissé
-    Xtr, ytr = features(train, site_rate, prior), np.array([r["clicked"] for r in train], float)
-    Xte = features(test, site_rate, prior)
+    Xtr, ytr = features(train, site_rate, prior, by_site), np.array([r["clicked"] for r in train], float)
+    Xte = features(test, site_rate, prior, by_site)
     model = fit_logistic(Xtr, ytr)
     scores = model(Xte)
     # Qualité brute du classement (aire sous la courbe ROC) : 0,5 = hasard
@@ -104,4 +112,4 @@ def main(path):
     print("\nLecture : « économie » = préchargements en moins pour attraper autant de clics. Moins de 10 % ou un AUC proche de 0,5 : la règle simple suffit encore.")
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], by_site="--sites" in sys.argv)
