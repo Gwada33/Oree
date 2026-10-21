@@ -260,6 +260,18 @@ extension BrowserWindowController {
             return "types=\((board.types ?? []).map(\.rawValue).joined(separator: ",")) pdf=\(board.data(forType: .pdf)?.count ?? 0) files=\((board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? []).count)"
         case "overlayshot": return aiBarController?.devOverlayShot(to: "/tmp/oree-overlay.png") ?? "no panel"
         case "dimshot": return aiBarController?.devDimShot(to: "/tmp/oree-dim.png") ?? "no panel"
+        case "upscale":
+            let before = tab.upscaleStatus.map { "on=\($0.on) note=\($0.note) \($0.sourceW)x\($0.sourceH)→\($0.shownW)x\($0.shownH)" } ?? "aucune"
+            if ((try? String(contentsOfFile: "/tmp/oree-upscale.txt", encoding: .utf8)) ?? "").hasPrefix("toggle") { tab.toggleUpscale() }
+            return before
+        case "upscaleworld":
+            Task { @MainActor in
+                let present = await tab.webView?.safeEvaluate("typeof window.__oreeUpscale", world: VideoUpscaleScript.world)
+                let status = await tab.webView?.safeEvaluate("window.__oreeUpscale ? window.__oreeUpscale.status() : 'absent'", world: VideoUpscaleScript.world)
+                let auto = await tab.webView?.safeEvaluate("String(window.__oreeUpscaleAuto)", world: VideoUpscaleScript.world)
+                try? "script=\(String(describing: present)) status=\(String(describing: status)) auto=\(String(describing: auto))".write(toFile: "/tmp/oree-upscale-world.txt", atomically: true, encoding: .utf8)
+            }
+            return "started"
         case "memoire":
             let query = ((try? String(contentsOfFile: "/tmp/oree-memory-query.txt", encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let hits = (try? pageMemory.search(words: PageMemoryPolicy.keywords(from: query))) ?? []

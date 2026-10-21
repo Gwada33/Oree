@@ -132,6 +132,14 @@ final class OreeWebView: WKWebView {
             menu.addItem(.separator())
             add("Copier l'adresse de la page") { Self.copy(page) }
         }
+        if let status = tab?.upscaleStatus, let tab {
+            menu.addItem(.separator())
+            if !status.note.isEmpty && !status.on {
+                add("Amélioration de la vidéo : \(status.note)", enabled: false) {}
+            } else {
+                add(status.on ? "Revenir à la vidéo d'origine" : "Améliorer cette vidéo (\(status.sourceW)×\(status.sourceH) → \(status.shownW)×\(status.shownH))") { tab.toggleUpscale() }
+            }
+        }
         menu.addItem(.separator())
         add("Copier tous les médias de la page") { [weak self] in self?.copyAllMedia() }
         add("Copier les adresses des médias") { [weak self] in self?.copyMediaAddresses() }

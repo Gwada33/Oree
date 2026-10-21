@@ -1,0 +1,21 @@
+<!doctype html><meta charset=utf-8><title>upscale</title><body>
+<script src="core.js"></script>
+<script>
+// Rend chaque mode pour une image source et envoie les PNG au petit serveur du banc.
+async function run(name, srcUrl, outW, outH) {
+  const img = new Image(); img.src = srcUrl; await img.decode();
+  const canvas = document.createElement('canvas'); const up = new OreeUpscaler(canvas);
+  const result = {};
+  for (const [mode, sharp] of [['bilinear'], ['bicubic'], ['cas', 0.3], ['cas', 0.6], ['cas', 0.9]]) {
+    const key = mode === 'cas' ? 'cas' + sharp : mode;
+    const t0 = performance.now();
+    for (let i = 0; i < 20; i++) up.render(img, img.naturalWidth, img.naturalHeight, outW, outH, mode, sharp);
+    const px = new Uint8Array(4); const gl = canvas.getContext('webgl'); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);   // force la fin du travail du GPU
+    result[key] = (performance.now() - t0) / 20;
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    await fetch(`/save?name=${name}_${key}.png`, { method: 'POST', body: blob });
+  }
+  return result;
+}
+window.runAll = async (jobs) => { const out = {}; for (const j of jobs) out[j.name] = await run(j.name, j.src, j.w, j.h); await fetch('/done', { method: 'POST', body: JSON.stringify(out) }); };
+</script>

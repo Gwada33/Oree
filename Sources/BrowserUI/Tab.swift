@@ -87,6 +87,14 @@ final class Tab: NSObject {
     /// but is only torn down when the system really needs the memory.
     var isDirty = false
     private var usedPrivateFreeze = false
+    /// L'agrandissement des vidéos : la meilleure vidéo vue par le script (dans quel cadre, et où elle en est).
+    var upscaleStatus: UpscaleStatus?
+    var upscaleFrame: WKFrameInfo?
+    func toggleUpscale() {
+        guard let webView, let frame = upscaleFrame else { return }
+        Task { @MainActor in _ = await webView.safeEvaluate("window.__oreeUpscale ? window.__oreeUpscale.toggle() : 'absent'", frame: frame, world: VideoUpscaleScript.world) }
+    }
+
     /// The ghost shown while this tab wakes (flag `oree.hibernation.ghost`), and a link clicked in it meanwhile.
     private(set) var ghostView: GhostView?
     private var pendingGhostURL: URL?
@@ -336,6 +344,7 @@ final class Tab: NSObject {
         controller.add(MediaMessageHandler(), contentWorld: MediaScript.world, name: MediaScript.handlerName)
         controller.add(JournalMessageHandler(), contentWorld: JournalScript.world, name: JournalScript.handlerName)
         controller.add(LucioleSelectionHandler(), contentWorld: LucioleSelectionScript.world, name: LucioleSelectionScript.handlerName)
+        controller.add(VideoUpscaleHandler(), contentWorld: VideoUpscaleScript.world, name: VideoUpscaleScript.handlerName)
         // Ghost hibernation: the page-side capture needs hooks installed before the page's own scripts run, so it is only
         // added to tabs created while the flag is on.
         if SettingsStore.shared.hibernationGhost {

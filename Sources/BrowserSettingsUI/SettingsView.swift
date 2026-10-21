@@ -82,6 +82,8 @@ final class SettingsViewModel: ObservableObject {
     @Published var ambientMemory = true { didSet { settings.ambientMemory = ambientMemory } }
     @Published var ambientMemoryDays = 30 { didSet { settings.ambientMemoryDays = ambientMemoryDays } }
     @Published var memoryStatus = ""
+    @Published var videoUpscale = false { didSet { settings.videoUpscale = videoUpscale } }
+    @Published var videoUpscaleSharpness = 0.4 { didSet { settings.videoUpscaleSharpness = videoUpscaleSharpness } }
     func refreshMemoryStatus() { let n = (try? PageMemoryRepository().count()) ?? 0; memoryStatus = n == 0 ? "Rien n'est gardé pour l'instant." : "\(n) page\(n > 1 ? "s" : "") gardée\(n > 1 ? "s" : "") sur ce Mac." }
     func forgetMemory() {
         let alert = NSAlert()
@@ -224,6 +226,7 @@ final class SettingsViewModel: ObservableObject {
         eventJournal = current.eventJournalEnabled
         eventJournalDays = current.eventJournalDays
         ambientMemory = current.ambientMemory; ambientMemoryDays = current.ambientMemoryDays
+        videoUpscale = current.videoUpscale; videoUpscaleSharpness = current.videoUpscaleSharpness
         energyMode = current.energyMode
         sendGPC = current.sendGlobalPrivacyControl
         minimumFontSize = current.minimumFontSize
@@ -783,6 +786,12 @@ public struct SettingsView: View {
             Section("Spotlight") {
                 Toggle("Retrouver mes favoris et mon historique récent dans la recherche Spotlight", isOn: $model.spotlight)
                 Text("Seuls le titre et le site (pas le contenu des pages) sont donnés à Spotlight : 300 pages récentes et tous les favoris. Rien en navigation privée. Effacer l'historique les retire aussi, et couper ce réglage vide l'index.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Qualité des vidéos") {
+                Toggle("Agrandir d'office les vidéos de basse résolution (expérimental)", isOn: $model.videoUpscale)
+                Picker("Netteté ajoutée", selection: $model.videoUpscaleSharpness) { Text("Douce").tag(0.3); Text("Normale").tag(0.4); Text("Forte").tag(0.6) }.disabled(!model.videoUpscale)
+                Text("Orée agrandit l'image avec un filtre bicubique puis accentue les contours (WebGL, dans la page). Ce n'est pas de l'IA : les contours sont plus nets, mais aucun détail absent de la source n'est inventé, et sur un flux très compressé la netteté accentue aussi ses défauts. Cela ne marche pas sur les vidéos protégées ni sur celles qu'un autre site sert sans autorisation, et peut coûter des images sur un Mac chargé : Orée l'arrête alors toute seule. Désactivé, le choix se fait vidéo par vidéo (clic droit › Améliorer cette vidéo). S'applique aux pages chargées ensuite.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Mémoire d'Orée") {

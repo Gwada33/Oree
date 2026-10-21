@@ -661,6 +661,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     func userScripts(for url: URL?, isPrivate: Bool = false) -> [WKUserScript] {
         var scripts: [WKUserScript] = [CredentialScript.makeUserScript(), AutofillScript.makeUserScript(), MediaScript.makeUserScript()]
         if SettingsStore.shared.lucioleInPage, !isPrivate { scripts.append(LucioleSelectionScript.makeUserScript(auto: SettingsStore.shared.lucioleSelectionFan)) }      // le script de lecture de Luciole : seulement « dans la page »
+        scripts.append(VideoUpscaleScript.makeUserScript(auto: SettingsStore.shared.videoUpscale, sharpness: SettingsStore.shared.videoUpscaleSharpness))
         if SettingsStore.shared.eventJournalEnabled, !isPrivate { scripts.append(JournalScript.makeUserScript()) }
         if SettingsStore.shared.autoRejectCookieBanners, !ProtectionPolicy.isExempt(host: url?.host, list: SettingsStore.shared.protectionExemptHosts) { scripts.append(CookieBannerScript.makeUserScript()) }      // le journal : jamais dans un onglet privé
         if SettingsStore.shared.sendGlobalPrivacyControl { scripts.append(PrivacyTools.gpcUserScript()) }

@@ -118,6 +118,7 @@
 | **Valider en voyant** | Avant tout envoi, paiement ou connexion, la page s'assombrit autour du bouton et une carte montre en clair ce qui va partir. Rien ne part sans votre clic, Entrée ne valide jamais. | ✅ | ⭐⭐ |
 | **Le chemin de l'agent** | Chaque action de Luciole laisse une étape numérotée sur la page ; une pastille « Arrêter » reste en haut. | ✅ (tâche de 2 étapes) | ⭐⭐ |
 | **Mémoire d'Orée** | Luciole retrouve la page que vous avez lue hier (« l'article sur WebKit »). Jamais en navigation privée, ni connexion, paiement ou mot de passe ; sur ce Mac seulement ; effaçable en un clic. | ✅ (page de test ; recherche par mots, pas par sens) | ⭐⭐ |
+| **Agrandissement des vidéos** | Clic droit › « Améliorer cette vidéo » : image agrandie en bicubique avec netteté adaptative (WebGL), s'arrête seule si le Mac ne suit pas. Ce n'est pas de l'IA. | 🔶 (mesuré sur des images : +2,8 dB sur source propre, fidélité inchangée sur flux compressé ; pas testé sur un vrai direct) | ⭐ |
 | **Réponses mises en page** | Tableaux, listes, titres, code ; « Ouvrir en page » pour lire en grand. | ✅ | ⭐ |
 
 ---

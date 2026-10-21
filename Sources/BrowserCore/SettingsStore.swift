@@ -412,6 +412,18 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.ambientMemoryDays") }
     }
 
+    /// Agrandir d'office les vidéos plus petites que leur affichage (bicubique + netteté, WebGL, dans la page). Éteint par défaut : expérimental, et coûteux pour un Mac de 8 Go en mode économie d'énergie.
+    /// Éteint, le choix se fait vidéo par vidéo (clic droit › Améliorer cette vidéo).
+    public var videoUpscale: Bool {
+        get { ProcessInfo.processInfo.environment["HB_VIDEO_UPSCALE"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.videoUpscale") as? Bool ?? false) }
+        set { defaults.set(newValue, forKey: "settings.videoUpscale") }
+    }
+    /// La netteté ajoutée (0 à 1) : 0,3 douce, 0,4 normale (défaut), 0,6 forte. Au-delà, elle accentue les défauts de compression (mesuré).
+    public var videoUpscaleSharpness: Double {
+        get { min(max(defaults.object(forKey: "settings.videoUpscaleSharpness") as? Double ?? 0.4, 0), 1) }
+        set { defaults.set(newValue, forKey: "settings.videoUpscaleSharpness") }
+    }
+
     public var mouseGestures: Bool {
         get { ProcessInfo.processInfo.environment["HB_GESTURES"].map { $0 == "1" } ?? (defaults.object(forKey: "settings.mouseGestures") as? Bool ?? false) }
         set { defaults.set(newValue, forKey: "settings.mouseGestures") }
