@@ -50,3 +50,22 @@ Coût : 8 à 35 ms par image 1080p selon la charge de la machine (mesure bruité
 OREE_TEST_APP=… python3 scripts/bench/upscale_check.py        # qualité sur des images de référence
 OREE_TEST_APP=… python3 scripts/bench/video_upscale_check.py  # repérage, bascule, mode auto, vidéo d'une autre origine (7 vérifications)
 ```
+
+
+## L'upscaler d'Apple (VideoToolbox) : mesures du 22 octobre 2026
+
+`VTLowLatencySuperResolutionScaler` (macOS 26+) est un agrandisseur par apprentissage, conçu pour le temps réel. Mesuré avec `scripts/bench/vtsr.swift` sur les mêmes images (×2, 960×540 → 1920×1080) :
+
+| Source compressée | PSNR | SSIM | Netteté |
+|---|---|---|---|
+| Bicubique + netteté 0,3 (Orée) | 34,10 | 0,879 | 0,51 |
+| **Apple IA** | 32,73 | 0,880 | **0,84** |
+
+| Source propre | PSNR | SSIM | Netteté |
+|---|---|---|---|
+| Bicubique + netteté 0,3 (Orée) | 43,92 | 0,987 | 0,72 |
+| **Apple IA** | 35,94 | 0,950 | 1,28 |
+
+- **Vitesse : 2,7 ms par image** (≈ 370 images/s) pour 960×540 → 1920×1080 sur ce M1, bien sous les 16,6 ms du 60 images/s. Taille maximale de la source : 1280×1280.
+- **Qualité :** visiblement plus net (texte et icônes bien plus lisibles que le bicubique + CAS, voir `~/Downloads/comparaison-agrandissement.png`), mais l'image s'éloigne de l'original (PSNR plus bas, netteté > 1 = contours plus marqués que l'original) : le modèle **invente** des contours plausibles. Sur un flux compressé, la fidélité structurelle (SSIM) reste égale à celle du navigateur alors que la netteté ×3,6.
+- Ce que l'API ne fait pas : elle travaille sur des images natives (CVPixelBuffer), pas sur une vidéo dans une page. Voir la section « Intégration » de la discussion : il faut sortir les images de la page, les traiter et les réafficher.

@@ -81,9 +81,19 @@ def main():
         proc.terminate(); time.sleep(1)
         if proc.poll() is None: proc.kill()
     if not done: print("Le navigateur n'a rien rendu en 240 s."); raise SystemExit(1)
+    # 4 bis. L'upscaler d'Apple (VideoToolbox, apprentissage), si l'outil `vtsr` est fourni (OREE_VTSR=/chemin/vtsr) : même images, même mesures.
+    vt_ms = {}
+    vtsr = os.environ.get("OREE_VTSR")
+    if vtsr:
+        for job in jobs:
+            r = subprocess.run([vtsr, os.path.join(work, job["src"]), os.path.join(work, f"{job['name']}_vt.png"), "2", "60"], capture_output=True, text=True)
+            m = re.search(r": ([\d.]+) ms/image", r.stdout)
+            vt_ms[job["name"]] = float(m.group(1)) if m else float("nan")
+            if not m: print(r.stdout[-300:], r.stderr[-300:])
+        for name, ms in vt_ms.items(): done.setdefault(name, {})["vt"] = ms
     # 5. Mesures.
-    modes = ["bilinear", "bicubic", "cas0.3", "cas0.6", "cas0.9"]
-    labels = {"bilinear": "navigateur (bilinéaire)", "bicubic": "bicubique", "cas0.3": "bicubique + netteté 0,3", "cas0.6": "bicubique + netteté 0,6", "cas0.9": "bicubique + netteté 0,9"}
+    modes = ["bilinear", "bicubic", "cas0.3", "cas0.6", "cas0.9"] + (["vt"] if vtsr else [])
+    labels = {"bilinear": "navigateur (bilinéaire)", "bicubic": "bicubique", "cas0.3": "bicubique + netteté 0,3", "cas0.6": "bicubique + netteté 0,6", "cas0.9": "bicubique + netteté 0,9", "vt": "Apple VideoToolbox (IA)"}
     for kind, title in (("clean", "source propre (réduite à la moitié)"), ("comp", "source compressée (x264 CRF 28, comme un flux)")):
         print(f"\n{title}\n  {'méthode':<28} {'PSNR dB':>8} {'SSIM':>7} {'netteté':>8} {'ms/image':>9}")
         for mode in modes:
