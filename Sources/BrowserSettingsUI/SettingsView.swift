@@ -174,6 +174,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var backgroundCleanup: Bool { didSet { settings.backgroundCleanup = backgroundCleanup } }
     @Published var autoUpdateCheck: Bool { didSet { settings.autoUpdateCheck = autoUpdateCheck } }
     @Published var memoryBudgetMB: Int { didSet { settings.memoryBudgetMB = memoryBudgetMB } }
+    @Published var webkitTuning: Bool { didSet { settings.webkitTuning = webkitTuning } }
     @Published var instantBack: Bool { didSet { settings.instantBack = instantBack } }
     @Published var startPageShowsRecent: Bool { didSet { settings.startPageShowsRecent = startPageShowsRecent } }
     @Published var webInspectorEnabled: Bool { didSet { settings.webInspectorEnabled = webInspectorEnabled } }
@@ -211,6 +212,7 @@ final class SettingsViewModel: ObservableObject {
         webInspectorEnabled = current.webInspectorEnabled
         startPageShowsRecent = current.startPageShowsRecent
         instantBack = current.instantBack
+        webkitTuning = current.webkitTuning
         memoryBudgetMB = current.memoryBudgetMB
         backgroundCleanup = current.backgroundCleanup
         autoUpdateCheck = current.autoUpdateCheck
@@ -758,6 +760,9 @@ public struct SettingsView: View {
                 Text("Libère de la mémoire sur certains sites lourds ; peut provoquer de brèves saccades. Le budget mémoire utilise ce nettoyage de toute façon avant de mettre un onglet en veille.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle("Réglages de vitesse et de confort de WebKit (préchargement, animations hors du fil principal, API récentes)", isOn: $model.webkitTuning)
+                Text("Active des réglages internes de WebKit que Safari laisse coupés : préchargement des pages et médias, animations et filtres accélérés, rafraîchissement à la fréquence de l'écran, onglets cachés ralentis davantage, quelques API et fonctions CSS récentes. S'applique aux onglets ouverts ensuite ; coupez-le si un site se comporte mal.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Retour instantané (garde les pages précédentes en mémoire)", isOn: $model.instantBack)
                 Text("Utilise nettement plus de mémoire quand vous naviguez beaucoup. Pris en compte au prochain lancement.")
                     .font(.caption)

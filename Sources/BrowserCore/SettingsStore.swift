@@ -424,6 +424,12 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "settings.videoUpscaleEngine") }
     }
     /// La netteté ajoutée (0 à 1) : 0,3 douce, 0,4 normale (défaut), 0,6 forte. Au-delà, elle accentue les défauts de compression (mesuré).
+    /// Réglages internes de WebKit choisis pour Orée (préchargement, animations hors du fil principal, API récentes). Lu à la création de chaque onglet ; coupé par HB_WK_TUNING=0.
+    public var webkitTuning: Bool {
+        get { ProcessInfo.processInfo.environment["HB_WK_TUNING"] == "0" ? false : (defaults.object(forKey: "settings.webkitTuning") as? Bool ?? true) }
+        set { defaults.set(newValue, forKey: "settings.webkitTuning") }
+    }
+
     public var videoUpscaleSharpness: Double {
         get { min(max(defaults.object(forKey: "settings.videoUpscaleSharpness") as? Double ?? 0.4, 0), 1) }
         set { defaults.set(newValue, forKey: "settings.videoUpscaleSharpness") }

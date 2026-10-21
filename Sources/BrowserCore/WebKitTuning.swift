@@ -23,7 +23,23 @@ public enum WebKitTuning {
 
     /// Flags we deliberately turn on/off for every web view (key, value).
     /// Chosen only after measuring; see scripts/bench.
-    static let defaultFeatures: [(String, Bool)] = []
+    static var defaultFeatures: [(String, Bool)] { SettingsStore.shared.webkitTuning ? tunedFeatures : [] }
+
+    /// Réglages retenus (clés WebKit de macOS 26/27 ; une clé inconnue est ignorée, voir `applyFeatures`). Rien qui touche à la sécurité ni à la vie privée.
+    static let tunedFeatures: [(String, Bool)] = [
+        // Vitesse : préchargement des pages et des médias, animations et filtres hors du fil principal.
+        ("LinkPrefetchEnabled", true), ("SpeculationRulesPrefetchEnabled", true), ("MediaPreloadingEnabled", true),
+        ("AcceleratedCompositingForFixedPositionEnabled", true), ("AcceleratedFiltersEnabled", true), ("ThreadedTimeBasedAnimationsEnabled", true),
+        ("PreferPageRenderingUpdatesNear60FPSEnabled", false),            // suit la fréquence de l'écran (120 Hz sur ProMotion) au lieu de 60
+        // Économie : un onglet caché est ralenti de plus en plus.
+        ("HiddenPageDOMTimerThrottlingAutoIncreases", true),
+        // Confort : API et CSS que Safari n'active pas encore, correctifs de sites cassés, recherche dans les sous-titres.
+        ("RequestIdleCallbackEnabled", true), ("DynamicSiteInterventionsEnabled", true), ("FindInVideoEnabled", true), ("TextTracksInMSEEnabled", true),
+        ("ImageAnalysisDuringFindInPageEnabled", true), ("InputTypeMonthEnabled", true), ("InputTypeWeekEnabled", true), ("SelectShowPickerEnabled", true),
+        ("CloseWatcherEnabled", true), ("LoginStatusAPIEnabled", true),
+        ("CSSLineClampEnabled", true), ("CSSOverflowClipMarginEnabled", true), ("CSSTextJustifyEnabled", true), ("CSSTextSpacingTrimEnabled", true),
+        ("CSSFontVariantEmojiEnabled", true), ("CSSAppearanceBaseEnabled", true), ("CSSScrollStateContainerQueriesEnabled", true),
+    ]
 
     /// Sets internal WebKit feature flags on a preferences object. Returns the keys that were applied.
     @discardableResult
