@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A/B des réglages privés de WebKit (pool de processus, préférences) sur de vrais sites : temps de chargement (1re visite, puis revisite) et mémoire en fin de parcours.
+"""A/B des réglages privés de WebKit (pool de processus, préférences) sur de vrais sites : temps de chargement (1re visite, puis revisite ; mesuré au premier affichage de contenu) et mémoire en fin de parcours.
 
   OREE_TEST_APP=/chemin/OreeTest.app python3 scripts/bench/webkit_pool_ab.py [runs] [config ...]
 Les configs sont posées par HB_WK_POOL / HB_WK_PREFS / HB_WK_FEATURES, en plus des réglages par défaut d'Orée. Le réseau fait varier les temps : comparer des médianes de plusieurs passages.
@@ -12,6 +12,8 @@ UI = os.path.join(ROOT, "scripts", "ui.sh"); APP = os.environ["OREE_TEST_APP"]
 SITES = ["https://en.wikipedia.org/wiki/WebKit", "https://news.ycombinator.com", "https://github.com/apple/swift", "https://developer.mozilla.org/en-US/", "https://www.bbc.com/news", "https://stackoverflow.com/questions"]
 CONFIGS = {
     "base": {},
+    "rendu-0.3s": {"HB_WK_CONFIG": "_incrementalRenderingSuppressionTimeout=0.3"},
+    "rendu-0s": {"HB_WK_CONFIG": "_incrementalRenderingSuppressionTimeout=0"},
     "dns": {"HB_WK_PREFS": "_dnsPrefetchingEnabled=1"},
     "cache-processus": {"HB_WK_POOL": "usesWebProcessCache=1"},
     "garde-echanges": {"HB_WK_POOL": "alwaysKeepAndReuseSwappedProcesses=1"},
@@ -32,7 +34,7 @@ def one(env):
             ui("load", u); end = time.time() + 25
             while time.time() < end:
                 time.sleep(0.5)
-                r = ui("eval", "document.readyState==='complete' ? Math.round(performance.getEntriesByType('navigation')[0].loadEventEnd) : -1")
+                r = ui("eval", "document.readyState==='complete' ? Math.round((performance.getEntriesByName('first-contentful-paint')[0]||{startTime:performance.getEntriesByType('navigation')[0].loadEventEnd}).startTime) : -1")
                 if r.lstrip("-").isdigit() and int(r) > 0: return int(r)
             return 25000
         first = [visit(u) for u in SITES]

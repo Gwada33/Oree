@@ -19,6 +19,7 @@ extension BrowserWindowController {
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
         config.applicationNameForUserAgent = UserAgent.applicationName   // announce as Safari: sites serve their current pages
         WebKitTuning.applyFeatures(to: config.preferences)
+        WebKitTuning.applyConfiguration(to: config)
         // Off by default in WKWebView: without it, the fullscreen button on
         // videos (YouTube, etc.) and the Fullscreen API do nothing.
         config.preferences.isElementFullscreenEnabled = true

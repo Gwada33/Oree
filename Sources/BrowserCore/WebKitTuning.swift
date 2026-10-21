@@ -79,6 +79,15 @@ public enum WebKitTuning {
         }
     }
 
+    /// Réglages numériques privés de `WKWebViewConfiguration`, posés par clé (essais : HB_WK_CONFIG="_incrementalRenderingSuppressionTimeout=0.3").
+    public static func applyConfiguration(to configuration: WKWebViewConfiguration) {
+        for pair in (ProcessInfo.processInfo.environment["HB_WK_CONFIG"] ?? "").split(separator: ",") {
+            let parts = pair.split(separator: "=")
+            guard parts.count == 2, let value = Double(parts[1]), configuration.responds(to: NSSelectorFromString("set\(parts[0].prefix(1).uppercased())\(parts[0].dropFirst()):")) else { continue }
+            configuration.setValue(value, forKey: String(parts[0]))
+        }
+    }
+
     /// Process-pool switches, set by key on the private `_WKProcessPoolConfiguration`.
     static func applyPoolSettings(to configuration: NSObject) {
         for (key, value) in defaultPoolSettings + overrides("HB_WK_POOL") {
