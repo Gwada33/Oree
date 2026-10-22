@@ -545,6 +545,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     guard let request = try? String(contentsOfFile: "/tmp/oree-boost-request.txt", encoding: .utf8) else { return "no request file" }
                     self.createBoost(request: request.trimmingCharacters(in: .whitespacesAndNewlines), for: tab)
                     return "started (model available: \(LocalModel.isAvailable))"
+                case "widgetmodel":
+                    // Dev : le flux complet avec le modèle local, la demande lue dans /tmp/oree-widget-request.txt, aperçu accepté d'office.
+                    guard let request = try? String(contentsOfFile: "/tmp/oree-widget-request.txt", encoding: .utf8) else { return "no request file" }
+                    Self.widgetAutoAccept = true
+                    self.createWidget(request: request.trimmingCharacters(in: .whitespacesAndNewlines), for: tab)
+                    return "started (model available: \(LocalModel.isAvailable))"
+                case "widgetreport":
+                    return (SettingsStore.shared.pageWidgets ?? WidgetPolicy.builtIn).map { "\($0.title)@\($0.host) \($0.source)" }.joined(separator: "; ")
                 case "boostreport":
                     let boosts = (try? self.boostRepo.all()) ?? []
                     return boosts.map { "\($0.host) rules=\($0.rules.count) calm=\($0.calm)" }.joined(separator: "; ") + " calmAll=\(SettingsStore.shared.calmModeEverywhere)"

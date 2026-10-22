@@ -233,6 +233,7 @@ extension BrowserWindowController {
             if TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {
                 actions.append(("Ajouter au Calendrier", "calendar.badge.plus", { $0.addToCalendarAction() }))
                 actions.append(("Personnaliser ce site…", "wand.and.stars", { $0.customizeSiteAction() }))
+                if activeTab?.isPrivate == false { actions.append(("Créer un widget pour cette page…", "square.grid.2x2", { $0.createWidgetAction() })) }
                 let boost = try? boostRepo.boost(for: activeTab?.webView?.url?.host)
                 if boost?.rules.isEmpty == false { actions.append(("Retirer les changements de ce site", "arrow.uturn.backward.circle", { $0.removeBoostAction() })) }
                 actions.append((boost?.calm == true ? "Mode calme : le quitter sur ce site" : "Mode calme sur ce site", "leaf", { $0.toggleCalmForSiteAction() }))
