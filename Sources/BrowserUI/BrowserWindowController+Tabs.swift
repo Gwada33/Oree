@@ -81,6 +81,7 @@ extension BrowserWindowController {
             tab.tabButton.setTitle(tab.displayTitle, host: tab.badgeHost)
             if self?.effectiveSidebarMode == .compact { self?.updateTabCount() }
             self?.extensionManager.tabChanged(tab, .title)
+            self?.refreshWidgets()
         }
         tab.ghostRuleLists = { [weak self, weak tab] in self?.ruleLists(for: tab?.currentURL) ?? [] }
         tab.onURLChange = { [weak self, weak tab] in
@@ -426,6 +427,7 @@ extension BrowserWindowController {
             tabStrip.tabsChanged()
         }
         updateTabCount()
+        refreshWidgets()
     }
 
     /// The ▾ button of a full tab strip: every tab of this space, the one in front ticked; a pick brings it to the front.

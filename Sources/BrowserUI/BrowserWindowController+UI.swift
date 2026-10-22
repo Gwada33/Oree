@@ -160,6 +160,7 @@ extension BrowserWindowController {
         downloads.resumeWebView = { [weak self] in self?.activeTab?.webView }
         downloads.start()
         assistantButton.onClick = { [weak self] in self?.askAIAction() }
+        widgetTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refreshWidgets() } }   // les valeurs lues dans la page (pas dans le titre) n'ont pas d'événement : on les relit
         if SettingsStore.shared.lucioleInPage { assistantButton.setCustomContent(assistantMascot); assistantMascot.apply(.sleep) }
         applyChromeLayout()
         return bar
@@ -423,7 +424,7 @@ extension BrowserWindowController {
         footerTail = [spacer, sleepMetaLabel]
         applyChromeLayout()
 
-        [topStack, searchRow, newTabRow, scroll, sidePanel, nowPlaying, panelBar].forEach(column.addSubview)
+        [topStack, searchRow, newTabRow, scroll, sidePanel, widgetStrip, nowPlaying, panelBar].forEach(column.addSubview)
         let rowsInset: CGFloat = 8
         NSLayoutConstraint.activate([
             topStack.topAnchor.constraint(equalTo: column.topAnchor, constant: 8),
@@ -440,7 +441,10 @@ extension BrowserWindowController {
             scroll.topAnchor.constraint(equalTo: newTabRow.bottomAnchor, constant: 10),
             scroll.leadingAnchor.constraint(equalTo: column.leadingAnchor, constant: rowsInset),
             scroll.trailingAnchor.constraint(equalTo: column.trailingAnchor, constant: -rowsInset),
-            scroll.bottomAnchor.constraint(equalTo: nowPlaying.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: widgetStrip.topAnchor),
+            widgetStrip.leadingAnchor.constraint(equalTo: column.leadingAnchor, constant: rowsInset),
+            widgetStrip.trailingAnchor.constraint(equalTo: column.trailingAnchor, constant: -rowsInset),
+            widgetStrip.bottomAnchor.constraint(equalTo: nowPlaying.topAnchor),
             nowPlaying.leadingAnchor.constraint(equalTo: column.leadingAnchor, constant: rowsInset),
             nowPlaying.trailingAnchor.constraint(equalTo: column.trailingAnchor, constant: -rowsInset),
             nowPlaying.bottomAnchor.constraint(equalTo: panelBar.topAnchor, constant: -6),

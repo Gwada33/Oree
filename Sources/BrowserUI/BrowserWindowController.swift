@@ -112,6 +112,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     let loadingBar = LoadingBarView()
     let noticePill = NoticePill()
     let nowPlaying = NowPlayingView()
+    let widgetStrip = WidgetStripView()
+    var widgetTimer: Timer?
     let audioRoute = AudioRoute()
     var mediaTabID: UUID?                      // the tab the card is about
     var siteInfoPopover: NSPopover?

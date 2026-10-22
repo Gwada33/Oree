@@ -174,6 +174,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var backgroundCleanup: Bool { didSet { settings.backgroundCleanup = backgroundCleanup } }
     @Published var autoUpdateCheck: Bool { didSet { settings.autoUpdateCheck = autoUpdateCheck } }
     @Published var memoryBudgetMB: Int { didSet { settings.memoryBudgetMB = memoryBudgetMB } }
+    @Published var widgetsEnabled: Bool { didSet { settings.widgetsEnabled = widgetsEnabled } }
     @Published var webkitTuning: Bool { didSet { settings.webkitTuning = webkitTuning } }
     @Published var instantBack: Bool { didSet { settings.instantBack = instantBack } }
     @Published var startPageShowsRecent: Bool { didSet { settings.startPageShowsRecent = startPageShowsRecent } }
@@ -213,6 +214,7 @@ final class SettingsViewModel: ObservableObject {
         startPageShowsRecent = current.startPageShowsRecent
         instantBack = current.instantBack
         webkitTuning = current.webkitTuning
+        widgetsEnabled = current.widgetsEnabled
         memoryBudgetMB = current.memoryBudgetMB
         backgroundCleanup = current.backgroundCleanup
         autoUpdateCheck = current.autoUpdateCheck
@@ -787,6 +789,11 @@ public struct SettingsView: View {
             Section("Gestes de souris") {
                 Toggle("Gestes avec le bouton droit (maintenir, tracer, relâcher)", isOn: $model.mouseGestures)
                 Text("← page précédente · → page suivante · ↓ nouvel onglet · ↓→ fermer l'onglet · ↑↓ recharger · ↑ haut de la page · ↓↑ bas de la page · ↑← onglet précédent · ↑→ onglet suivant · ↓← rouvrir l'onglet fermé. Un clic droit sans tracer ouvre le menu comme d'habitude. Désactivé par défaut.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Widgets de la barre latérale") {
+                Toggle("Montrer des pastilles lues sur vos pages ouvertes (messages non lus Gmail…)", isOn: $model.widgetsEnabled)
+                Text("Une pastille apparaît au pied de la barre latérale quand un onglet du site est ouvert et éveillé : par exemple le nombre de messages non lus de Gmail, lu dans le titre de l'onglet. Orée ne charge jamais une page en cachette, ne lit pas les onglets privés et ne fait que lire : aucune donnée ne quitte votre Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Spotlight") {

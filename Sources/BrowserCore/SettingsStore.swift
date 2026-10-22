@@ -610,6 +610,17 @@ public final class SettingsStore: @unchecked Sendable {
         set { defaults.set(min(max(newValue, -1), 1), forKey: Key.uiTextOffset) }
     }
 
+    /// Pastilles de la barre latérale (messages non lus…), lues sur les onglets ouverts.
+    public var widgetsEnabled: Bool {
+        get { defaults.object(forKey: "settings.widgetsEnabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "settings.widgetsEnabled") }
+    }
+    /// Les widgets choisis ; nil tant que l'utilisateur n'a rien changé (on montre alors ceux fournis avec Orée).
+    public var pageWidgets: [PageWidget]? {
+        get { (ProcessInfo.processInfo.environment["HB_PAGE_WIDGETS"].flatMap { $0.data(using: .utf8) } ?? defaults.data(forKey: "settings.pageWidgets")).flatMap { try? JSONDecoder().decode([PageWidget].self, from: $0) } }
+        set { defaults.set(newValue.flatMap { try? JSONEncoder().encode($0) }, forKey: "settings.pageWidgets") }
+    }
+
     /// Replace movement by plain fades (also honoured when macOS asks to reduce motion).
     public var calmMotion: Bool {
         get { defaults.bool(forKey: Key.calmMotion) }
