@@ -132,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let window = controller.window {
             let id = ObjectIdentifier(controller)
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
+                mainActorNow {
                     self?.extraControllers.removeAll { ObjectIdentifier($0) == id }
                     // A window the user closes is gone for good; but not while the app quits (then it must come back).
                     if self?.isQuitting == false { BrowserWindowController.saveExtraWindows() }

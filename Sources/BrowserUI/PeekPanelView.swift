@@ -92,7 +92,7 @@ final class PeekPanelView: NSView, WKNavigationDelegate {
             page.trailingAnchor.constraint(equalTo: clip.trailingAnchor), page.bottomAnchor.constraint(equalTo: clip.bottomAnchor),
         ])
         web = page
-        observation = page.observe(\.title) { [weak self] page, _ in MainActor.assumeIsolated { self?.titleLabel.stringValue = page.title ?? "" } }
+        observation = page.observe(\.title) { [weak self] page, _ in mainActorNow { self?.titleLabel.stringValue = page.title ?? "" } }
         currentURL = url
         titleLabel.stringValue = url.host ?? url.absoluteString
         hostLabel.stringValue = url.host ?? ""
@@ -103,7 +103,7 @@ final class PeekPanelView: NSView, WKNavigationDelegate {
         NSAnimationContext.runAnimationGroup { $0.duration = 0.16; animator().alphaValue = 1 }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.keyCode == 53 else { return event }
-            MainActor.assumeIsolated { self.close() }
+            mainActorNow { self.close() }
             return nil
         }
     }
@@ -112,7 +112,7 @@ final class PeekPanelView: NSView, WKNavigationDelegate {
         guard !isHidden else { return }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         NSAnimationContext.runAnimationGroup({ $0.duration = 0.14; animator().alphaValue = 0 }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let self, self.alphaValue == 0 else { return }
                 self.isHidden = true
                 self.tearDownPage()                                     // frees the page and anything it was playing

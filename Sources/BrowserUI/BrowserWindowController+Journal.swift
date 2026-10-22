@@ -319,19 +319,19 @@ extension BrowserWindowController {
         guard journalTimer == nil else { return }
         journalWasEnabled = journal.enabled
         let center = NotificationCenter.default
-        center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.journal.emit("app.active", ["on": .bool(true)]) } }
-        center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.journal.emit("app.active", ["on": .bool(false)]) } }
-        center.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.journal.emitSystemState() } }
-        center.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.journal.emitSystemState() } }
+        center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in mainActorNow { self?.journal.emit("app.active", ["on": .bool(true)]) } }
+        center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in mainActorNow { self?.journal.emit("app.active", ["on": .bool(false)]) } }
+        center.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in mainActorNow { self?.journal.emitSystemState() } }
+        center.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in mainActorNow { self?.journal.emitSystemState() } }
         // Toutes les minutes : ce que coûtent les onglets en mémoire (seulement si le journal est actif).
-        journalTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.journalMemory() } }
+        journalTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in mainActorNow { self?.journalMemory() } }
     }
 
     /// La mise en page change en rafale quand on redimensionne : un seul événement, une seconde après la dernière.
     func journalLayoutSoon() {
         guard journal.enabled else { return }
         journalLayoutWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.journalWindowLayout() } }
+        let work = DispatchWorkItem { [weak self] in mainActorNow { self?.journalWindowLayout() } }
         journalLayoutWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
     }

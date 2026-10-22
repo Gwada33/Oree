@@ -143,7 +143,7 @@ extension BrowserWindowController {
         installSplitLayout()
         saveSession()
         splitMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            MainActor.assumeIsolated { self?.focusPane(at: event) }
+            mainActorNow { self?.focusPane(at: event) }
             return event
         }
         selectTab(left)
@@ -373,7 +373,7 @@ extension BrowserWindowController {
         panel.message = "Choisissez la photo de la page d’accueil"
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            MainActor.assumeIsolated {
+            mainActorNow {
                 SettingsStore.shared.homePhotoPath = url.path
                 SettingsStore.shared.homeBackground = .photo
                 self?.drawer.refreshFromSettings()

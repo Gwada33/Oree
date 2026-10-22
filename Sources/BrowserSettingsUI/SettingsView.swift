@@ -1133,7 +1133,7 @@ final class ShortcutsModel: ObservableObject {
             guard let self else { return event }
             let code = event.keyCode, flags = event.modifierFlags.rawValue
             let characters = event.charactersIgnoringModifiers
-            let consumed = MainActor.assumeIsolated { self.handle(keyCode: code, flags: NSEvent.ModifierFlags(rawValue: flags), characters: characters) }
+            let consumed = mainActorNow { self.handle(keyCode: code, flags: NSEvent.ModifierFlags(rawValue: flags), characters: characters) }
             return consumed ? nil : event
         }
     }

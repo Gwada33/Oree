@@ -140,6 +140,6 @@ enum NightScript {
 final class NightMessageHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let host = message.body as? String else { return }
-        MainActor.assumeIsolated { Tab.tabsByWebView.object(forKey: message.webView)?.owner?.nativeDarkDetected(host) }
+        mainActorNow { Tab.tabsByWebView.object(forKey: message.webView)?.owner?.nativeDarkDetected(host) }
     }
 }

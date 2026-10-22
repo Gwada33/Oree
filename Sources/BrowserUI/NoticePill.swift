@@ -1,4 +1,5 @@
 import AppKit
+import BrowserCore
 
 /// A small floating offer at the bottom of the page ("Adresse copiée · Ouvrir dans Plans"). It fades out by itself and never
 /// takes focus.
@@ -55,7 +56,7 @@ final class NoticePill: SurfaceView {
     func dismiss() {
         hideTask?.cancel()
         NSAnimationContext.runAnimationGroup({ $0.duration = 0.18; animator().alphaValue = 0 }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated { if self?.alphaValue == 0 { self?.isHidden = true } }
+            mainActorNow { if self?.alphaValue == 0 { self?.isHidden = true } }
         })
     }
 }

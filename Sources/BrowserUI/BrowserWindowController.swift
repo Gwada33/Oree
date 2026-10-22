@@ -358,7 +358,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         settingsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.scheduleSettingsReaction() }
+            mainActorNow { self?.scheduleSettingsReaction() }
         }
         refreshSafeBrowsing()
     }
@@ -638,7 +638,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     func scheduleSettingsReaction() {
         settingsReactionWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 self?.applyRuleListsIfSettingsChanged()
                 let font = CGFloat(SettingsStore.shared.minimumFontSize)
                 for tab in self?.tabs ?? [] where tab.webView?.configuration.preferences.minimumFontSize != font { tab.webView?.configuration.preferences.minimumFontSize = font }

@@ -119,7 +119,7 @@ extension BrowserWindowController {
 
     func startAudioTimer() {
         audioTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshAudioIndicators() }
+            mainActorNow { self?.refreshAudioIndicators() }
         }
     }
 
@@ -248,7 +248,7 @@ extension BrowserWindowController {
         invisTimer?.invalidate()
         invisSamples = []; invisStart = Date(); invisTicks = 0
         invisTimer = Timer.scheduledTimer(withTimeInterval: 0.008, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let self, let tab = self.activeTab else { return }
                 self.invisTicks += 1
                 if self.invisTicks % 12 == 0 { self.samplePage(of: tab) }

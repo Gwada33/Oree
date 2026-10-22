@@ -179,7 +179,7 @@ final class DownloadsController {
         let entry = WebKitEntry(download: download, itemID: id, destination: destination, origin: download.originalRequest?.url)
         entry.observation = download.progress.observe(\.fractionCompleted, options: [.new]) { @Sendable [weak self] progress, _ in
             let received = progress.completedUnitCount, total = progress.totalUnitCount
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.webkitProgress(id, received: received, total: total) } }
+            DispatchQueue.main.async { mainActorNow { self?.webkitProgress(id, received: received, total: total) } }
         }
         webkit[ObjectIdentifier(download)] = entry
         adopt(Item(id: id, name: destination.lastPathComponent, sourceURL: entry.origin ?? URL(string: "about:blank")!, phase: .running,
@@ -286,7 +286,7 @@ final class DownloadsController {
         guard !fireScheduled else { return }
         fireScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 self?.fireScheduled = false
                 self?.onChange?()
             }
@@ -307,7 +307,7 @@ final class DownloadsController {
         guard let item = items.first(where: { $0.id == id }) else { return }
         if item.origin == .engine { Task { await engine?.pause(id) } }
         else if let entry = webkit.values.first(where: { $0.itemID == id }) { entry.download.cancel { data in
-            DispatchQueue.main.async { MainActor.assumeIsolated { entry.resumeData = data } }
+            DispatchQueue.main.async { mainActorNow { entry.resumeData = data } }
         } }
     }
 
@@ -320,13 +320,13 @@ final class DownloadsController {
                   let data = entry.resumeData, let webView = resumeWebView() {
             webkit[key] = nil
             webView.resumeDownload(fromResumeData: data) { [weak self] resumed in
-                MainActor.assumeIsolated {
+                mainActorNow {
                     guard let self else { return }
                     resumed.delegate = webView.navigationDelegate as? WKDownloadDelegate
                     let renewed = WebKitEntry(download: resumed, itemID: id, destination: entry.destination, origin: entry.origin)
                     renewed.observation = resumed.progress.observe(\.fractionCompleted, options: [.new]) { @Sendable [weak self] progress, _ in
                         let r = progress.completedUnitCount, t = progress.totalUnitCount
-                        DispatchQueue.main.async { MainActor.assumeIsolated { self?.webkitProgress(id, received: r, total: t) } }
+                        DispatchQueue.main.async { mainActorNow { self?.webkitProgress(id, received: r, total: t) } }
                     }
                     self.webkit[ObjectIdentifier(resumed)] = renewed
                     self.update(id) { $0.phase = .running; $0.error = nil }

@@ -1,5 +1,6 @@
 import Foundation
 import WebKit
+import BrowserCore
 
 /// Page-side helper that lets a tab be put to sleep without losing the user's work:
 ///  - tells the app when the user typed into a field / editor (`dirty`), so the tab is only ever
@@ -83,13 +84,13 @@ enum TabPageState {
 /// Receives the page's "the user typed something" signal and flags the tab that owns that web view.
 final class TabPageStateHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        MainActor.assumeIsolated { Tab.tabsByWebView.object(forKey: message.webView)?.isDirty = true }
+        mainActorNow { Tab.tabsByWebView.object(forKey: message.webView)?.isDirty = true }
     }
 }
 
 /// Receives "a frame is here" from `GhostBootstrap` (non-main frames only) so the tab can ask it to capture itself.
 final class GhostFrameHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        MainActor.assumeIsolated { Tab.tabsByWebView.object(forKey: message.webView)?.noteFrame(message.frameInfo) }
+        mainActorNow { Tab.tabsByWebView.object(forKey: message.webView)?.noteFrame(message.frameInfo) }
     }
 }

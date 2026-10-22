@@ -254,6 +254,6 @@ final class PageTranslator {
 /// Receives the page script's "something may have changed" and tells the tab's translator.
 final class TranslationMessageHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        MainActor.assumeIsolated { Tab.tabsByWebView.object(forKey: message.webView)?.translator.pageChanged() }
+        mainActorNow { Tab.tabsByWebView.object(forKey: message.webView)?.translator.pageChanged() }
     }
 }

@@ -64,7 +64,7 @@ final class TaskManagerWindowController: NSWindowController, NSTableViewDataSour
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
+        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in mainActorNow { self?.refresh() } }
     }
 
     override func close() { timer?.invalidate(); timer = nil; super.close() }
@@ -99,7 +99,7 @@ final class TaskManagerWindowController: NSWindowController, NSTableViewDataSour
     @objc private func openSelected() { if let id = selectedID { onSelect?(id) } }
     private func sleepSelected() { if sleepEnabled, let id = selectedID { onSleep?(id); refreshSoon() } }
     private func closeSelected() { if closeEnabled, let id = selectedID { onClose?(id); refreshSoon() } }
-    private func refreshSoon() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in MainActor.assumeIsolated { self?.refresh() } } }
+    private func refreshSoon() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in mainActorNow { self?.refresh() } } }
 
     // MARK: Table
 

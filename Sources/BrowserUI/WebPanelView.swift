@@ -90,7 +90,7 @@ final class WebPanelView: SurfaceView, WKNavigationDelegate, WKUIDelegate {
     func hide() {
         guard !isHidden else { return }
         NSAnimationContext.runAnimationGroup({ $0.duration = 0.14; animator().alphaValue = 0 }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated { if let self, self.alphaValue == 0 { self.isHidden = true } }
+            mainActorNow { if let self, self.alphaValue == 0 { self.isHidden = true } }
         })
     }
 

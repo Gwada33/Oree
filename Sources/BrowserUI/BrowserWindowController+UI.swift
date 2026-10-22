@@ -160,7 +160,7 @@ extension BrowserWindowController {
         downloads.resumeWebView = { [weak self] in self?.activeTab?.webView }
         downloads.start()
         assistantButton.onClick = { [weak self] in self?.askAIAction() }
-        widgetTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refreshWidgets() } }   // les valeurs lues dans la page (pas dans le titre) n'ont pas d'événement : on les relit
+        widgetTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in mainActorNow { self?.refreshWidgets() } }   // les valeurs lues dans la page (pas dans le titre) n'ont pas d'événement : on les relit
         if SettingsStore.shared.lucioleInPage { assistantButton.setCustomContent(assistantMascot); assistantMascot.apply(.sleep) }
         applyChromeLayout()
         return bar
@@ -292,10 +292,10 @@ extension BrowserWindowController {
         edgeTrigger.onLeave = { [weak self] in self?.floatingShowWork?.cancel() }
         let center = NotificationCenter.default
         center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.floatingMenuTracking = true; self?.floatingHideWork?.cancel() }
+            mainActorNow { self?.floatingMenuTracking = true; self?.floatingHideWork?.cancel() }
         }
         center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.floatingMenuTracking = false; self?.scheduleFloatingHide(after: 0.8) }
+            mainActorNow { self?.floatingMenuTracking = false; self?.scheduleFloatingHide(after: 0.8) }
         }
         NSLayoutConstraint.activate([
             edgeTrigger.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),

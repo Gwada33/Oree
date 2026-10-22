@@ -69,7 +69,7 @@ extension BrowserWindowController {
             self?.activeWebDialog = nil
             completion(response)
         }
-        if let window { alert.beginSheetModal(for: window) { response in MainActor.assumeIsolated { finish(response) } } }
+        if let window { alert.beginSheetModal(for: window) { response in mainActorNow { finish(response) } } }
         else { finish(alert.runModal()) }
     }
 }
@@ -97,7 +97,7 @@ extension BrowserWindowController {
             self?.activeWebDialog = nil
             if response == .alertFirstButtonReturn { NSWorkspace.shared.open(url) }
         }
-        if let window { alert.beginSheetModal(for: window) { response in MainActor.assumeIsolated { open(response) } } } else { open(alert.runModal()) }
+        if let window { alert.beginSheetModal(for: window) { response in mainActorNow { open(response) } } } else { open(alert.runModal()) }
     }
 }
 
@@ -131,6 +131,6 @@ extension BrowserWindowController {
                 completionHandler(.cancelAuthenticationChallenge, nil)
             }
         }
-        if let window { alert.beginSheetModal(for: window) { response in MainActor.assumeIsolated { answer(response) } } } else { answer(alert.runModal()) }
+        if let window { alert.beginSheetModal(for: window) { response in mainActorNow { answer(response) } } } else { answer(alert.runModal()) }
     }
 }

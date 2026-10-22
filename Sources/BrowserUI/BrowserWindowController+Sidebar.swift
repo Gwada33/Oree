@@ -140,7 +140,7 @@ extension BrowserWindowController {
         guard effectiveSidebarMode == .floating, !floatingShown else { return }
         floatingShowWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let self, self.pointerInEdgeZone else { return }
                 self.setFloatingShown(true)
                 self.scheduleFloatingHide(after: 1.5)       // safety net if the pointer never enters the panel
@@ -155,7 +155,7 @@ extension BrowserWindowController {
         guard floatingShown else { return }
         floatingHideWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let self, self.floatingShown else { return }
                 if self.pointerInSidebar || self.pointerInEdgeZone || self.floatingMenuTracking || self.isResizingSidebar { return }
                 self.setFloatingShown(false)
@@ -179,7 +179,7 @@ extension BrowserWindowController {
         if shown {
             // A click anywhere outside the panel puts it away (the click still goes through to the page).
             floatingClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-                MainActor.assumeIsolated {
+                mainActorNow {
                     guard let self, let content = self.window?.contentView, event.window === self.window,
                           let sidebar = self.sidebarView else { return }
                     let point = content.convert(event.locationInWindow, from: nil)

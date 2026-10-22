@@ -138,7 +138,7 @@ final class DownloadRowView: HoverView {
 
     private func updateSweep() {
         if bar.indeterminate, !Motion.reduced, sweep == nil {
-            sweep = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak bar] _ in MainActor.assumeIsolated { bar?.needsDisplay = true } }
+            sweep = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak bar] _ in mainActorNow { bar?.needsDisplay = true } }
         } else if !bar.indeterminate { sweep?.invalidate(); sweep = nil }
     }
 

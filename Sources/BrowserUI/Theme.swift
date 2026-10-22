@@ -225,7 +225,7 @@ enum Motion {
             context.timingFunction = timing
             context.allowsImplicitAnimation = !reduced
             changes()
-        }, completionHandler: completion.map { done in { MainActor.assumeIsolated { done() } } })
+        }, completionHandler: completion.map { done in { mainActorNow { done() } } })
     }
 }
 

@@ -483,7 +483,7 @@ extension BrowserWindowController {
             guard response == .alertFirstButtonReturn else { return }
             let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return }
-            MainActor.assumeIsolated { completion(String(text.prefix(30))) }
+            mainActorNow { completion(String(text.prefix(30))) }
         }
     }
 
@@ -598,7 +598,7 @@ extension BrowserWindowController {
             guard response == .alertFirstButtonReturn, let self else { return }
             let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return }
-            MainActor.assumeIsolated {
+            mainActorNow {
                 self.spaces[index].name = String(name.prefix(14))
                 self.refreshSpaceUI(animated: false)
             }

@@ -34,11 +34,11 @@ final class PageSpeech: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async { MainActor.assumeIsolated { self.passageEnded() } }
+        DispatchQueue.main.async { mainActorNow { self.passageEnded() } }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async { MainActor.assumeIsolated { self.passageEnded() } }
+        DispatchQueue.main.async { mainActorNow { self.passageEnded() } }
     }
 
     private func passageEnded() {

@@ -166,7 +166,7 @@ final class AIPanelController {
         }
         // Les notifications de la fenêtre arrivent sur le fil principal ; on ne passe pas `Notification` (non Sendable) au code isolé.
         NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.dock() }
+            mainActorNow { self?.dock() }
         }
     }
 

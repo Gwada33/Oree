@@ -17,7 +17,7 @@ final class SpotlightIndexer {
     private init() {
         // Effacer l'historique (Réglages, ou à la fermeture) l'efface aussi de Spotlight.
         observer = NotificationCenter.default.addObserver(forName: Notification.Name("Oree.historyCleared"), object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.removeHistory() }
+            mainActorNow { self?.removeHistory() }
         }
     }
 

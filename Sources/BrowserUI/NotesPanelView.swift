@@ -103,7 +103,7 @@ final class NotesPanelView: NSView, NSTextViewDelegate {
         note.body = textView.string
         titleLabel.stringValue = note.title
         saveWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.saveNow() } }
+        let work = DispatchWorkItem { [weak self] in mainActorNow { self?.saveNow() } }
         saveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }

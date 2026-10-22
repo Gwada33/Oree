@@ -1,4 +1,5 @@
 import WebKit
+import BrowserCore
 
 /// Page-side half of the "now playing" card: reports what the page is playing and carries out the card's commands.
 ///
@@ -88,6 +89,6 @@ enum MediaScript {
 final class MediaMessageHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let json = message.body as? String else { return }
-        MainActor.assumeIsolated { if let tab = Tab.tabsByWebView.object(forKey: message.webView) { tab.owner?.handleMedia(tab: tab, json: json) } }
+        mainActorNow { if let tab = Tab.tabsByWebView.object(forKey: message.webView) { tab.owner?.handleMedia(tab: tab, json: json) } }
     }
 }

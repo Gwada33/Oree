@@ -169,7 +169,7 @@ extension BrowserWindowController {
         notesView = view
         notesPopover = popover
         NotificationCenter.default.addObserver(forName: NSPopover.willCloseNotification, object: popover, queue: .main) { [weak view] _ in
-            MainActor.assumeIsolated { view?.saveNow() }
+            mainActorNow { view?.saveNow() }
         }
         if showPopoverSafely(popover, relativeTo: addressPill, fallback: window?.contentView, edge: .minY) { DispatchQueue.main.async { view.focusText() } }
     }

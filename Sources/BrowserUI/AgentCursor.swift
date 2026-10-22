@@ -101,7 +101,7 @@ final class AgentCursor: NSView, AgentPresence {
     private func release(after delay: Double) {
         let mine = generation
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let self, self.generation == mine, !self.isHidden else { return }
                 self.atElement = false
                 if Motion.reduced { self.ring.alphaValue = 0; self.tagBox.alphaValue = 0; self.mascot.frame.origin = self.dock; return }
@@ -168,7 +168,7 @@ final class AgentCursor: NSView, AgentPresence {
                 self.tagBox.animator().alphaValue = 1
                 self.ring.animator().frame = ringFrame
                 self.ring.animator().alphaValue = 1
-            }, completionHandler: { MainActor.assumeIsolated { continuation.resume() } })
+            }, completionHandler: { mainActorNow { continuation.resume() } })
         }
         release(after: 1.5)                                       // le cadre ne reste pas posé là : il s'efface après le geste
         await pause(0.12)
@@ -227,12 +227,12 @@ final class AgentCursor: NSView, AgentPresence {
         }
         if Motion.reduced { hideNow(); return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let self, self.generation == mine else { return }          // une autre tâche a commencé entre-temps : on ne touche à rien
                 NSAnimationContext.runAnimationGroup({ context in
                     context.duration = 0.4; context.timingFunction = Motion.timing; context.allowsImplicitAnimation = true
                     leave()
-                }, completionHandler: { MainActor.assumeIsolated { if self.generation == mine { self.hideNow() } } })
+                }, completionHandler: { mainActorNow { if self.generation == mine { self.hideNow() } } })
             }
         }
     }

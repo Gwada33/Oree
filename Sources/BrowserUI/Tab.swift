@@ -486,14 +486,14 @@ final class Tab: NSObject {
         // card instead of WKWebView's white default background flashing.
         webView.alphaValue = 0
         progressObservation = webView.observe(\.estimatedProgress, options: [.new]) { [weak self] web, _ in
-            MainActor.assumeIsolated { self?.reportProgress() }
+            mainActorNow { self?.reportProgress() }
         }
         titleObservation = webView.observe(\.title, options: [.new]) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.onTitleChange?() }
+            mainActorNow { self?.onTitleChange?() }
         }
         // Entering/leaving a fullscreen video: make sure nothing of ours (fade-in, slot animation) leaves the page translucent.
         fullscreenObservation = webView.observe(\.fullscreenState, options: [.new]) { [weak self] web, _ in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let self else { return }
                 // A trace for diagnosing a black fullscreen video: where the page lives and whether its window is on screen.
                 let window = web.window
@@ -511,10 +511,10 @@ final class Tab: NSObject {
             }
         }
         urlObservation = webView.observe(\.url, options: [.new]) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.onURLChange?() }
+            mainActorNow { self?.onURLChange?() }
         }
         loadingObservation = webView.observe(\.isLoading, options: [.new]) { [weak self] web, _ in
-            MainActor.assumeIsolated { self?.reportProgress() }
+            mainActorNow { self?.reportProgress() }
         }
         // Ask WebKit to tell us when real content first paints: that is the right moment to drop the snapshot.
         let renderingSelector = NSSelectorFromString("_setObservedRenderingProgressEvents:")

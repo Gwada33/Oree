@@ -1,4 +1,5 @@
 import WebKit
+import BrowserCore
 
 /// Clean copy: what a page puts on the clipboard (its fonts, colors, links, hidden junk) is replaced by the text as it reads.
 /// Plain text only, on purpose: WebKit rewrites any HTML given to the clipboard and adds explicit default fonts and colors to it,
@@ -94,6 +95,6 @@ enum CleanCopyScript {
 final class CleanCopyMessageHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let text = message.body as? String else { return }
-        MainActor.assumeIsolated { Tab.tabsByWebView.object(forKey: message.webView)?.copiedText(text) }
+        mainActorNow { Tab.tabsByWebView.object(forKey: message.webView)?.copiedText(text) }
     }
 }

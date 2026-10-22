@@ -48,7 +48,7 @@ final class AutomationServer {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         Log.tabs.notice("Automation channel enabled at \(base.path, privacy: .public)")
         timer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.poll() }
+            mainActorNow { self?.poll() }
         }
     }
 

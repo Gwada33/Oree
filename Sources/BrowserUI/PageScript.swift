@@ -48,7 +48,7 @@ extension WKWebView {
     func safeRun(_ script: String, world: WKContentWorld = .page, completion: (@MainActor () -> Void)? = nil) {
         var reason: NSString?
         let started = OreeEvaluateJS(self, script, nil, world, { _, _ in
-            if let completion { MainActor.assumeIsolated { completion() } }
+            if let completion { mainActorNow { completion() } }
         }, &reason)
         if !started { Log.tabs.error("evaluateJavaScript a levé une exception, ignorée : \((reason as String?) ?? "?", privacy: .public)") }
     }

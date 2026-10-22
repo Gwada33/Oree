@@ -54,7 +54,7 @@ final class MediaKeys {
             command.isEnabled = true
             command.addTarget { event in
                 guard let action = action(event) else { return .commandFailed }
-                DispatchQueue.main.async { MainActor.assumeIsolated { MediaKeys.shared.perform(action) } }
+                DispatchQueue.main.async { mainActorNow { MediaKeys.shared.perform(action) } }
                 return .success
             }
         }

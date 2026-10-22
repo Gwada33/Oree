@@ -90,6 +90,6 @@ enum LucioleSelectionScript {
 final class LucioleSelectionHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let json = message.body as? String else { return }
-        MainActor.assumeIsolated { if let tab = Tab.tabsByWebView.object(forKey: message.webView) { tab.owner?.handleLucioleSelection(tab: tab, json: json) } }
+        mainActorNow { if let tab = Tab.tabsByWebView.object(forKey: message.webView) { tab.owner?.handleLucioleSelection(tab: tab, json: json) } }
     }
 }

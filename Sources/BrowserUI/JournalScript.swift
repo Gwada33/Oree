@@ -162,6 +162,6 @@ final class JournalMessageHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame else { return }
         let body = message.body
-        MainActor.assumeIsolated { if let tab = Tab.tabsByWebView.object(forKey: message.webView) { tab.owner?.handleJournal(tab: tab, body: body) } }
+        mainActorNow { if let tab = Tab.tabsByWebView.object(forKey: message.webView) { tab.owner?.handleJournal(tab: tab, body: body) } }
     }
 }

@@ -191,7 +191,7 @@ final class TabButtonView: NSView {
 
     private func startPreview() {
         previewWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { if self?.isHovered == true { self?.hoverPreviewed = true; self?.onHoverPreview?(true) } } }
+        let work = DispatchWorkItem { [weak self] in mainActorNow { if self?.isHovered == true { self?.hoverPreviewed = true; self?.onHoverPreview?(true) } } }
         previewWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: work)
     }
@@ -199,7 +199,7 @@ final class TabButtonView: NSView {
     private func startDwell() {
         dwellWork?.cancel()
         guard isSleeping else { return }
-        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { if self?.isHovered == true { self?.onHoverDwell?() } } }
+        let work = DispatchWorkItem { [weak self] in mainActorNow { if self?.isHovered == true { self?.onHoverDwell?() } } }
         dwellWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
@@ -245,7 +245,7 @@ final class TabButtonView: NSView {
         let group = CAAnimationGroup(); group.animations = [scale, fade]; group.duration = 0.16
         group.timingFunction = CAMediaTimingFunction(name: .easeIn); group.fillMode = .forwards; group.isRemovedOnCompletion = false
         layer.add(group, forKey: "oreeClose")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { MainActor.assumeIsolated { completion() } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { mainActorNow { completion() } }
     }
 
     // MARK: Interaction

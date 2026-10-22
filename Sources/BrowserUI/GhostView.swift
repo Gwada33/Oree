@@ -99,12 +99,12 @@ final class GhostView: NSObject, WKNavigationDelegate {
         }
         // Images and fonts arrive after didFinish and can move things: restore again once the layout has settled.
         let endBoot = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.webView.safeRun(GhostScript.endBoot, world: GhostScript.world) }
+            mainActorNow { self?.webView.safeRun(GhostScript.endBoot, world: GhostScript.world) }
         }
         restoreWork.append(endBoot)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: endBoot)
         for delay in [0.25, 0.7] {
-            let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.restoreScroll() } }
+            let work = DispatchWorkItem { [weak self] in mainActorNow { self?.restoreScroll() } }
             restoreWork.append(work)
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
         }

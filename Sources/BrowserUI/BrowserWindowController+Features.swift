@@ -147,7 +147,7 @@ extension BrowserWindowController {
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
             let text = field.stringValue
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let self else { return }
                 guard let url = WebPanels.normalize(text) else { self.presentNotice("Cette adresse n’est pas une page web."); return }
                 let entry = WebPanelEntry(name: WebPanels.suggestions.first { $0.url == url.absoluteString }?.name ?? WebPanels.defaultName(for: url), url: url.absoluteString)
@@ -284,7 +284,7 @@ extension BrowserWindowController {
     /// The state of every page is serialised on the main thread, so doing it at each change was the price of every navigation.
     func saveSession() {
         sessionSaveWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.saveSessionNow() } }
+        let work = DispatchWorkItem { [weak self] in mainActorNow { self?.saveSessionNow() } }
         sessionSaveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }

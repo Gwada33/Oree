@@ -29,7 +29,7 @@ final class AudioRoute {
         refreshOutput()
         var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.refreshOutput() }
+            mainActorNow { self?.refreshOutput() }
         }
     }
 

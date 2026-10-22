@@ -1,4 +1,5 @@
 import WebKit
+import BrowserCore
 
 /// Agrandissement des vidéos en temps réel, dans la page : le script copie chaque image de la vidéo dans une texture WebGL, l'agrandit (bicubique Catmull-Rom, puis netteté adaptative
 /// au contraste « CAS » de FidelityFX) et l'affiche dans un canevas posé sur la vidéo. Dans un monde isolé : le site ne voit rien et rien n'est modifié dans sa page, à part ce canevas.
@@ -292,14 +293,14 @@ final class VideoUpscaleHandler: NSObject, WKScriptMessageHandler {
         let frame = message.frameInfo
         // Une image du moteur « apple » (dictionnaire) : confiée à l'agrandisseur natif de l'onglet.
         if let body = message.body as? [String: Any] {
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let tab = Tab.tabsByWebView.object(forKey: message.webView), let web = message.webView else { return }
                 if body["kind"] as? String == "frame" { tab.enhancer(for: web).receive(body) } else if body["kind"] as? String == "stop" { tab.videoEnhancer?.stop() }
             }
             return
         }
         guard let json = message.body as? String else { return }
-        MainActor.assumeIsolated {
+        mainActorNow {
             guard let tab = Tab.tabsByWebView.object(forKey: message.webView) else { return }
             if let status = UpscaleStatus(json: json) { tab.upscaleStatus = status; tab.upscaleFrame = frame }
             else if tab.upscaleFrame?.request.url == frame.request.url { tab.upscaleStatus = nil; tab.upscaleFrame = nil }        // la vidéo de ce cadre n'est plus là

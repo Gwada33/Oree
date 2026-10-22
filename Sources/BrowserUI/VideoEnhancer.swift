@@ -185,7 +185,7 @@ final class VideoEnhancer {
         guard watchdog == nil else { return }
         // Si plus aucune image n'arrive (pause, onglet caché, script arrêté), la vidéo d'origine reprend la place : une image figée ne doit jamais recouvrir une vidéo qui bouge.
         watchdog = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { guard let self else { return }; if Date().timeIntervalSince(self.lastShown) > 0.3 { self.overlay.hideNow() } }
+            mainActorNow { guard let self else { return }; if Date().timeIntervalSince(self.lastShown) > 0.3 { self.overlay.hideNow() } }
         }
     }
 

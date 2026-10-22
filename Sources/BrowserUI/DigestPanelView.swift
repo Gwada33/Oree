@@ -134,7 +134,7 @@ final class DigestPanelView: NSView, WKNavigationDelegate {
         NSAnimationContext.runAnimationGroup { $0.duration = 0.16; animator().alphaValue = 1 }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.keyCode == 53 else { return event }          // Escape
-            MainActor.assumeIsolated { self.close(byUser: true) }
+            mainActorNow { self.close(byUser: true) }
             return nil
         }
     }
@@ -189,7 +189,7 @@ final class DigestPanelView: NSView, WKNavigationDelegate {
         onCancel?(); onCancel = nil
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         NSAnimationContext.runAnimationGroup({ $0.duration = 0.14; animator().alphaValue = 0 }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let self, self.alphaValue == 0 else { return }
                 self.isHidden = true
                 self.web.loadHTMLString("", baseURL: nil)                       // free the page

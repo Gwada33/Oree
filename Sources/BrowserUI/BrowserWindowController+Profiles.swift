@@ -50,7 +50,7 @@ extension BrowserWindowController {
         alert.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
             let name = field.stringValue
-            MainActor.assumeIsolated {
+            mainActorNow {
                 guard let profile = try? ProfileRegistry().add(name: name) else { return }
                 BrowserWindowController.openProfile(id: profile.id)
             }
