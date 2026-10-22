@@ -83,7 +83,7 @@ final class AboutPanel: NSPanel {
     static let shared = AboutPanel()
 
     private init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 300, height: 250),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 300, height: 290),
                    styleMask: [.titled, .closable], backing: .buffered, defer: true)
         title = "À propos d’Orée"
         isReleasedWhenClosed = false
@@ -99,7 +99,10 @@ final class AboutPanel: NSPanel {
         let tag = oreeLabel("Un navigateur qui dort quand vous ne le regardez pas.\nAucune télémétrie.", font: Theme.sans(12), color: Theme.muted, lines: 3)
         tag.alignment = .center
 
-        let stack = NSStackView(views: [mark, name, ver, tag])
+        let licenses = TextButton("Licences et mentions", style: .ghost) {
+            if let url = Bundle.main.url(forResource: "THIRD_PARTY_NOTICES", withExtension: "md") { NSWorkspace.shared.open(url) }
+        }
+        let stack = NSStackView(views: [mark, name, ver, tag, licenses])
         stack.orientation = .vertical; stack.alignment = .centerX; stack.spacing = 8
         stack.setCustomSpacing(14, after: mark)
         stack.setCustomSpacing(14, after: ver)

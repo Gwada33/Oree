@@ -700,7 +700,7 @@ public final class SettingsStore: @unchecked Sendable {
 
     /// Image file used when the background is `.photo`.
     public var homePhotoPath: String {
-        get { defaults.string(forKey: Key.homePhotoPath) ?? "" }
+        get { ProcessInfo.processInfo.environment["HB_HOME_PHOTO"] ?? defaults.string(forKey: Key.homePhotoPath) ?? "" }   // HB_HOME_PHOTO : essais
         set { defaults.set(newValue, forKey: Key.homePhotoPath) }
     }
 

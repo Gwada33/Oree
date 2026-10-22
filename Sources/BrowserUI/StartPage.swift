@@ -78,7 +78,8 @@ enum StartPage {
             // Un état vide qui dit quoi faire, au lieu d'un trou dans la page.
             return "<section aria-label=\"Favoris\"><div class=\"sh\"><h2>Favoris</h2></div><p class=\"empty\">Vos sites préférés s'afficheront ici, numérotés et accessibles par <span class=\"k\">⌥1</span> à <span class=\"k\">⌥8</span>. Sur une page, <span class=\"k\">⌘D</span> l'ajoute.</p></section>"
         }
-        let items = favorites.prefix(8).enumerated().map { index, bookmark -> String in
+        // Seulement des adresses web : un favori importé en « javascript: » ou « file: » ne doit pas devenir un lien de la page d'accueil.
+        let items = favorites.filter { isWebLink($0.url) }.prefix(8).enumerated().map { index, bookmark -> String in
             let host = HomeFormatting.displayHost(bookmark.url)
             let title = bookmark.title.isEmpty || bookmark.title == bookmark.url ? host : bookmark.title
             let letter = host.first.map { String($0).uppercased() } ?? "?"
@@ -96,7 +97,7 @@ enum StartPage {
 
     private static func recentHTML(_ recent: [HistoryEntry], now: Date) -> String {
         guard !recent.isEmpty else { return "" }
-        let rows = recent.prefix(4).map { entry -> String in
+        let rows = recent.filter { isWebLink($0.url) }.prefix(4).map { entry -> String in
             let host = HomeFormatting.displayHost(entry.url)
             let title = entry.title.isEmpty ? host : entry.title
             return """
@@ -116,6 +117,8 @@ enum StartPage {
         }.joined()
         return "<section aria-label=\"Espaces\"><h2>Espaces</h2><div class=\"chips\">\(chips)</div></section>"
     }
+
+    static func isWebLink(_ url: String) -> Bool { ["http", "https"].contains(URL(string: url)?.scheme?.lowercased() ?? "") }
 
     private static func hueClass(_ host: String) -> String { "h-\(HomeFormatting.hue(forHost: host).rawValue)" }
 
@@ -263,7 +266,9 @@ enum StartPage {
 /// (`oree://home/fonts/<file>.ttf`, `oree://home/photo`). Nothing else is reachable.
 final class OreeSchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
-        guard let url = urlSchemeTask.request.url, let (data, mime) = resolve(url) else {
+        // La photo de fond est un fichier de l'utilisateur : seules les pages d'Orée (oree://) peuvent la lire, pas un site qui demanderait oree://home/photo.
+        let fromOree = urlSchemeTask.request.mainDocumentURL?.scheme == "oree"
+        guard let url = urlSchemeTask.request.url, fromOree || url.pathComponents.filter({ $0 != "/" }) != ["photo"], let (data, mime) = resolve(url) else {
             urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
             return
         }
