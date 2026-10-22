@@ -494,7 +494,7 @@ final class AddressPillView: SurfaceView, NSTextFieldDelegate {
     private(set) var isEditing = false
     private let hoverLayer = CALayer()
     private var hovered = false {
-        didSet { if !isEditing { Motion.transaction(Motion.quick) { hoverLayer.opacity = hovered ? 1 : 0 } } }
+        didSet { if !isEditing { Motion.transaction(Motion.quick) { hoverLayer.opacity = hovered ? 1 : 0; kbd.alphaValue = hovered ? 1 : 0 } } }   // le raccourci ⌘L ne s'affiche qu'au survol : en permanence c'est du bruit
     }
 
     override func layout() {
@@ -532,6 +532,7 @@ final class AddressPillView: SurfaceView, NSTextFieldDelegate {
         field.setAccessibilityLabel("Adresse ou recherche")
         kbd.translatesAutoresizingMaskIntoConstraints = false
         [icon, label, field, kbd].forEach(addSubview)
+        kbd.alphaValue = 0
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 32),
             icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
@@ -606,6 +607,7 @@ final class AddressPillView: SurfaceView, NSTextFieldDelegate {
         field.isHidden = true
         label.isHidden = false
         kbd.isHidden = false
+        kbd.alphaValue = hovered ? 1 : 0
         fill = Theme.field
         border = nil
         borderWidth = 1

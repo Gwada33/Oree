@@ -164,7 +164,8 @@ extension BrowserWindowController {
                 entries = ((try? SuggestionProvider().suggestions(for: q, limit: 8)) ?? []).map { ($0.url, $0.title, nil) }
             }
             let formatter = RelativeDateTimeFormatter()
-            formatter.unitsStyle = .abbreviated
+            formatter.unitsStyle = .short
+            formatter.locale = Locale(identifier: "fr_FR")   // sinon « −5 s », qu'on lit comme une durée négative
             let shown = entries.filter { filter == .history || !favoriteURLs.contains($0.url) }.prefix(filter == .all ? 5 : 30)
             sections.append(PaletteSection(title: "Historique", items: shown.map { entry in
                 PaletteItem(

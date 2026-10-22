@@ -167,12 +167,11 @@ extension BrowserWindowController {
     /// Everything the home page shows, for a tab in the current space.
     func homeInput(for tab: Tab) -> HomeInput {
         let recent = (tab.isPrivate || !SettingsStore.shared.startPageShowsRecent) ? [] : ((try? historyRepo.recent(limit: 6)) ?? [])
-        let style = spaces[min(tab.spaceIndex, spaces.count - 1)]
         let chips = spaces.enumerated().map { index, space in
             HomeInput.SpaceChip(index: index, name: space.name, hue: space.hue, icon: space.icon,
                                 tabCount: tabs.filter { $0.spaceIndex == index }.count)
         }
-        return HomeInput(hue: style.hue,
+        return HomeInput(hue: SettingsStore.shared.accentHue,   // l'accent choisi, comme la barre et les réglages ; les puces d'espaces gardent leur propre teinte
                          favorites: (try? bookmarkRepo.all(forSpace: tab.spaceIndex)) ?? [],
                          recent: recent, spaces: chips)
     }

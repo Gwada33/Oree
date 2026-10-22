@@ -219,7 +219,7 @@ private final class SpaceCardView: SurfaceView {
         let name = oreeLabel(data.style.name, font: Theme.Typo.subheading, color: Theme.text)
         let count = oreeLabel("\(data.entries.count) onglet\(data.entries.count > 1 ? "s" : "")", font: Theme.sans(12), color: Theme.muted)
         let titles = NSStackView(views: [name, count]); titles.orientation = .vertical; titles.alignment = .leading; titles.spacing = 0
-        let edit = TextButton("Modifier", style: .ghost) { [weak self] in self?.onEdit?() }
+        let edit = TextButton("Modifier", style: .secondary) { [weak self] in self?.onEdit?() }
         let head = NSStackView(views: [chip(data.style), titles, edit])
         head.orientation = .horizontal; head.alignment = .centerY; head.spacing = 10; head.distribution = .fill
         titles.setContentHuggingPriority(.defaultLow, for: .horizontal)

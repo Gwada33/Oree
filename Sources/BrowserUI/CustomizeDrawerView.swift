@@ -200,8 +200,16 @@ final class CustomizeDrawerView: NSView {
         stack.alignment = .width
         stack.spacing = 10
         stack.setCustomSpacing(18, after: header)
-        for (i, v) in items.enumerated() where v is NSTextField && i > 0 { stack.setCustomSpacing(6, after: v) }
         stack.translatesAutoresizingMaskIntoConstraints = false
+        // Un intitulé colle à ce qu'il titre (6 pt) et se détache de ce qui précède (22 pt) ; sinon on ne sait plus de quel bloc il est.
+        for (i, v) in items.enumerated() where v is NSTextField && i > 0 {
+            stack.setCustomSpacing(6, after: v)
+            if !(items[i - 1] is NSTextField) { stack.setCustomSpacing(22, after: items[i - 1]) }
+        }
+        // Pleine largeur pour chaque ligne : sans cela WebKit-style stretch n'a pas lieu et intitulés et lignes se collent à droite.
+        for v in items { v.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        header.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        title.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         let scroll = NSScrollView()
         scroll.translatesAutoresizingMaskIntoConstraints = false

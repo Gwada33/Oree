@@ -224,5 +224,6 @@ func oreeSettingRow(title: String, detail: String? = nil, control: NSView) -> NS
     row.translatesAutoresizingMaskIntoConstraints = false
     text.setContentHuggingPriority(.defaultLow, for: .horizontal)
     control.setContentHuggingPriority(.required, for: .horizontal)
+    text.leadingAnchor.constraint(equalTo: row.leadingAnchor).isActive = true   // le titre à gauche, la commande à droite : sans cela le titre flotte au milieu
     return row
 }

@@ -74,7 +74,10 @@ enum StartPage {
     // MARK: Sections
 
     private static func favoritesHTML(_ favorites: [Bookmark]) -> String {
-        guard !favorites.isEmpty else { return "" }
+        guard !favorites.isEmpty else {
+            // Un état vide qui dit quoi faire, au lieu d'un trou dans la page.
+            return "<section aria-label=\"Favoris\"><div class=\"sh\"><h2>Favoris</h2></div><p class=\"empty\">Vos sites préférés s'afficheront ici, numérotés et accessibles par <span class=\"k\">⌥1</span> à <span class=\"k\">⌥8</span>. Sur une page, <span class=\"k\">⌘D</span> l'ajoute.</p></section>"
+        }
         let items = favorites.prefix(8).enumerated().map { index, bookmark -> String in
             let host = HomeFormatting.displayHost(bookmark.url)
             let title = bookmark.title.isEmpty || bookmark.title == bookmark.url ? host : bookmark.title
@@ -186,7 +189,7 @@ enum StartPage {
         .bg-photo section,.bg-photo header,.bg-photo .search{background:color-mix(in srgb,var(--page) 78%,transparent);backdrop-filter:blur(14px);border-radius:var(--r-lg);padding:12px}
         .home{max-width:1120px;margin:0 auto;padding:56px clamp(20px,5vw,72px) 72px;display:grid;grid-template-columns:1.45fr .85fr;gap:40px 64px;align-items:start}
         .col{display:flex;flex-direction:column;gap:32px;min-width:0}
-        .side{padding-top:18px;gap:28px}
+        .side{gap:28px}
         header{display:flex;flex-direction:column;gap:6px}
         .wd{font-size:13px;font-weight:600;color:var(--muted);text-transform:capitalize}
         h1{margin:0;font:italic 400 clamp(48px,6.4vw,84px)/.92 var(--serif);letter-spacing:-.015em}
@@ -199,6 +202,8 @@ enum StartPage {
         .chip{font-size:12px;font-weight:500;padding:5px 9px;border-radius:999px;background:var(--hover);color:var(--muted)}
         section{display:flex;flex-direction:column;gap:6px}
         .sh{padding:0 6px}
+        .empty{margin:0;padding:0 6px;max-width:44ch;font-size:14px;line-height:1.55;color:var(--muted)}
+        .k{font-size:11px;font-weight:500;color:var(--text);background:var(--hover);padding:2px 6px;border-radius:5px;white-space:nowrap}
         .favs{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;column-gap:28px}
         .favs li{border-top:1px solid var(--line)}
         .fav-row{display:grid;grid-template-columns:28px 36px 1fr auto;gap:10px;align-items:center;padding:9px 6px;border-radius:var(--r-sm);text-decoration:none;color:inherit;transition:background .12s cubic-bezier(.2,.8,.2,1)}
