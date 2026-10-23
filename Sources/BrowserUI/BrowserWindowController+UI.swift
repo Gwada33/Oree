@@ -58,13 +58,19 @@ extension BrowserWindowController {
         guard let window else { return }
         applyProfileTitle()
         let contentView = configureWindow(window)
+        LaunchTrace.mark("ui: window configured")
         let sidebar = wireSidebar()
+        LaunchTrace.mark("ui: sidebar")
         let bar = wireToolbar()
+        LaunchTrace.mark("ui: toolbar")
         buildPageSheet()
+        LaunchTrace.mark("ui: page sheet")
         layoutMain(in: contentView, sidebar: sidebar, bar: bar)
+        LaunchTrace.mark("ui: layout")
         wireAddressBar(in: contentView)
         wireFloatingEdge(in: contentView)
         buildFindBar(in: contentView)
+        LaunchTrace.mark("ui: address, edge, find bar")
 
         applySidebarMode(animated: false)
     }
@@ -185,14 +191,18 @@ extension BrowserWindowController {
             self.digestKey = nil
             if let tab = self.activeTab { self.updateDigestButton(for: tab) }
         }
+        LaunchTrace.mark("sheet: digest panel")
         buildResponsiveBar()
+        LaunchTrace.mark("sheet: responsive bar")
         contentContainer.addSubview(webPanel)
+        LaunchTrace.mark("sheet: web panel")
         NSLayoutConstraint.activate([
             webPanel.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: 10), webPanel.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor, constant: -10),
             webPanel.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor, constant: -10),
         ])
         webPanel.onOpenInTab = { [weak self] url in self?.newTab(urlString: url.absoluteString, isPrivate: false) }
         contentContainer.addSubview(peekPanel)
+        LaunchTrace.mark("sheet: peek panel")
         NSLayoutConstraint.activate([
             peekPanel.topAnchor.constraint(equalTo: contentContainer.topAnchor), peekPanel.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
             peekPanel.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor), peekPanel.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
@@ -211,7 +221,9 @@ extension BrowserWindowController {
             readingBar.heightAnchor.constraint(equalToConstant: 2), barWidth,
         ])
         audioRoute.onChange = { [weak self] in self?.refreshNowPlaying() }
-        audioRoute.start()
+        // L'écoute de la sortie audio réveille CoreAudio (plusieurs dizaines de ms) : après l'affichage de la fenêtre, pas avant.
+        DispatchQueue.main.async { [weak self] in self?.audioRoute.start() }
+        LaunchTrace.mark("sheet: audio deferred")
         NSLayoutConstraint.activate([
             noticePill.centerXAnchor.constraint(equalTo: contentContainer.centerXAnchor),
             noticePill.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor, constant: -24),
