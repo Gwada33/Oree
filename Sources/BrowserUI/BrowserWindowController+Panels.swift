@@ -408,7 +408,7 @@ extension BrowserWindowController {
 
     /// Re-renders open home pages so they pick up background, toggles, accent and radius.
     func reloadHomePages() {
-        for tab in tabs where tab.webView?.url?.scheme == "oree" {
+        for tab in tabs where tab.webView?.url?.scheme == "oree" && tab.webView?.url?.host == "home" {
             tab.webView?.loadHTMLString(StartPage.render(homeInput(for: tab)), baseURL: StartPage.baseURL)
         }
     }

@@ -887,7 +887,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
 /// Top-anchored document view so scrolled content starts at the top.
 final class FlippedDocumentView: NSView {
-    override var isFlipped: Bool { true }
+    // nonisolated : une constante, appelée par AppKit pendant le tracé ou le test de clic ; le contrôle d'exécuteur de la bêta macOS 27 y plantait (Docs/plantages-macos27.md).
+    nonisolated override var isFlipped: Bool { true }
 }
 
 /// Receives `hbCreds` messages. Held separately (not the controller itself)
