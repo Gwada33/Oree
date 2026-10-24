@@ -134,3 +134,8 @@ select{font:500 17px var(--sans);color:var(--text);background:var(--raised);bord
 #luciole.ball{position:fixed;left:0;top:0;right:auto;bottom:auto;width:80px;z-index:5;pointer-events:none}
 .endbtns{display:flex;gap:14px;justify-content:center;align-items:center;margin-top:24px}
 body.playing #moon{display:none}
+
+.structure{margin:0 0 8px;display:grid;gap:6px;color:var(--muted);font-size:16px}
+.structure .strip{display:flex;gap:3px;flex-wrap:wrap}.structure i{width:10px;height:22px;border-radius:3px;background:var(--acc)}.structure i.calme{background:#2a3a33}
+.bar.calm .c0{grid-column:1/4}.bar.calm .c1,.bar.calm .c2{display:none}
+.storytitle{grid-column:1/-1;text-align:center;color:var(--acc-ink);font:600 15px var(--sans);letter-spacing:.14em;text-transform:uppercase}

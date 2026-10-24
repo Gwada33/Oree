@@ -25,6 +25,7 @@
         <input type="file" id="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg" hidden>
       </label>
       <p id="prodInfo" class="prodinfo" hidden></p>
+      <div id="structure" class="structure" hidden></div>
     </div>
     <div class="bpmbox">
       <div class="bpmrow">
@@ -49,7 +50,10 @@
         <button class="chip" data-level="debutant">Débutant</button><button class="chip on" data-level="normal">Normal</button><button class="chip" data-level="avance">Avancé</button><button class="chip" data-level="expert">Expert</button></div>
       <div class="opt"><span class="lab">Durée</span>
         <button class="chip" data-length="8">8 mesures</button><button class="chip on" data-length="16">16</button><button class="chip" data-length="32">32</button><button class="chip" data-length="inf">Sans fin</button></div>
-      <div class="opt"><span class="lab">Rimes</span><select id="famSel" aria-label="Famille de rimes"></select></div>
+      <div class="opt"><span class="lab">Style</span>
+        <button class="chip on" data-style="histoire">Histoire (les phrases se suivent)</button><button class="chip" data-style="mots">Mots (une rime par mesure)</button></div>
+      <div id="wordsOpts" class="opt" hidden><span class="lab">Rimes</span><select id="famSel" aria-label="Famille de rimes"></select>
+        <button class="chip on" data-syll="1">Tous les mots</button><button class="chip" data-syll="2">2 syllabes et +</button><button class="chip" data-syll="3">3 syllabes et +</button></div>
       <p class="legend" id="legend">Débutant : des débuts de phrase dans les 3 premières cases · Normal : seulement la rime · Avancé : la rime disparaît à la 3ᵉ mesure · Expert : on te la montre une seule fois.</p>
     </div>
     <button id="start" class="go">Jouer <kbd>Entrée</kbd></button>

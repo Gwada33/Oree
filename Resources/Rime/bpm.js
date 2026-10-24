@@ -32,4 +32,15 @@ function detectBpm(mono, sampleRate) {
   const mean = R.slice(1).reduce((x, y) => x + y, 0) / maxLag || 1;
   return { bpm, offset: bestO / fps, confidence: Math.max(0, Math.min(1, (score(bpm) / mean - 1) / 3)) };
 }
-if (typeof module !== 'undefined') module.exports = { detectBpm };
+
+/* Structure de la prod, mesure par mesure : « beat » (grosse caisse / basse présentes) ou « calme » (rien de grave : intro, pont, break).
+   Sert à poser les mots autrement quand on n'entend pas le beat. Seuil relatif au passage le plus chargé, donc indépendant du volume. */
+function analyzeSections(mono, sampleRate, bpm, offset) {
+  const bar = 4 * 60 / bpm * sampleRate, start = offset * sampleRate, n = Math.floor((mono.length - start) / bar);
+  if (n < 1) return [];
+  const a = 1 - Math.exp(-2 * Math.PI * 150 / sampleRate), low = new Float32Array(n); let lp = 0;
+  for (let b = 0; b < n; b++) { let e = 0; const i0 = Math.floor(start + b * bar), i1 = Math.floor(start + (b + 1) * bar); for (let i = i0; i < i1; i += 2) { lp += a * 2 * (mono[i] - lp); e += lp * lp; } low[b] = Math.sqrt(e / ((i1 - i0) / 2)); }
+  const sorted = [...low].sort((x, y) => x - y), ref = sorted[Math.floor(sorted.length * 0.8)] || 0;
+  return Array.from(low, (v) => (v < ref * 0.3 ? 'calme' : 'beat'));
+}
+if (typeof module !== 'undefined') module.exports = { detectBpm, analyzeSections };

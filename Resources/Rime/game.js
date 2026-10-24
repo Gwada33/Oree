@@ -3,10 +3,10 @@
   'use strict';
   const $ = (s) => document.querySelector(s);
   const PREFS_KEY = 'oree.rime.prefs';
-  const state = { mode: 'intro', src: 'builtin', bpm: 85, startBpm: 85, level: 'normal', length: 16, family: 'auto', muted: false, paused: false, starting: false, bars: [], total: 16, lastBeat: -1, startedAt: 0 };
+  const state = { mode: 'intro', src: 'builtin', bpm: 85, startBpm: 85, level: 'normal', length: 16, family: 'auto', style: 'histoire', syll: 1, sections: null, muted: false, paused: false, starting: false, bars: [], total: 16, lastBeat: -1, startedAt: 0 };
   let ac = null, master = null, gridStart = 0, nextStep = 0, beatDur = 60 / 85, timer = null, raf = 0, noiseBuf = null;
   const prod = { buffer: null, name: '', detected: null, offset: 0, nudgeMs: 0, source: null }; // la prod (instrumental) de l'utilisateur, décodée en mémoire
-  let previewTimer = null, previewSrc = null;
+  let story = null, previewTimer = null, previewSrc = null;
 
   /* ---------- forêt (aplats, générée une fois) ---------- */
   (function forest() {
@@ -59,30 +59,45 @@
   const pose = (p) => { el.lu.setAttribute('class', 'lu lu-' + p); };
   const shuffle = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
   const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch (e) { return {}; } };
-  const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify({ level: state.level, length: state.length, family: state.family, bpm: state.src === 'builtin' ? state.startBpm : undefined })); } catch (e) {} };
+  const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify({ level: state.level, length: state.length, family: state.family, style: state.style, syll: state.syll, bpm: state.src === 'builtin' ? state.startBpm : undefined })); } catch (e) {} };
 
   /* Une mesure = 4 cases (4 temps). La rime tombe dans la 4e. Toutes les 4 mesures, on change de famille de rimes (sauf si on en a choisi une). */
   let blockFamily = null, blockWords = [], lastFamilies = [];
   function bar(i) { // i = 0 est la mesure de décompte ; les vraies mesures commencent à 1
     if (state.bars[i]) return state.bars[i];
     if (i === 0) return (state.bars[0] = { count: true, cells: ['4', '3', '2', '1'] });
+    const calm = !!state.sections && state.sections.length > 0 && state.sections[i % state.sections.length] === 'calme'; // la prod n'a pas de beat ici
+    if (state.style === 'histoire') {
+      const l = (i - 1) % 8;
+      if (l === 0 || !story) { const pool = STORIES.filter((x) => x !== story); story = pool[Math.floor(Math.random() * pool.length)]; }
+      const line = story.lines[l], word = line[3], second = l % 2 === 1;
+      // beat : trois morceaux courts, un par temps. Sans beat : une seule phrase posée, plus lente, sur les trois premiers temps.
+      const head = calm ? [line.slice(0, 3).join(' ')] : line.slice(0, 3);
+      let cells = state.level === 'debutant' ? head : state.level === 'normal' ? [head[0]] : [];
+      while (cells.length < (calm ? 1 : 3)) cells.push('');
+      if (calm) cells = [cells[0], '', ''];
+      cells.push(state.level === 'expert' && second ? '…' : word);
+      return (state.bars[i] = { cells, calm, title: l === 0 ? story.titre : '', family: '', first: l === 0 });
+    }
     const k = (i - 1) % 4;
     if (k === 0 || !blockFamily) {
       const pool = FAMILIES.filter((f) => !lastFamilies.includes(f.id));
       blockFamily = state.family === 'auto' ? pool[Math.floor(Math.random() * pool.length)] : FAMILIES.find((f) => f.id === state.family);
       lastFamilies.push(blockFamily.id); if (lastFamilies.length > 8) lastFamilies.shift();
-      blockWords = shuffle(blockFamily.words.filter((w) => w.length <= 12 && !w.includes(' '))).slice(0, 4);
+      const ok = blockFamily.words.filter((w) => w.length <= 14 && !w.includes(' ') && syl(w) >= state.syll);
+      blockWords = shuffle(ok.length >= 4 ? ok : blockFamily.words.filter((w) => w.length <= 12 && !w.includes(' '))).slice(0, 4);
     }
     const word = blockWords[k] || blockWords[0];
     const fillers = shuffle(FILLERS).slice(0, 3);
     let cells;
-    if (state.level === 'debutant') cells = [...fillers, word];
-    else if (state.level === 'normal') cells = ['', '', '', word];
+    if (state.level === 'debutant' && !calm) cells = [...fillers, word];
+    else if (state.level === 'normal' || state.level === 'debutant') cells = ['', '', '', word];
     else if (state.level === 'avance') cells = ['', '', '', k < 2 ? word : '…'];
     else cells = ['', '', '', k === 0 ? word : '…'];
-    return (state.bars[i] = { cells, family: blockFamily.id, first: k === 0 });
+    return (state.bars[i] = { cells, calm, family: blockFamily.id, first: k === 0 });
   }
-  const rowHtml = (b, i) => `<div class="bar${b.count ? ' count' : ''}" data-i="${i}">${b.cells.map((c, n) => `<div class="cell${n === 3 && !b.count ? ' rime' : ''}${c === '…' ? ' hidden' : ''}">${c}</div>`).join('')}</div>`;
+  const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const rowHtml = (b, i) => `<div class="bar${b.count ? ' count' : ''}${b.calm ? ' calm' : ''}" data-i="${i}">${b.title ? `<div class="storytitle">${esc(b.title)}</div>` : ''}${b.cells.map((c, n) => `<div class="cell c${n}${n === 3 && !b.count ? ' rime' : ''}${c === '…' ? ' hidden' : ''}">${esc(c)}</div>`).join('')}</div>`;
   function ensureRows(upTo) {
     const have = el.rows.children.length;
     for (let i = have; i <= upTo && (state.total === Infinity || i <= state.total); i++) el.rows.insertAdjacentHTML('beforeend', rowHtml(bar(i), i));
@@ -102,7 +117,8 @@
     state.starting = false;
     if (state.src === 'prod' && !prod.buffer) { flashProd('Dépose d’abord ta prod, ou reviens au beat d’Orée.'); return; }
     stopPreview(); savePrefs();
-    state.bars = []; blockFamily = null; lastFamilies = []; state.paused = false; el.pause.textContent = 'Pause'; el.rows.innerHTML = '';
+    state.bars = []; story = null; blockFamily = null; lastFamilies = []; state.paused = false; el.pause.textContent = 'Pause'; el.rows.innerHTML = '';
+    state.sections = state.src === 'prod' ? analyzeSections(prod.mono, prod.buffer.sampleRate, state.startBpm, Math.max(0, prod.offset + prod.nudgeMs / 1000)) : null;
     state.total = state.length; state.bpm = state.startBpm; beatDur = 60 / state.bpm;
     gridStart = ac.currentTime + 0.4; nextStep = 0;
     if (state.src === 'prod') playProd(gridStart); else if (!timer) timer = setInterval(pump, 25);
@@ -136,7 +152,7 @@
       if (barIdx >= 0 && (state.total === Infinity || barIdx <= state.total)) {
         focusRow(barIdx); el.bar.textContent = barIdx === 0 ? 'décompte' : (state.total === Infinity ? `mesure ${barIdx}` : `mesure ${barIdx} / ${state.total}`);
         const row = el.rows.querySelector(`.bar[data-i="${barIdx}"]`);
-        if (row) [...row.children].forEach((c, n) => c.classList.toggle('on', n === beat % 4));
+        if (row) { const bt = beat % 4, hot = row.classList.contains('calm') && bt < 3 ? 0 : bt; row.querySelectorAll('.cell').forEach((c, n) => c.classList.toggle('on', n === hot)); }
         const b = state.bars[barIdx]; el.famLabel.textContent = b && b.family && state.level !== 'expert' ? 'rime en -' + b.family : '';
       }
     }
@@ -161,6 +177,15 @@
     $('#half').hidden = $('#double').hidden = src !== 'prod';
     if (src === 'prod' && prod.detected) setBpm(prod.detected.bpm);
   }
+  function showStructure() { // la structure de la prod, visible avant de jouer : une pastille par mesure
+    const box = $('#structure'); if (!prod.mono) { box.hidden = true; return; }
+    const sec = analyzeSections(prod.mono, prod.buffer.sampleRate, state.startBpm, Math.max(0, prod.offset + prod.nudgeMs / 1000)), calmN = sec.filter((x) => x === 'calme').length;
+    box.hidden = !sec.length; box.innerHTML = '';
+    const strip = document.createElement('div'); strip.className = 'strip';
+    sec.slice(0, 64).forEach((x, n) => { const d = document.createElement('i'); d.className = x; d.title = 'Mesure ' + (n + 1) + (x === 'calme' ? ' : sans beat' : ' : avec beat'); strip.appendChild(d); });
+    const t = document.createElement('span'); t.textContent = calmN ? `${calmN} mesure${calmN > 1 ? 's' : ''} sans beat sur ${sec.length} : les mots y seront posés plus lentement.` : 'Le beat est présent partout : les mots suivront chaque temps.';
+    box.append(strip, t);
+  }
   async function loadProd(file) {
     if (!file) return;
     startAudio(); flashProd('Analyse de « ' + file.name + ' »…');
@@ -169,7 +194,7 @@
       const n = Math.min(buf.length, Math.floor(buf.sampleRate * 90)), mono = new Float32Array(n), chans = buf.numberOfChannels;
       for (let c = 0; c < chans; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) mono[i] += d[i] / chans; }
       const r = detectBpm(mono, buf.sampleRate);
-      Object.assign(prod, { buffer: buf, name: file.name, detected: r, offset: r.offset, nudgeMs: 0 });
+      Object.assign(prod, { buffer: buf, mono, name: file.name, detected: r, offset: r.offset, nudgeMs: 0 }); showStructure();
       setBpm(r.bpm); $('#offVal').textContent = '0 ms'; $('#offsetRow').hidden = false;
       const sure = r.confidence >= 0.6 ? 'tempo sûr' : r.confidence >= 0.3 ? 'tempo probable, vérifie avec le clic' : 'tempo incertain : règle-le à la main ou tape-le';
       const info = $('#prodInfo'); info.hidden = false; info.innerHTML = ''; const b = document.createElement('b'); b.textContent = file.name; const em = document.createElement('em');
@@ -206,7 +231,7 @@
   $('#double').addEventListener('click', () => setBpm(Math.min(200, state.startBpm * 2)));
   $('#bpmInput').addEventListener('change', (e) => { const v = parseBpm(e.target.value); setBpm(v === null ? state.startBpm : v); });
   $('#bpmInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.stopPropagation(); e.target.blur(); } });
-  const nudge = (d) => { prod.nudgeMs += d; $('#offVal').textContent = (prod.nudgeMs > 0 ? '+' : '') + prod.nudgeMs + ' ms'; if (previewSrc) startPreview(); };
+  const nudge = (d) => { prod.nudgeMs += d; showStructure(); $('#offVal').textContent = (prod.nudgeMs > 0 ? '+' : '') + prod.nudgeMs + ' ms'; if (previewSrc) startPreview(); };
   $('#offMinus').addEventListener('click', () => nudge(-10)); $('#offPlus').addEventListener('click', () => nudge(10));
   $('#preview').addEventListener('click', () => (previewSrc ? stopPreview() : startPreview()));
   $('#file').addEventListener('change', (e) => loadProd(e.target.files[0]));
@@ -245,11 +270,15 @@
     else if (e.key === 'Escape' && state.mode === 'game') stopGame(true);
     else if ((e.key === 'm' || e.key === 'M') && !typing) { state.muted = !state.muted; if (master) master.gain.value = state.muted ? 0 : 0.55; }
   });
+  document.querySelectorAll('[data-style]').forEach((b) => b.addEventListener('click', () => { state.style = b.dataset.style; setChoice('style', state.style); $('#wordsOpts').hidden = state.style === 'histoire'; }));
+  document.querySelectorAll('[data-syll]').forEach((b) => b.addEventListener('click', () => { state.syll = Number(b.dataset.syll); setChoice('syll', state.syll); }));
   const prefs = loadPrefs();
+  if (prefs.style) { state.style = prefs.style; } if (prefs.syll) state.syll = prefs.syll;
+  setChoice('style', state.style); setChoice('syll', state.syll); $('#wordsOpts').hidden = state.style === 'histoire';
   if (prefs.level) { state.level = prefs.level; setChoice('level', state.level); }
   if ('length' in prefs) { state.length = prefs.length === null ? Infinity : prefs.length; setChoice('length', state.length === Infinity ? 'inf' : state.length); }
   if (prefs.family) { state.family = prefs.family; famSel.value = prefs.family; }
   setBpm(prefs.bpm || 85); setChoice('level', state.level); pose('idle'); show('intro');
-  window.__rime = { get audio() { return ac && ac.state; }, get time() { return ac ? ac.currentTime : -1; }, state, prod, startGame,
-    loadBuffer: (buf) => { const r = detectBpm(buf.getChannelData(0), buf.sampleRate); Object.assign(prod, { buffer: buf, name: 'test', detected: r, offset: r.offset, nudgeMs: 0 }); setSource('prod'); setBpm(r.bpm); return r; } };
+  window.__rime = { bar: (i) => bar(i), get audio() { return ac && ac.state; }, get time() { return ac ? ac.currentTime : -1; }, state, prod, startGame,
+    loadBuffer: (buf) => { const r = detectBpm(buf.getChannelData(0), buf.sampleRate); Object.assign(prod, { buffer: buf, mono: buf.getChannelData(0), name: 'test', detected: r, offset: r.offset, nudgeMs: 0 }); setSource('prod'); setBpm(r.bpm); showStructure(); return r; } };
 })();

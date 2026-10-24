@@ -11,3 +11,6 @@ if (rhymesFor('xyzqw').length) { bad++; console.log('un mot inconnu ne devrait r
 const shortWords = FAMILIES.filter((f) => f.words.filter((w) => w.length <= 12 && !w.includes(' ')).length < 4);
 if (shortWords.length) { bad++; console.log('familles sans 4 mots utilisables :', shortWords.map((f) => f.id).join(', ')); }
 console.log(FAMILIES.length, 'familles,', FAMILIES.reduce((n, f) => n + f.words.length, 0), 'mots,', FILLERS.length, 'débuts de phrase,', bad, 'problème(s)');
+{ const { STORIES, syl } = require(require('path').join(__dirname, '../../Resources/Rime/words.js')); let b = 0;
+  for (const s of STORIES) { if (s.lines.length !== 8) b++; for (const l of s.lines) if (l.length !== 4 || syl(l[3]) < 1 || l.some((c) => c.length > 40)) b++; }
+  console.log(STORIES.length, 'histoires,', b, 'problème(s)'); }

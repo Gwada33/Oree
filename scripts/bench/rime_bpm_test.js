@@ -11,3 +11,13 @@ for (const [bpm, off] of [[90, 0.2], [85, 0], [100, 0.37], [115, 0.1], [75, 0.5]
   console.log(bpm, '→', r.bpm, 'décalage', r.offset.toFixed(3), 'attendu', off, 'sûr', r.confidence.toFixed(2), ok && offOk ? (half ? 'ok (demi-tempo : le bouton ×2 corrige)' : 'ok') : 'ÉCART'); if (!ok || !offOk) bad++;
 }
 console.log(bad, 'écart(s)');
+// structure : 8 mesures avec beat, 4 mesures sans (break), 4 avec
+{
+  const { analyzeSections } = require(require('path').join(__dirname, '../../Resources/Rime/bpm.js'));
+  const sr = 44100, bpm = 90, bar = 4 * 60 / bpm, full = synth(bpm, bar * 16, 0), cut = Math.floor(bar * 8 * sr), end = Math.floor(bar * 12 * sr);
+  for (let i = cut; i < end; i++) full[i] = 0.02 * Math.sin(2 * Math.PI * 880 * i / sr); // nappe aiguë, sans grave
+  const sec = analyzeSections(full, sr, bpm, 0), want = [...Array(8).fill('beat'), ...Array(4).fill('calme'), ...Array(4).fill('beat')];
+  const wrong = want.filter((w, i) => sec[i] !== w).length;
+  console.log('structure', sec.map((x) => x[0]).join(''), wrong ? 'ÉCART ' + wrong : 'ok'); if (wrong > 1) bad++;
+}
+console.log(bad, 'écart(s) au total');

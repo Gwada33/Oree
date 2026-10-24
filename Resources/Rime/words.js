@@ -78,4 +78,33 @@ function rhymeVerdict(target, typed) {
   if (fa === fb) return 'riche';
   return (fa.vow || fa.id) === (fb.vow || fb.id) ? 'assonance' : null;
 }
-if (typeof module !== 'undefined') module.exports = { FAMILIES, FILLERS, familyOf, rhymeVerdict, clean, rhymesFor };
+
+/* Nombre de syllabes (approximation par groupes de voyelles ; le « e » final muet ne compte pas). Suffit pour trier des mots courants. */
+function syl(w) {
+  const t = clean(w).replace(/(es|e|ent)$/, (m, x, i, str) => (/[aeiouyéèêàâîïôûù]/.test(str[i - 1] || '') ? m : ''));
+  const g = t.match(/[aeiouyéèêëàâîïôûùœ]+/g); return Math.max(1, g ? g.length : 1);
+}
+/* Histoires : 8 lignes qui se suivent, rimes en couplets (AABBCCDD). Chaque ligne = 3 morceaux + la rime (4ᵉ case, plusieurs syllabes). */
+const STORIES = [
+  { titre: 'La route de nuit', lines: [
+    ['Minuit sonne,', 'j’ai mon sac,', 'je m’en vais vers', 'l’horizon'], ['Plus de bruit,', 'plus de murs,', 'je laisse derrière', 'la maison'],
+    ['Le vent se lève,', 'il m’emporte,', 'il me guide dans', 'la tempête'], ['Les phares brillent,', 'la pluie tombe,', 'mais je cours vers', 'la fête'],
+    ['Un vieil ami', 'm’ouvre la porte,', 'et on se rappelle', 'toute l’histoire'], ['On rit, on chante,', 'rien ne s’efface,', 'tout reste gravé', 'dans la mémoire'],
+    ['Au petit jour,', 'le soleil se lève,', 'j’ai retrouvé', 'mon chemin'], ['Je repars,', 'sans regret, sans peur,', 'je cours vers', 'le lendemain'] ] },
+  { titre: 'Le texte de la nuit', lines: [
+    ['Je prends mon stylo,', 'j’écris sur la feuille,', 'et mes mots s’envolent', 'comme une plume'], ['Mon cœur tape,', 'ma tête fume,', 'je me perds', 'dans la brume'],
+    ['Mes potes arrivent,', 'on s’installe,', 'on pose les verres', 'sur la table'], ['Chaque phrase', 'que je lance', 'devient une', 'fable'],
+    ['Le beat tourne,', 'la nuit avance,', 'je sens monter', 'la confiance'], ['Plus de doute,', 'plus de crainte,', 'je suis fier de', 'ma chance'],
+    ['Le jour se lève,', 'la page est pleine,', 'j’ai tout donné', 'par envie'], ['Et ce soir-là,', 'je sais enfin', 'que la musique,', 'c’est ma vie'] ] },
+  { titre: 'La luciole', lines: [
+    ['Une luciole', 'traverse la forêt,', 'elle cherche', 'la lumière'], ['Entre les arbres,', 'elle danse,', 'et derrière elle,', 'la poussière'],
+    ['Un hibou', 'la suit des yeux,', 'il lui confie', 'un secret'], ['Sois patiente,', 'avance sans bruit,', 'reste calme', 'et discret'],
+    ['Au bord du lac,', 'un renard dort,', 'elle l’éclaire', 'de son or'], ['Il sourit,', 'ouvre un œil,', 'et lui dit :', 'reste encore'],
+    ['Ensemble ils marchent', 'sous la lune claire,', 'jusqu’à la', 'clairière'], ['Et ils dansent', 'sans une prière', 'toute la', 'nuit entière'] ] },
+  { titre: 'Le grand rêve', lines: [
+    ['Je viens de loin,', 'j’ai rien dans les mains,', 'mais j’ai en tête', 'un grand destin'], ['Chaque jour', 'je me lève tôt,', 'je bosse', 'dès le matin'],
+    ['On me dit :', 'tu rêves trop,', 'moi je reste', 'invincible'], ['Chaque échec', 'me rend plus fort,', 'chaque rêve', 'est possible'],
+    ['Un soir d’été', 'sur une grande scène,', 'la foule crie', 'mon prénom'], ['Je ferme les yeux,', 'je respire à fond,', 'et je lance', 'ma chanson'],
+    ['Mes proches pleurent', 'dans les gradins,', 'je leur dis :', 'j’ai tout donné'], ['Le rêve est vrai,', 'personne n’y croyait,', 'mais moi', 'je l’ai gagné'] ] },
+];
+if (typeof module !== 'undefined') module.exports = { syl, STORIES, FAMILIES, FILLERS, familyOf, rhymeVerdict, clean, rhymesFor };
