@@ -27,6 +27,7 @@ mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 mkdir -p "$APP_DIR/Contents/Resources/Fonts"
 cp Resources/Fonts/*.ttf "$APP_DIR/Contents/Resources/Fonts/"
+mkdir -p "$APP_DIR/Contents/Resources/Rime" && cp Resources/Rime/* "$APP_DIR/Contents/Resources/Rime/"   # le jeu caché « La Rime » (oree://rime/)
 cp Resources/THIRD_PARTY_NOTICES.md "$APP_DIR/Contents/Resources/"   # licences et mentions (À propos › Licences)
 cp "$BUILD_DIR/$EXECUTABLE_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
 # The download engine runs as its own process (a launchd agent started on demand), so it ships beside the app.

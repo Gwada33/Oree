@@ -227,6 +227,7 @@ extension BrowserWindowController {
                 actions.append((digestPanel.state == "closed" ? "L'essentiel" : "Fermer « L'essentiel »", "list.bullet.clipboard", { $0.digestAction() }))
             }
             actions.append(("Demander à l'IA", "sparkles", { $0.askAIAction() }))
+            actions.append(("Jouer à La Rime (rimes en rythme)", "music.quarternote.3", { $0.openFromPalette("oree://rime/", inNewTab: true) }))
             actions.append(contentsOf: webPanelActions())
             actions.append(contentsOf: responsiveActions())
             actions.append(contentsOf: profileActions())

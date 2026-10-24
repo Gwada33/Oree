@@ -65,6 +65,7 @@ enum StartPage {
             </div>
           </main>
           <a class="custom" href="\(actionScheme)://customize">Personnaliser la page</a>
+          <a class="custom rime" href="oree://rime/">♪ La Rime · jeu de rimes en rythme</a>
         <script>\(script)</script>
         </body>
         </html>
@@ -226,6 +227,7 @@ enum StartPage {
         .space{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 10px;border-radius:999px;background:var(--h-soft);color:var(--h-ink);text-decoration:none;font-weight:600}
         .space .ic{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
         .space .count{opacity:.7;font-weight:500}
+        .custom.rime{left:auto;right:20px}
         .custom{position:fixed;left:20px;bottom:16px;height:30px;padding:0 12px;border-radius:var(--r-sm);background:var(--raised);box-shadow:var(--s2);color:var(--text);font-size:12px;font-weight:500;display:inline-flex;align-items:center;text-decoration:none}
         a:focus-visible{outline:2px solid var(--h);outline-offset:2px}
         body.anim .home>.col{animation:up .26s cubic-bezier(.2,.8,.2,1) both}body.anim .home>.col+.col{animation-delay:.04s}
@@ -281,8 +283,17 @@ final class OreeSchemeHandler: NSObject, WKURLSchemeHandler {
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}
 
+    /// Le jeu « La Rime » (oree://rime/) : cinq fichiers de l’app, rien d’autre.
+    private static let rimeFiles: [String: String] = ["index.html": "text/html", "style.css": "text/css", "game.js": "text/javascript", "words.js": "text/javascript", "bpm.js": "text/javascript"]
+
     private func resolve(_ url: URL) -> (Data, String)? {
         let components = url.pathComponents.filter { $0 != "/" }
+        if url.host == "rime", components.first != "fonts" {
+            let name = components.first ?? "index.html"
+            guard let mime = Self.rimeFiles[name], let dir = Bundle.main.resourceURL?.appendingPathComponent("Rime"),
+                  let data = try? Data(contentsOf: dir.appendingPathComponent(name)) else { return nil }
+            return (data, mime)
+        }
         if components.first == "fonts", components.count == 2 {
             let name = (components[1] as NSString).lastPathComponent   // no path tricks
             guard name.hasSuffix(".ttf"),

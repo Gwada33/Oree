@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La Rime</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg id="forest" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax slice" aria-hidden="true"></svg>
+<div id="moon" aria-hidden="true"></div>
+
+<main>
+  <section id="intro">
+    <p class="kicker">un jeu d’Orée</p>
+    <h1>La Rime</h1>
+    <p class="lead">Un beat tourne. Chaque mesure, 4 cases : une balle saute de case en case, <b>la rime tombe dans la 4ᵉ</b>.<br>Tu rappes à voix haute dessus. Orée n’écoute rien et ne note rien : c’est entre toi et le beat.</p>
+    <div class="src" role="tablist" aria-label="Choisis ton beat">
+      <button class="tab on" data-src="builtin" role="tab" aria-selected="true">Le beat d’Orée</button>
+      <button class="tab" data-src="prod" role="tab" aria-selected="false">Ma prod</button>
+    </div>
+    <div id="prodBox" hidden>
+      <label id="drop" class="drop" tabindex="0">
+        <span id="dropText">Dépose ta prod ici <small>(mp3, wav, m4a…)</small> ou <u>choisis un fichier</u></span>
+        <input type="file" id="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg" hidden>
+      </label>
+      <p id="prodInfo" class="prodinfo" hidden></p>
+    </div>
+    <div class="bpmbox">
+      <div class="bpmrow">
+        <button class="step" id="half" title="Moitié moins vite (÷2)">÷2</button>
+        <button class="step" id="bpmMinus" aria-label="Moins vite">−</button>
+        <label class="bpmval"><input id="bpmInput" inputmode="decimal" aria-label="Tempo en BPM" value="85"><span>BPM</span></label>
+        <button class="step" id="bpmPlus" aria-label="Plus vite">+</button>
+        <button class="step" id="double" title="Deux fois plus vite (×2)">×2</button>
+        <button class="chip" id="tap">Taper le tempo</button>
+      </div>
+      <div class="presets" id="presets"><button class="chip" data-bpm="70">70</button><button class="chip on" data-bpm="85">85</button><button class="chip" data-bpm="100">100</button><button class="chip" data-bpm="115">115</button></div>
+      <div class="bpmrow" id="offsetRow" hidden>
+        <span class="lab">Premier temps</span>
+        <button class="step" id="offMinus" aria-label="Plus tôt de 10 ms">−</button>
+        <b id="offVal">0 ms</b>
+        <button class="step" id="offPlus" aria-label="Plus tard de 10 ms">+</button>
+        <button class="chip" id="preview">▶ Écouter avec le clic</button>
+      </div>
+    </div>
+    <div class="opts">
+      <div class="opt"><span class="lab">Niveau</span>
+        <button class="chip" data-level="debutant">Débutant</button><button class="chip on" data-level="normal">Normal</button><button class="chip" data-level="avance">Avancé</button><button class="chip" data-level="expert">Expert</button></div>
+      <div class="opt"><span class="lab">Durée</span>
+        <button class="chip" data-length="8">8 mesures</button><button class="chip on" data-length="16">16</button><button class="chip" data-length="32">32</button><button class="chip" data-length="inf">Sans fin</button></div>
+      <div class="opt"><span class="lab">Rimes</span><select id="famSel" aria-label="Famille de rimes"></select></div>
+      <p class="legend" id="legend">Débutant : des débuts de phrase dans les 3 premières cases · Normal : seulement la rime · Avancé : la rime disparaît à la 3ᵉ mesure · Expert : on te la montre une seule fois.</p>
+    </div>
+    <button id="start" class="go">Jouer <kbd>Entrée</kbd></button>
+    <details class="dict"><summary>Dictionnaire de rimes</summary>
+      <div class="dictrow"><input id="dictIn" placeholder="Un mot : maison, soir, cœur…" aria-label="Chercher des rimes" autocomplete="off" spellcheck="false"><button id="randomWord" class="chip">Un mot au hasard</button><b id="randomOut"></b></div>
+      <div id="dictOut" class="dictout"></div></details>
+    <p class="foot"><kbd>Espace</kbd> pause · <kbd>M</kbd> coupe le son · <kbd>Échap</kbd> quitte · ta prod reste sur ton Mac, rien n’est envoyé</p>
+  </section>
+
+  <section id="game" hidden>
+    <header class="top">
+      <span id="barNo" class="bn">décompte</span>
+      <span id="famLabel" class="fam"></span>
+      <span class="bpmtag"><span id="bpmShow">85</span> BPM</span>
+      <span class="btns"><button id="pauseBtn" class="chip">Pause</button><button id="stopBtn" class="chip">Arrêter</button></span>
+    </header>
+    <div id="stage" class="stagebox"><div id="rows" class="rows"></div></div>
+    <p id="hint" class="hint"></p>
+  </section>
+
+  <section id="over" hidden>
+    <h2>Bien rappé.</h2>
+    <p class="big"><b id="finalBars">0</b> mesures</p>
+    <p class="lead">Un autre beat, une autre rime ?</p>
+    <div class="endbtns"><button id="again" class="go">Rejouer <kbd>Entrée</kbd></button><button id="changeBtn" class="chip">Changer les réglages</button></div>
+  </section>
+</main>
+
+<svg id="luciole" class="lu lu-idle" viewBox="0 0 40 40" aria-hidden="true"><circle class="h" cx="20" cy="26.5" r="11"/><g transform="rotate(-30 11 10)"><ellipse class="w wl" cx="11" cy="10" rx="6" ry="3.3"/></g><g transform="rotate(30 29 10)"><ellipse class="w wr" cx="29" cy="10" rx="6" ry="3.3"/></g><g class="bd"><path class="a" d="M17.4 10Q15.8 6.4 13.2 5.4M22.6 10Q24.2 6.4 26.8 5.4"/><circle class="k" cx="13.2" cy="5.4" r="1.3"/><circle class="k" cx="26.8" cy="5.4" r="1.3"/><circle class="l" cx="20" cy="26.5" r="5.6"/><circle class="k" cx="20" cy="17" r="8.6"/><g class="es"><rect class="e" x="16.1" y="14.8" width="2.5" height="4.2" rx="1.25"/><rect class="e" x="21.4" y="14.8" width="2.5" height="4.2" rx="1.25"/></g></g></svg>
+
+<script src="words.js"></script>
+<script src="bpm.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
