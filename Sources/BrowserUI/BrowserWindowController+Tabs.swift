@@ -35,6 +35,7 @@ extension BrowserWindowController {
         config.userContentController.addUserScript(AutofillScript.makeUserScript())
         config.userContentController.addUserScript(MediaScript.makeUserScript())
         if SettingsStore.shared.eventJournalEnabled, !isPrivate { config.userContentController.addUserScript(JournalScript.makeUserScript()) }
+        if !isPrivate { config.userContentController.addUserScript(HoverPreconnectScript.makeUserScript()) }
         if SettingsStore.shared.autoRejectCookieBanners { config.userContentController.addUserScript(CookieBannerScript.makeUserScript()) }
         if SettingsStore.shared.sendGlobalPrivacyControl { config.userContentController.addUserScript(PrivacyTools.gpcUserScript()) }
         config.preferences.minimumFontSize = CGFloat(SettingsStore.shared.minimumFontSize)

@@ -674,6 +674,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         scripts.append(VideoUpscaleScript.makeUserScript(auto: SettingsStore.shared.videoUpscale, sharpness: SettingsStore.shared.videoUpscaleSharpness,
                                                          engine: SettingsStore.shared.videoUpscaleEngine == "apple" && SuperResolution.isSupported ? "apple" : "webgl"))
         if SettingsStore.shared.eventJournalEnabled, !isPrivate { scripts.append(JournalScript.makeUserScript()) }
+        if !isPrivate { scripts.append(HoverPreconnectScript.makeUserScript()) }
         if SettingsStore.shared.autoRejectCookieBanners, !ProtectionPolicy.isExempt(host: url?.host, list: SettingsStore.shared.protectionExemptHosts) { scripts.append(CookieBannerScript.makeUserScript()) }      // le journal : jamais dans un onglet privé
         if SettingsStore.shared.sendGlobalPrivacyControl { scripts.append(PrivacyTools.gpcUserScript()) }
         if SettingsStore.shared.resumeEnabled { scripts.append(ResumeScript.makeUserScript()) }

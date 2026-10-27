@@ -359,6 +359,7 @@ final class Tab: NSObject {
         controller.add(ResumeMessageHandler(), contentWorld: ResumeScript.world, name: ResumeScript.handlerName)
         controller.add(MediaMessageHandler(), contentWorld: MediaScript.world, name: MediaScript.handlerName)
         controller.add(JournalMessageHandler(), contentWorld: JournalScript.world, name: JournalScript.handlerName)
+        controller.add(HoverPreconnectHandler(), contentWorld: HoverPreconnectScript.world, name: HoverPreconnectScript.handlerName)
         controller.add(LucioleSelectionHandler(), contentWorld: LucioleSelectionScript.world, name: LucioleSelectionScript.handlerName)
         controller.add(VideoUpscaleHandler(), contentWorld: VideoUpscaleScript.world, name: VideoUpscaleScript.handlerName)
         // Ghost hibernation: the page-side capture needs hooks installed before the page's own scripts run, so it is only
