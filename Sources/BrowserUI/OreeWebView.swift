@@ -165,7 +165,7 @@ final class OreeWebView: WKWebView {
 final class GestureTrailView: NSView {
     private var points: [CGPoint] = []
     private var label: String?
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     func update(points: [CGPoint], label: String?) { self.points = points; self.label = label; needsDisplay = true }
 

@@ -57,8 +57,9 @@ class SurfaceView: NSView {
         addTrackingArea(area)
         hoverArea = area
     }
-    override func mouseEntered(with event: NSEvent) { if event.trackingArea === hoverArea { onHover?(true) } }
-    override func mouseExited(with event: NSEvent) { if event.trackingArea === hoverArea { onHover?(false) } }
+    // nonisolated + mainActorNow : le contrôle d'exécuteur inséré par le compilateur plante sur macOS 27 (Docs/plantages-macos27.md)
+    nonisolated override func mouseEntered(with event: NSEvent) { nonisolated(unsafe) let e = event; mainActorNow { if e.trackingArea === hoverArea { onHover?(true) } } }
+    nonisolated override func mouseExited(with event: NSEvent) { nonisolated(unsafe) let e = event; mainActorNow { if e.trackingArea === hoverArea { onHover?(false) } } }
 
     override func updateLayer() {
         guard let layer else { return }
@@ -97,7 +98,7 @@ final class KbdChip: SurfaceView {
         label.setContentHuggingPriority(.required, for: .horizontal)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 // MARK: - Icon button
@@ -649,8 +650,8 @@ final class AddressPillView: SurfaceView, NSTextFieldDelegate {
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
-    override func mouseEntered(with event: NSEvent) { hovered = true }
-    override func mouseExited(with event: NSEvent) { hovered = false }
+    nonisolated override func mouseEntered(with event: NSEvent) { mainActorNow { hovered = true } }
+    nonisolated override func mouseExited(with event: NSEvent) { mainActorNow { hovered = false } }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
         guard !isEditing else { return }
@@ -673,7 +674,7 @@ final class LisiereView: NSView {
         Theme.hue(hue).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 1.5, yRadius: 1.5).fill()
     }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 // MARK: - Sidebar rows
@@ -846,7 +847,7 @@ final class SpinnerRingView: NSView {
         spin.repeatCount = .infinity
         arc.add(spin, forKey: "spin")
     }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 // MARK: - Group header

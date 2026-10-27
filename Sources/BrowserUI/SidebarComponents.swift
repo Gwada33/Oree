@@ -3,7 +3,7 @@ import BrowserCore
 
 /// An icon that never takes the click: pressing exactly on it must still press the button behind it.
 final class PassthroughImageView: NSImageView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// A favorite in the 4-column grid: the site badge on a soft tile.
@@ -159,5 +159,5 @@ final class LoadingBarView: NSView {
         fill.backgroundColor = Theme.cg(color, in: self)
     }
 
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }   // never steals clicks from the page
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }   // never steals clicks from the page
 }

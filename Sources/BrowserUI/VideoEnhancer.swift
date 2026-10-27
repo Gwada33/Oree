@@ -234,7 +234,7 @@ final class VideoEnhancer {
 final class EnhancerView: NSView {
     private let display = AVSampleBufferDisplayLayer()
     override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override init(frame: NSRect) {
         super.init(frame: frame)

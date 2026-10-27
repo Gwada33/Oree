@@ -38,7 +38,7 @@ final class LucioleView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override var intrinsicContentSize: NSSize { NSSize(width: side, height: side) }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); recolor() }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); apply(state) }   // les boucles repartent à l'ouverture
 

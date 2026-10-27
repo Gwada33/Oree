@@ -41,7 +41,7 @@ final class AgentCursor: NSView, AgentPresence {
     private var generation = 0            // chaque nouvelle tâche (ou arrêt) invalide un départ programmé
 
     override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     init() {
         super.init(frame: .zero)
