@@ -15,7 +15,8 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     }
 
     let controller: WKWebExtensionController
-    weak var windowController: BrowserWindowController?
+    weak var windowController: BrowserWindowController? { didSet { bridge.window = windowController } }
+    let bridge = ExtensionBridge()
     /// Called whenever the set of extensions or an action (icon, badge) changes.
     var onChange: (() -> Void)?
     /// The automation channel can't click a permission dialog.
@@ -66,6 +67,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     private func load(_ record: Record) async {
         let directory = root.appendingPathComponent(record.directory, isDirectory: true)
         do {
+            Self.applyCompat(to: directory)
             let webExtension = try await WKWebExtension(resourceBaseURL: directory)
             let context = WKWebExtensionContext(for: webExtension)
             context.uniqueIdentifier = record.id
@@ -77,6 +79,16 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         } catch {
             Log.tabs.error("Could not load extension \(record.id, privacy: .public): \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// Le script de compatibilité (API chrome.* que WebKit n'a pas) est ajouté à la copie de l'extension avant son chargement.
+    private static func applyCompat(to directory: URL) {
+        guard let folder = Bundle.main.resourceURL?.appendingPathComponent("ExtCompat", isDirectory: true),
+              let core = try? String(contentsOf: folder.appendingPathComponent("core.js"), encoding: .utf8) else { return }
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder.appendingPathComponent("sections").path)) ?? []).filter { $0.hasSuffix(".js") }.sorted()
+        let sections = names.compactMap { try? String(contentsOf: folder.appendingPathComponent("sections/\($0)"), encoding: .utf8) }
+        do { try ExtensionCompat.apply(to: directory, shim: Data(ExtensionCompat.assemble(core: core, sections: sections).utf8)) }
+        catch { Log.tabs.error("Compatibilité des extensions : \(String(describing: error), privacy: .public)") }
     }
 
     private func save() {
@@ -263,6 +275,18 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         if let url = configuration.url, url.scheme != "http", url.scheme != "https" { tab = windowController.newTab(extensionPage: url, context: extensionContext) }      // une page de l'extension elle-même
         else { tab = windowController.newTab(urlString: configuration.url?.absoluteString, isPrivate: false) }
         completionHandler(tab, nil)
+    }
+
+    @objc(webExtensionController:sendMessage:toApplicationWithIdentifier:forExtensionContext:replyHandler:)
+    func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?, for extensionContext: WKWebExtensionContext, replyHandler: @escaping (Any?, (any Error)?) -> Void) {
+        nonisolated(unsafe) let request = message, reply = replyHandler
+        Task { @MainActor in reply(await self.bridge.handle(request, context: extensionContext), nil) }
+    }
+
+    @objc(webExtensionController:connectUsingMessagePort:forExtensionContext:completionHandler:)
+    func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort, for extensionContext: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
+        bridge.attach(port, context: extensionContext)
+        completionHandler(nil)
     }
 
     @objc(webExtensionController:openOptionsPageForExtensionContext:completionHandler:)

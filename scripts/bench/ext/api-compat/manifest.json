@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"Test API ajoutées","version":"1.0","description":"Vérifie les API chrome.* ajoutées par Orée","permissions":["storage","tabs","webNavigation","scripting","activeTab","alarms"],"host_permissions":["<all_urls>"],"background":{"service_worker":"sw.js","type":"module"},"action":{"default_popup":"popup.html"}}

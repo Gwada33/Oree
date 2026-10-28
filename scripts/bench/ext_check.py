@@ -23,7 +23,7 @@ if __name__ == "__main__":
     def check(name, ok, detail=""): results.append(bool(ok)); print(("  ok     " if ok else "  ÉCHEC  ") + name + (f"   [{detail}]" if detail and not ok else ""))
     try:
         time.sleep(8); print("   page :", ui("load", "https://example.com")); time.sleep(4)
-        names = ["popup-mv3", "popup-mv2", "content-badge", "messaging", "options-ui"]
+        names = ["popup-mv3", "popup-mv2", "content-badge", "messaging", "options-ui", "api-compat"]
         for n in names:
             r = ui("install", os.path.join(ROOT, "scripts/bench/ext", n)); time.sleep(1); check(f"installe {n}", r == "installed", r)
         time.sleep(3)
@@ -38,6 +38,13 @@ if __name__ == "__main__":
             check(f"{n} : le popup est rendu (titre {title})", r.get("title") == title, str(r))
             if body: check(f"{n} : le contenu dynamique est là ({body})", body in (r.get("body") or ""), str(r))
             w, _, h = (r.get("wanted") or r.get("size") or "0x0").partition("x"); check(f"{n} : le popover a une taille", int(w or 0) > 50 and int(h or 0) > 30, str(r))
+        r = jo(ui("extop", "popup:5")); res = {}
+        try: res = json.loads(r.get("title") or "{}")
+        except Exception: pass
+        print("   api-compat", res.get("__sw"))
+        for name, v in res.items():
+            if name != "__sw": check(f"API ajoutées : {name}", v is True, str(v))
+        check("API ajoutées : le popup a bien rendu ses résultats", len(res) >= 8, str(r))
         for i, (n, title) in enumerate([("popup-mv3", "OPTIONS-A"), ("popup-mv2", "OPTIONS-B"), ("content-badge", None), ("messaging", None), ("options-ui", "OPTIONS-E")]):
             r = jo(ui("extop", f"options:{i}")); print("   options", n, r)
             if title is None: check(f"{n} : sans réglages, rien ne s'ouvre", r.get("opened") is False, str(r)); continue
