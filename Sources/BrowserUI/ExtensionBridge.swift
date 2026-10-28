@@ -16,6 +16,8 @@ final class ExtensionBridge {
     let panels = PanelStates()
     let notifications = NotificationCenterBridge()
     let system = SystemStates()
+    let downloadWatch = DownloadWatch()
+    let nativeHosts = NativeHostRegistry()
     weak var manager: ExtensionManager?
     let debuggerControllers = NSHashTable<WKUserContentController>.weakObjects()
 
@@ -44,7 +46,7 @@ final class ExtensionBridge {
         all["log"] = Method(permission: nil) { [self] a, context in
             callLog.append("\(context.webExtension.displayName ?? "?") · \(a["kind"] ?? "journal") : \(a["message"] ?? "") \(a["where"] ?? "")"); return NSNull()
         }
-        for family in [dataMethods(), debuggerMethods(), panelMethods(), notificationMethods(), systemMethods()] { all.merge(family) { first, _ in first } }
+        for family in [dataMethods(), debuggerMethods(), panelMethods(), notificationMethods(), systemMethods(), downloadMethods()] { all.merge(family) { first, _ in first } }
         return all
     }
 

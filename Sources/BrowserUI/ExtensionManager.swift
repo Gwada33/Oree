@@ -399,14 +399,29 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     @objc(webExtensionController:sendMessage:toApplicationWithIdentifier:forExtensionContext:replyHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?, for extensionContext: WKWebExtensionContext, replyHandler: @escaping (Any?, (any Error)?) -> Void) {
-        guard applicationIdentifier == ExtensionBridge.applicationID else { replyHandler(nil, NSError(domain: "Orée", code: 1, userInfo: [NSLocalizedDescriptionKey: "Specified native messaging host not found."])); return }
+        bridge.note("délégué : message natif vers \(applicationIdentifier ?? "?")")
+        if let host = applicationIdentifier, host != ExtensionBridge.applicationID {
+            nonisolated(unsafe) let request = message, reply = replyHandler
+            Task { @MainActor in
+                do { reply(try await self.bridge.nativeHostOneShot(host, message: request, context: extensionContext), nil) }
+                catch { reply(nil, NSError(domain: "Orée", code: 1, userInfo: [NSLocalizedDescriptionKey: (error as? ExtensionBridge.Failure)?.message ?? error.localizedDescription])) }
+            }
+            return
+        }
         nonisolated(unsafe) let request = message, reply = replyHandler
         Task { @MainActor in reply(await self.bridge.handle(request, context: extensionContext), nil) }
     }
 
     @objc(webExtensionController:connectUsingMessagePort:forExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort, for extensionContext: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
-        guard port.applicationIdentifier == ExtensionBridge.applicationID else { completionHandler(NSError(domain: "Orée", code: 1, userInfo: [NSLocalizedDescriptionKey: "Specified native messaging host not found."])); return }
+        if let host = port.applicationIdentifier, host != ExtensionBridge.applicationID {
+            nonisolated(unsafe) let p = port, done = completionHandler
+            Task { @MainActor in
+                do { try await self.bridge.nativeHostConnect(host, port: p, context: extensionContext); done(nil) }
+                catch { done(NSError(domain: "Orée", code: 1, userInfo: [NSLocalizedDescriptionKey: (error as? ExtensionBridge.Failure)?.message ?? error.localizedDescription])) }
+            }
+            return
+        }
         bridge.attach(port, context: extensionContext)
         completionHandler(nil)
     }

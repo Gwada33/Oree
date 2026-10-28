@@ -37,6 +37,19 @@
     insertCSS: api(async (a, b) => { const tabId = typeof a === 'number' ? a : undefined; const d = typeof a === 'number' ? b : a; await C.scripting.insertCSS({ target: { tabId, allFrames: !!d.allFrames }, ...(d.file ? { files: [d.file] } : { css: d.code }) }); }),
     removeCSS: api(async (a, b) => { const tabId = typeof a === 'number' ? a : undefined; const d = typeof a === 'number' ? b : a; await C.scripting.removeCSS({ target: { tabId, allFrames: !!d.allFrames }, ...(d.file ? { files: [d.file] } : { css: d.code }) }); }),
   });
+  /* chrome.windows.create : Orée ne laisse pas une extension ouvrir une fenêtre à elle ; la page demandée s'ouvre alors dans un onglet de la fenêtre actuelle. */
+  if (C.windows && typeof C.windows.create === 'function' && C.tabs && C.tabs.create) {
+    const original = C.windows.create.bind(C.windows);
+    const replacement = api(async (info = {}) => {
+      try { return await original(info); } catch (e) {
+        const urls = [].concat(info.url || []);
+        const tabs = []; for (const url of urls.length ? urls : [undefined]) tabs.push(await C.tabs.create(url ? { url, active: info.focused !== false } : { active: info.focused !== false }));
+        const current = await C.windows.getCurrent().catch(() => ({ id: tabs[0].windowId, focused: true, type: 'normal', state: 'normal', incognito: false }));
+        return { ...current, tabs };
+      }
+    });
+    try { C.windows.create = replacement; if (B && B.windows) B.windows.create = replacement; } catch (e) { diag.failed.push('windows.create'); }
+  }
   /* chrome.windows */
   extend('windows', { WindowState: { NORMAL: 'normal', MINIMIZED: 'minimized', MAXIMIZED: 'maximized', FULLSCREEN: 'fullscreen', LOCKED_FULLSCREEN: 'locked-fullscreen' }, onBoundsChanged: makeEvent() });
   /* chrome.storage.managed : les règles d'entreprise (il n'y en a pas) */

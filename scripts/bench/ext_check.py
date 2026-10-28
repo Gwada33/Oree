@@ -17,13 +17,16 @@ def jo(s):
 
 if __name__ == "__main__":
     tmp = tempfile.mkdtemp(prefix="ext-"); auto = os.path.join(tmp, "auto"); os.makedirs(auto); os.makedirs(os.path.join(tmp, "ext")); os.environ["HB_AUTOMATION_DIR"] = auto
-    env = dict(os.environ, HB_FRESH_SESSION="1", HB_EXT_CONTROLLER_ID=str(__import__("uuid").uuid4()).upper(), HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AI_NO_AGENT="1", HB_TEST_KEYS_DIR=os.path.join(tmp, "keys"))
+    hosts = os.path.join(tmp, "hosts"); os.makedirs(hosts)
+    cid = open(os.path.join(ROOT, "scripts/bench/ext/native-host/ID.txt")).read().strip()
+    json.dump({"name": "com.oree.test_host", "description": "essai", "path": os.path.join(ROOT, "scripts/bench/ext/native-host/host.py"), "type": "stdio", "allowed_origins": [f"chrome-extension://{cid}/"]}, open(os.path.join(hosts, "com.oree.test_host.json"), "w"))
+    env = dict(os.environ, HB_NATIVE_HOSTS_DIR=hosts, HB_FRESH_SESSION="1", HB_EXT_CONTROLLER_ID=str(__import__("uuid").uuid4()).upper(), HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AI_NO_AGENT="1", HB_TEST_KEYS_DIR=os.path.join(tmp, "keys"))
     p = subprocess.Popen([os.path.join(APP, "Contents/MacOS/Oree"), "--automation"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     results = []
     def check(name, ok, detail=""): results.append(bool(ok)); print(("  ok     " if ok else "  ÉCHEC  ") + name + (f"   [{detail}]" if detail and not ok else ""))
     try:
         time.sleep(8); print("   page :", ui("load", "https://example.com")); time.sleep(4)
-        names = ["popup-mv3", "popup-mv2", "content-badge", "messaging", "options-ui", "api-compat", "debugger-test", "native-apis", "system-apis"]
+        names = ["popup-mv3", "popup-mv2", "content-badge", "messaging", "options-ui", "api-compat", "debugger-test", "native-apis", "system-apis", "native-host"]
         for n in names:
             r = ui("install", os.path.join(ROOT, "scripts/bench/ext", n)); time.sleep(1); check(f"installe {n}", r == "installed", r)
         time.sleep(3)
@@ -62,6 +65,11 @@ if __name__ == "__main__":
         except Exception: pass
         for name, v in res.items(): check(f"API système : {name}", v is True, str(v))
         check("API système : le test s'est exécuté", len(res) >= 14, str(r)[:300])
+        ui("extop", "popupstart:9"); r = jo(ui("extop", "popupread:9")); res = {}
+        try: res = json.loads(r.get("title") or "{}")
+        except Exception: pass
+        for name, v in res.items(): check(f"Messagerie native : {name}", v is True, str(v))
+        check("Messagerie native : le test s'est exécuté", len(res) >= 3, str(r)[:300])
         for i, (n, title) in enumerate([("popup-mv3", "OPTIONS-A"), ("popup-mv2", "OPTIONS-B"), ("content-badge", None), ("messaging", None), ("options-ui", "OPTIONS-E")]):
             r = jo(ui("extop", f"options:{i}")); print("   options", n, r)
             if title is None: check(f"{n} : sans réglages, rien ne s'ouvre", r.get("opened") is False, str(r)); continue

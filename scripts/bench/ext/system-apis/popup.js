@@ -24,5 +24,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     return result === base + 'cb?code=42' || result;
   });
   await check('identity.launchWebAuthFlow : non interactif refusé', async () => { try { await chrome.identity.launchWebAuthFlow({ url: 'https://example.org/', interactive: false }); return false; } catch (e) { return /interaction/i.test(e.message); } });
+  await check('downloads.search : liste', async () => Array.isArray(await chrome.downloads.search({})));
+  await check('downloads.download : adresse invalide refusée', async () => { try { await chrome.downloads.download({ url: 'file:///etc/hosts' }); return false; } catch (e) { return /Invalid URL/.test(e.message); } });
   document.getElementById('t').textContent = JSON.stringify(results);
 })();
