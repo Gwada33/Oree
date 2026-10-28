@@ -45,6 +45,7 @@ extension BrowserWindowController {
         let sections = paletteSections(query: query.trimmingCharacters(in: .whitespacesAndNewlines), filter: .all)
             .filter { $0.title != "Actions" && $0.title != "Espaces" && $0.title != "Favoris" }
         journalAddressTyped(query, sections: sections)
+        addressDropdown.query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         addressDropdown.show(sections)
     }
 
@@ -67,7 +68,9 @@ extension BrowserWindowController {
     func commitAddress(_ text: String, newTab: Bool) {
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // Like the palette: Return runs the highlighted suggestion (the first one unless arrowed).
-        if let item = addressDropdown.selectedItem, addressDropdown.hasSelection, !raw.isEmpty {
+        // Sauf si le champ montre une adresse complétée en ligne : la liste date de ce qui était tapé, et Entrée doit ouvrir ce qu'on voit dans le champ.
+        let completedInline = addressDropdown.selectedIndex == 0 && raw != addressDropdown.query
+        if let item = addressDropdown.selectedItem, addressDropdown.hasSelection, !raw.isEmpty, !completedInline {
             journalAddressCommitted(kind: "suggestion", index: addressDropdown.selectedIndex, newTab: newTab)
             endAddressEditing(); item.perform(newTab); return
         }

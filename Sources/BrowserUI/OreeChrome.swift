@@ -988,6 +988,8 @@ final class AddressDropdownView: SurfaceView {
     private var items: [PaletteItem] = []
     private var rowViews: [DropdownRow] = []
     private(set) var selectedIndex = 0
+    /// Le texte pour lequel la liste a été construite (sans la fin complétée en ligne dans le champ).
+    var query = ""
     private let stack = NSStackView()
     private var heightLimit: NSLayoutConstraint!
 
