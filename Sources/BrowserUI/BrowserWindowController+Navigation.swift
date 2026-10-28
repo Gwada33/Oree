@@ -394,6 +394,7 @@ extension BrowserWindowController {
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard let tab = tab(for: webView) else { return }
         updateLoadingIndicator(for: tab)
+        extensionManager.bridge.navigationEvent(tab, .fail(webView.url, error.localizedDescription))
         journalNavDone(tab, ok: false, code: (error as NSError).code)
         tab.tabButton.setTitle(tab.displayTitle, host: tab.badgeHost)
         let nsError = error as NSError
@@ -454,6 +455,7 @@ extension BrowserWindowController {
            disposition.hasPrefix("attachment") {
             return .download
         }
+        if let http = navigationResponse.response as? HTTPURLResponse, navigationResponse.isForMainFrame, let tab = tab(for: webView) { extensionManager.bridge.noteStatus(tab, http.statusCode) }
         return navigationResponse.canShowMIMEType ? .allow : .download
     }
 
@@ -469,6 +471,7 @@ extension BrowserWindowController {
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard let tab = tab(for: webView) else { return }
         noteNavigation("start", webView)
+        extensionManager.bridge.navigationEvent(tab, .start(webView.url ?? tab.lastRequestedURL))
         updateLoadingIndicator(for: tab)
         if tab.showsLoading { journalNavStart(tab, url: tab.lastRequestedURL ?? webView.url) }
     }
@@ -476,6 +479,7 @@ extension BrowserWindowController {
     public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard let tab = tab(for: webView) else { return }
         noteNavigation("commit", webView)
+        extensionManager.bridge.navigationEvent(tab, .commit(webView.url))
         journalNavCommit(tab)
         applySiteZoom(to: webView)
         tab.interstitial.hide()
@@ -533,12 +537,14 @@ extension BrowserWindowController {
         tab.restorePageStateIfNeeded()
         tab.revealWebView()
         extensionManager.tabChanged(tab, [.loading, .title])
+        extensionManager.bridge.navigationEvent(tab, .finish(webView.url))
         offerWebStoreInstall(for: tab)
         tab.upgradedFromHTTP = nil
         tab.upgradeAttempts = [:]
         if let url = webView.url, url.absoluteString != "about:blank", url.scheme != "oree", !tab.isPrivate {
             do {
                 try historyRepo.recordVisit(url: url.absoluteString, title: tab.displayTitle)
+                extensionManager.bridge.broadcast("history.onVisited", ["id": url.absoluteString, "url": url.absoluteString, "title": tab.displayTitle, "lastVisitTime": (Date().timeIntervalSince1970 * 1000).rounded(), "visitCount": 1, "typedCount": 0])
                 SpotlightIndexer.shared.add(url: url.absoluteString, title: tab.displayTitle)
             } catch {
                 Log.storage.error("Failed to record history visit: \(error.localizedDescription)")

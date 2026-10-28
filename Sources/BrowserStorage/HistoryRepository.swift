@@ -56,6 +56,32 @@ public struct HistoryRepository: Sendable {
         }
     }
 
+    /// Les entrées dont l'adresse ou le titre contient `text` (tout si vide), visitées entre `since` et `until`, les plus récentes d'abord.
+    public func entries(matching text: String, since: Date?, until: Date?, limit: Int) throws -> [HistoryEntry] {
+        let escaped = text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
+        return try dbPool.read { db in
+            try HistoryEntry.fetchAll(db, sql: """
+                SELECT * FROM history WHERE (url LIKE ?1 ESCAPE '\\' OR title LIKE ?1 ESCAPE '\\') AND lastVisitedAt >= ?2 AND lastVisitedAt <= ?3
+                ORDER BY lastVisitedAt DESC LIMIT ?4
+                """, arguments: ["%\(escaped)%", since ?? .distantPast, until ?? .distantFuture, limit])
+        }
+    }
+
+    /// Les pages les plus visitées.
+    public func top(limit: Int) throws -> [HistoryEntry] {
+        try dbPool.read { db in try HistoryEntry.order(Column("visitCount").desc, Column("lastVisitedAt").desc).limit(limit).fetchAll(db) }
+    }
+
+    @discardableResult
+    public func remove(url: String) throws -> Bool {
+        try dbPool.write { db in try HistoryEntry.filter(Column("url") == url).deleteAll(db) > 0 }
+    }
+
+    @discardableResult
+    public func remove(from start: Date, to end: Date) throws -> Int {
+        try dbPool.write { db in try HistoryEntry.filter(Column("lastVisitedAt") >= start && Column("lastVisitedAt") <= end).deleteAll(db) }
+    }
+
     public func clear() throws {
         try dbPool.write { db in _ = try HistoryEntry.deleteAll(db) }
     }

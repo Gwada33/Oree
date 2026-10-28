@@ -291,6 +291,7 @@ extension BrowserWindowController {
             endSplit(keeping: tab.id == pair.left ? pair.right : pair.left)
         }
         journalTabClosed(tab)
+        extensionManager.bridge.detach(tab, reason: "target_closed")
         extensionManager.tabClosed(tab)
         if remember, !tab.isPrivate, let url = tab.currentURL {
             closedTabs.append((url, tab.currentInteractionState, tab.displayTitle, tab.spaceIndex))

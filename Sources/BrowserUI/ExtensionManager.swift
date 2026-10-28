@@ -17,6 +17,8 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     let controller: WKWebExtensionController
     weak var windowController: BrowserWindowController? { didSet { bridge.window = windowController } }
     let bridge = ExtensionBridge()
+    /// Permissions du manifeste d'ORIGINE de chaque extension chargée (par identifiant de contexte).
+    private var originalPermissions: [String: Set<String>] = [:]
     /// Called whenever the set of extensions or an action (icon, badge) changes.
     var onChange: (() -> Void)?
     /// The automation channel can't click a permission dialog.
@@ -38,6 +40,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         controller = WKWebExtensionController(configuration: configuration)
         super.init()
         controller.delegate = self
+        bridge.permissions = { [weak self] context in self?.originalPermissions[context.uniqueIdentifier] ?? [] }
         if let data = try? Data(contentsOf: recordsFile), let saved = try? JSONDecoder().decode([Record].self, from: data) {
             records = saved
         }
@@ -74,6 +77,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
             // The user approved these when installing.
             for permission in webExtension.requestedPermissions { context.setPermissionStatus(.grantedExplicitly, for: permission) }
             for pattern in webExtension.allRequestedMatchPatterns { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
+            originalPermissions[record.id] = Self.manifestPermissions(at: directory)
             try controller.load(context)
             contexts[record.id] = context
         } catch {
@@ -112,6 +116,14 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         }
     }
 
+    /// `permissions` et `optional_permissions` du manifeste d'origine (avant notre modification).
+    static func manifestPermissions(at directory: URL) -> Set<String> {
+        let original = directory.appendingPathComponent("__oree/manifest.orig.json")
+        let file = FileManager.default.fileExists(atPath: original.path) ? original : directory.appendingPathComponent("manifest.json")
+        guard let data = try? Data(contentsOf: file), let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [] }
+        return Set((json["permissions"] as? [String] ?? []) + (json["optional_permissions"] as? [String] ?? []))
+    }
+
     private static func manifestName(at directory: URL) -> String? {
         guard let data = try? Data(contentsOf: directory.appendingPathComponent("manifest.json")),
               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
@@ -126,7 +138,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         do {
             unpacked = try ExtensionPackage.unpack(url, to: destination)
             let webExtension = try await WKWebExtension(resourceBaseURL: unpacked)
-            guard await approveInstall(of: webExtension) else { throw CancellationError() }
+            guard await approveInstall(of: webExtension, manifestPermissions: Self.manifestPermissions(at: unpacked)) else { throw CancellationError() }
         } catch {
             try? FileManager.default.removeItem(at: destination)
             throw error
@@ -175,10 +187,21 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         "clipboardRead": "Lire le presse-papiers", "clipboardWrite": "Écrire dans le presse-papiers",
         "nativeMessaging": "Communiquer avec une application de votre Mac", "notifications": "Afficher des notifications",
         "alarms": "Programmer des tâches", "unlimitedStorage": "Utiliser un stockage illimité",
+        "topSites": "Voir vos sites les plus visités", "sessions": "Voir vos onglets récemment fermés", "readingList": "Lire et modifier votre liste de lecture",
+        "management": "Voir et gérer les extensions installées", "idle": "Savoir si vous utilisez l'ordinateur", "power": "Empêcher la mise en veille",
+        "system.cpu": "Voir les informations du processeur", "system.memory": "Voir la mémoire de l'ordinateur", "system.storage": "Voir les disques", "system.display": "Voir les écrans",
+        "browsingData": "Effacer vos données de navigation", "search": "Lancer des recherches", "tts": "Lire du texte à voix haute",
+        "debugger": "CONTRÔLER LES PAGES À DISTANCE (clics, saisie, lecture du contenu) : accès très large", "sidePanel": "Afficher un panneau latéral", "offscreen": "Ouvrir des pages cachées en arrière-plan",
+        "identity": "Vous connecter à des comptes", "proxy": "Modifier le proxy du navigateur", "tabGroups": "Gérer les groupes d'onglets", "privacy": "Lire et modifier des réglages de confidentialité",
+        "contentSettings": "Modifier les autorisations des sites", "webRequestBlocking": "Bloquer ou modifier des requêtes réseau", "declarativeNetRequestWithHostAccess": "Bloquer ou modifier des requêtes réseau",
+        "declarativeContent": "Agir selon le contenu des pages", "tabCapture": "Capturer l'audio et la vidéo d'un onglet", "desktopCapture": "Capturer l'écran", "pageCapture": "Enregistrer une page",
+        "geolocation": "Connaître votre position", "gcm": "Recevoir des messages push", "favicon": "Lire les icônes des sites", "fontSettings": "Modifier les polices", "commands": "Définir des raccourcis clavier",
     ]
 
-    private func describe(_ webExtension: WKWebExtension) -> String {
-        var lines = webExtension.requestedPermissions.map { Self.permissionNames[$0.rawValue] ?? "Permission « \($0.rawValue) »" }.sorted()
+    private func describe(_ webExtension: WKWebExtension, manifestPermissions: Set<String> = []) -> String {
+        // WebKit ne connaît que 14 permissions : les autres (history, debugger…) viennent du manifeste, et ne doivent pas rester cachées.
+        let names = Set(webExtension.requestedPermissions.map(\.rawValue)).union(manifestPermissions)
+        var lines = names.map { Self.permissionNames[$0] ?? "Permission « \($0) »" }.sorted()
         let patterns = webExtension.allRequestedMatchPatterns.map(\.string).sorted()
         if patterns.contains(where: { $0 == "<all_urls>" || $0.hasPrefix("*://*/") }) {
             lines.append("Lire et modifier TOUTES les pages que vous visitez")
@@ -188,12 +211,12 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         return lines.isEmpty ? "Aucune permission particulière." : lines.map { "• \($0)" }.joined(separator: "\n")
     }
 
-    private func approveInstall(of webExtension: WKWebExtension) async -> Bool {
+    private func approveInstall(of webExtension: WKWebExtension, manifestPermissions: Set<String> = []) async -> Bool {
         if autoApprove { return true }
         guard let window = windowController?.window else { return false }
         let alert = NSAlert()
         alert.messageText = "Installer « \(webExtension.displayName ?? "cette extension") » ?"
-        alert.informativeText = "Cette extension pourra :\n\n\(describe(webExtension))"
+        alert.informativeText = "Cette extension pourra :\n\n\(describe(webExtension, manifestPermissions: manifestPermissions))"
         alert.addButton(withTitle: "Installer")
         alert.addButton(withTitle: "Annuler")
         return await withCheckedContinuation { continuation in
@@ -368,6 +391,8 @@ extension ExtensionManager {
             return probeJSON(["shown": false, "presentsPopup": context.action(for: tab)?.presentsPopup ?? false, "trace": windowController.extensionPopupTrace])
         }
         try? await Task.sleep(for: .milliseconds(800))
+        // Une page de test qui travaille longtemps met « ... » dans son titre (#t) puis le remplace par son résultat : on l'attend (7 s au plus).
+        if let web = context.action(for: tab)?.popupWebView { for _ in 0..<65 { if (try? await web.evaluateJavaScript("(document.getElementById('t')||{}).textContent")) as? String != "..." { break }; try? await Task.sleep(for: .milliseconds(100)) } }
         var out: [String: Any] = ["shown": true, "onScreen": popover.isShown, "trace": windowController.extensionPopupTrace, "size": "\(Int(popover.contentSize.width))x\(Int(popover.contentSize.height))", "wanted": "\(Int(popover.contentViewController?.preferredContentSize.width ?? 0))x\(Int(popover.contentViewController?.preferredContentSize.height ?? 0))"]
         if let web = context.action(for: tab)?.popupWebView {
             out["title"] = (try? await web.evaluateJavaScript("(document.getElementById('t')||{}).textContent || ''")) as? String ?? ""

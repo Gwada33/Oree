@@ -1,0 +1,43 @@
+const results = {}, events = [];
+const check = (name, ok, detail) => { results[name] = ok === true ? true : ('NON ' + (detail === undefined ? '' : JSON.stringify(detail)).slice(0, 160)); };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const PAGE = 'data:text/html,' + encodeURIComponent('<title>t0</title><body style="margin:0"><button id=b style="position:absolute;left:20px;top:30px;width:100px;height:40px" onclick="document.title=\'clicked\'">B</button><input id=i style="position:absolute;left:20px;top:100px;width:200px;height:30px"><script>console.log("hello-console")</script>');
+(async () => {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const target = { tabId: tabs[0].id };
+    chrome.debugger.onEvent.addListener((src, method, params) => events.push({ method, params }));
+    const send = (m, p) => chrome.debugger.sendCommand(target, m, p || {});
+    await chrome.debugger.attach(target, '1.3'); check('attach', true);
+    let again = ''; try { await chrome.debugger.attach(target, '1.3'); } catch (e) { again = e.message; } check('un 2e attach est refusé', /already attached/.test(again), again);
+    await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
+    await send('Page.navigate', { url: PAGE });
+    for (let i = 0; i < 50 && !events.some((e) => e.method === 'Page.loadEventFired'); i++) await sleep(100);
+    check('événement Page.loadEventFired', events.some((e) => e.method === 'Page.loadEventFired'), events.map((e) => e.method));
+    check('événement Network.requestWillBeSent', events.some((e) => e.method === 'Network.requestWillBeSent'));
+    await sleep(300);
+    check('événement Runtime.consoleAPICalled', events.some((e) => e.method === 'Runtime.consoleAPICalled' && JSON.stringify(e.params.args).includes('hello-console')), events.map((e) => e.method));
+    let r = await send('Runtime.evaluate', { expression: 'document.title', returnByValue: true }); check('Runtime.evaluate : texte', r.result.value === 't0', r);
+    r = await send('Runtime.evaluate', { expression: '1 + 41' }); check('Runtime.evaluate : nombre', r.result.value === 42 && r.result.type === 'number', r);
+    r = await send('Runtime.evaluate', { expression: '(async () => { await new Promise(r => setTimeout(r, 50)); return {a: [1,2]}; })()', awaitPromise: true, returnByValue: true }); check('Runtime.evaluate : promesse + objet', r.result.value && r.result.value.a[1] === 2, r);
+    r = await send('Runtime.evaluate', { expression: 'throw new TypeError("boum")' }); check('Runtime.evaluate : exception', r.exceptionDetails && /boum/.test(r.exceptionDetails.exception.description), r);
+    r = await send('Page.captureScreenshot', { format: 'png' }); check('Page.captureScreenshot (PNG)', typeof r.data === 'string' && r.data.startsWith('iVBOR') && r.data.length > 1000, String(r.data).slice(0, 20));
+    r = await send('Page.getLayoutMetrics'); check('Page.getLayoutMetrics', r.layoutViewport.clientWidth > 0, r);
+    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x: 60, y: 50, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
+    await sleep(300);
+    r = await send('Runtime.evaluate', { expression: 'document.title' }); check('Input.dispatchMouseEvent : clic sur le bouton', r.result.value === 'clicked', r);
+    for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x: 100, y: 115, button: 'left', clickCount: 1 });
+    await sleep(200);
+    await send('Input.insertText', { text: 'abc' });
+    r = await send('Runtime.evaluate', { expression: 'document.getElementById("i").value' }); check('Input.insertText dans un champ', r.result.value === 'abc', r);
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'x', text: 'x' }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'x' });
+    r = await send('Runtime.evaluate', { expression: 'document.getElementById("i").value' }); check('Input.dispatchKeyEvent : caractère', r.result.value === 'abcx', r);
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace' }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace' }); await sleep(150);
+    r = await send('Runtime.evaluate', { expression: 'document.getElementById("i").value' }); check('Input.dispatchKeyEvent : Retour arrière', r.result.value === 'abc', r);
+    let bad = ''; try { await send('DOM.getDocument'); } catch (e) { bad = e.message; } check('commande non prise en charge : message clair', /non prise en charge/.test(bad), bad);
+    const targets = await chrome.debugger.getTargets(); check('getTargets', Array.isArray(targets) && targets.some((t) => t.attached), targets);
+    await chrome.debugger.detach(target); check('detach', true);
+    let after = ''; try { await send('Runtime.evaluate', { expression: '1' }); } catch (e) { after = e.message; } check('après detach : refusé', /not attached/.test(after), after);
+  } catch (e) { results.ERREUR = String(e && e.message || e); }
+  document.getElementById('t').textContent = JSON.stringify(results);
+})();

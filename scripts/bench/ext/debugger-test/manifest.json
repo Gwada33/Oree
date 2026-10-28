@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"Test debugger","version":"1.0","description":"Pilote un onglet avec chrome.debugger","permissions":["debugger","tabs","activeTab"],"host_permissions":["<all_urls>"],"action":{"default_popup":"popup.html"}}
