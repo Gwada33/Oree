@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"Test API natives","version":"1.0","description":"history, bookmarks, notifications, panneau latéral, page cachée…","permissions":["storage","tabs","history","bookmarks","topSites","readingList","notifications","sidePanel","offscreen"],"host_permissions":["<all_urls>"],"background":{"service_worker":"sw.js"},"action":{"default_popup":"popup.html"}}

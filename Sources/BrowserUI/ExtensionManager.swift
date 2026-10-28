@@ -15,7 +15,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     }
 
     let controller: WKWebExtensionController
-    weak var windowController: BrowserWindowController? { didSet { bridge.window = windowController } }
+    weak var windowController: BrowserWindowController? { didSet { bridge.window = windowController; bridge.manager = self } }
     let bridge = ExtensionBridge()
     /// Permissions du manifeste d'ORIGINE de chaque extension chargée (par identifiant de contexte).
     private var originalPermissions: [String: Set<String>] = [:]
@@ -51,6 +51,29 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     // MARK: Loading
 
     private var windowRegistered = false
+    private var keyMonitor: Any?
+    /// Les raccourcis que les extensions déclarent (`commands` du manifeste) : WebKit sait quelle extension répond à quelle touche, l'app doit lui passer les frappes.
+    /// Les raccourcis d'Orée (menus) passent avant, comme dans Chrome.
+    private func installCommandMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            nonisolated(unsafe) let e = event
+            return mainActorNow {
+                guard let self, !self.contexts.isEmpty, !Self.menuHandles(e) else { return e }
+                for context in self.contexts.values where context.performCommand(for: e) { return nil }
+                return e
+            }
+        }
+    }
+    private static func menuHandles(_ event: NSEvent) -> Bool {
+        let wanted = event.modifierFlags.intersection([.command, .shift, .option, .control]), key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        func search(_ menu: NSMenu) -> Bool {
+            menu.items.contains { item in
+                (!item.keyEquivalent.isEmpty && item.keyEquivalent.lowercased() == key && item.keyEquivalentModifierMask.intersection([.command, .shift, .option, .control]) == wanted) || (item.submenu.map(search) ?? false)
+            }
+        }
+        return NSApp.mainMenu.map(search) ?? false
+    }
     /// Le moteur doit connaître la fenêtre (et ses onglets) : sans cela, « clic sur le bouton d'une extension » pour un onglet ne fait rien.
     private func registerWindowIfNeeded() {
         guard !windowRegistered, let windowController else { return }
@@ -63,6 +86,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     func loadAll() async {
         registerWindowIfNeeded()
+        installCommandMonitor()
         for record in records where record.enabled { await load(record) }
         onChange?()
     }
@@ -116,6 +140,26 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         }
     }
 
+    /// L'extension vue par chrome.management.
+    func managementInfo(id: String) -> [String: Any]? {
+        guard let record = records.first(where: { $0.id == id }) else { return nil }
+        let dir = root.appendingPathComponent(record.directory)
+        let original = dir.appendingPathComponent("__oree/manifest.orig.json")
+        let file = FileManager.default.fileExists(atPath: original.path) ? original : dir.appendingPathComponent("manifest.json")
+        let json = ((try? Data(contentsOf: file)).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]) ?? [:]
+        let permissions = (json["permissions"] as? [String]) ?? []
+        let hosts = ((json["host_permissions"] as? [String]) ?? []) + permissions.filter { $0.contains("://") || $0 == "<all_urls>" }
+        let context = contexts[id]
+        var info: [String: Any] = ["id": id, "name": context?.webExtension.displayName ?? (json["name"] as? String) ?? "Extension", "shortName": (json["short_name"] as? String) ?? (json["name"] as? String) ?? "",
+            "description": (json["description"] as? String) ?? "", "version": (json["version"] as? String) ?? "", "mayDisable": true, "enabled": record.enabled, "isApp": false, "type": "extension", "installType": "normal",
+            "offlineEnabled": false, "permissions": permissions.filter { !$0.contains("://") && $0 != "<all_urls>" }, "hostPermissions": hosts, "icons": [Any](), "disabledReason": record.enabled ? "" : "unknown"]
+        if let home = json["homepage_url"] as? String { info["homepageUrl"] = home }
+        if let url = context?.optionsPageURL { info["optionsUrl"] = url.absoluteString }
+        return info
+    }
+
+    func allManagementInfo() -> [[String: Any]] { records.compactMap { managementInfo(id: $0.id) } }
+
     /// `permissions` et `optional_permissions` du manifeste d'origine (avant notre modification).
     static func manifestPermissions(at directory: URL) -> Set<String> {
         let original = directory.appendingPathComponent("__oree/manifest.orig.json")
@@ -149,6 +193,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         save()
         await load(record)
         onChange?()
+        if let info = managementInfo(id: id) { bridge.broadcast("management.onInstalled", info) }
         if let windowController { for tab in windowController.extensionTabs { controller.didOpenTab(tab) } }      // le nouveau contexte doit connaître les onglets déjà ouverts
     }
 
@@ -156,10 +201,12 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         guard let index = records.firstIndex(where: { $0.id == id }), records[index].enabled != enabled else { return }
         records[index].enabled = enabled
         save()
+        defer { if let info = managementInfo(id: id) { bridge.broadcast(enabled ? "management.onEnabled" : "management.onDisabled", info) } }
         if enabled {
             let record = records[index]
             Task { await load(record); onChange?() }
         } else if let context = contexts.removeValue(forKey: id) {
+            bridge.unload(id)
             try? controller.unload(context)
             onChange?()
         }
@@ -167,9 +214,10 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     func remove(id: String) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
-        if let context = contexts.removeValue(forKey: id) { try? controller.unload(context) }
+        if let context = contexts.removeValue(forKey: id) { bridge.unload(id); try? controller.unload(context) }
         let record = records.remove(at: index)
         save()
+        bridge.broadcast("management.onUninstalled", id)
         // The record's directory is "<id>" or "<id>/<top folder>"; remove the whole <id> directory.
         try? FileManager.default.removeItem(at: root.appendingPathComponent(String(record.directory.split(separator: "/").first ?? Substring(record.id))))
         onChange?()
@@ -266,6 +314,10 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     }
 
     func performAction(id: String, for tab: Tab?) {
+        // setPanelBehavior({ openPanelOnActionClick: true }) : le bouton ouvre le panneau latéral au lieu de lancer l'action.
+        if let context = contexts[id], let path = bridge.opensPanelOnActionClick(context) {
+            do { try bridge.openSidePanel(for: context, path: path); return } catch { windowController?.noticePill.show(message: "Panneau latéral : \(error.localizedDescription)", button: "OK", seconds: 6) { } }
+        }
         contexts[id]?.performAction(for: tab)
     }
 
@@ -361,6 +413,7 @@ extension ExtensionManager {
     func automationOperation(_ op: String) async -> String {
         let parts = op.split(separator: ":").map(String.init)
         if parts.first == "report" { return report() }
+        if parts.first == "trace" { return (windowController?.extensionPopupTrace ?? []).joined(separator: " | ") }
         let list = installedExtensions()
         guard parts.count == 2, let n = Int(parts[1]), list.indices.contains(n) else { return "no extension" }
         let item = list[n]
@@ -369,6 +422,8 @@ extension ExtensionManager {
         case "enable": setEnabled(true, id: item.id)
         case "remove": remove(id: item.id)
         case "popup": return await popupProbe(id: item.id)
+        case "popupstart": return await popupProbe(id: item.id, readResult: false)
+        case "popupread": return await popupRead(id: item.id)
         case "options": return await optionsProbe(id: item.id)
         default: return "unknown op"
         }
@@ -381,7 +436,7 @@ extension ExtensionManager {
 
     /// Clique le bouton de l'extension, attend que l'app ait posé le popover, puis lit ce que la page du popup affiche.
     /// (`isShown` n'est vrai que si la fenêtre est visible à l'écran ; l'instance d'essai peut être cachée, on lit donc aussi le contenu.)
-    private func popupProbe(id: String) async -> String {
+    private func popupProbe(id: String, readResult: Bool = true) async -> String {
         guard let windowController, let context = contexts[id] else { return probeJSON(["error": "no context"]) }
         windowController.shownExtensionPopover?.close(); windowController.shownExtensionPopover = nil; windowController.extensionPopupTrace = []
         let tab = windowController.activeExtensionTab
@@ -391,6 +446,7 @@ extension ExtensionManager {
             return probeJSON(["shown": false, "presentsPopup": context.action(for: tab)?.presentsPopup ?? false, "trace": windowController.extensionPopupTrace])
         }
         try? await Task.sleep(for: .milliseconds(800))
+        if !readResult { return probeJSON(["shown": true]) }      // la suite se lit avec « popupread »
         // Une page de test qui travaille longtemps met « ... » dans son titre (#t) puis le remplace par son résultat : on l'attend (7 s au plus).
         if let web = context.action(for: tab)?.popupWebView { for _ in 0..<65 { if (try? await web.evaluateJavaScript("(document.getElementById('t')||{}).textContent")) as? String != "..." { break }; try? await Task.sleep(for: .milliseconds(100)) } }
         var out: [String: Any] = ["shown": true, "onScreen": popover.isShown, "trace": windowController.extensionPopupTrace, "size": "\(Int(popover.contentSize.width))x\(Int(popover.contentSize.height))", "wanted": "\(Int(popover.contentViewController?.preferredContentSize.width ?? 0))x\(Int(popover.contentViewController?.preferredContentSize.height ?? 0))"]
@@ -402,11 +458,22 @@ extension ExtensionManager {
         return probeJSON(out)
     }
 
+    /// Lit le résultat (#t) d'un popup ouvert avec « popupstart », en attendant jusqu'à 8 s qu'il ne soit plus « ... », puis le referme.
+    private func popupRead(id: String) async -> String {
+        guard let windowController, let context = contexts[id], let web = context.action(for: windowController.activeExtensionTab)?.popupWebView else { return probeJSON(["error": "aucun popup ouvert"]) }
+        for _ in 0..<80 { let text = (try? await web.evaluateJavaScript("(document.getElementById('t')||{}).textContent")) as? String; if let text, !text.isEmpty, text != "..." { break }; try? await Task.sleep(for: .milliseconds(100)) }
+        let title = (try? await web.evaluateJavaScript("(document.getElementById('t')||{}).textContent || ''")) as? String ?? ""
+        windowController.shownExtensionPopover?.close(); context.action(for: windowController.activeExtensionTab)?.closePopup()
+        return probeJSON(["title": title])
+    }
+
     private func optionsProbe(id: String) async -> String {
         guard let windowController else { return probeJSON(["error": "no window"]) }
         guard openOptions(id: id) else { return probeJSON(["opened": false]) }
-        for _ in 0..<50 { try? await Task.sleep(for: .milliseconds(100)); if windowController.activeTab?.webView?.isLoading == false, windowController.activeTab?.webView?.url?.scheme?.contains("extension") == true { break } }
-        let web = windowController.activeTab?.webView
+        let wanted = contexts[id]?.optionsPageURL?.absoluteString ?? ""
+        func optionsTab() -> Tab? { windowController.tabs.last { $0.webView?.url?.absoluteString == wanted } }
+        for _ in 0..<50 { try? await Task.sleep(for: .milliseconds(100)); if let t = optionsTab(), t.webView?.isLoading == false { break } }
+        let web = optionsTab()?.webView
         let title = (try? await web?.evaluateJavaScript("(document.getElementById('t')||{}).textContent || document.title || ''")) as? String ?? ""
         return probeJSON(["opened": true, "url": web?.url?.absoluteString ?? "", "title": title, "tabs": windowController.tabs.count, "loading": web?.isLoading ?? false, "optionsURL": contexts[id]?.optionsPageURL?.absoluteString ?? "nil", "tabURLs": windowController.tabs.map { $0.webView?.url?.absoluteString ?? "-" }])
     }

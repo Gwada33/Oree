@@ -9,11 +9,20 @@ import BrowserCore
 final class ExtensionBridge {
     weak var window: BrowserWindowController?
     /// Les connexions ouvertes par les extensions (pour leur envoyer des événements : `{ "ev": "downloads.onChanged", "d": … }`).
-    private var ports: [String: [WKWebExtension.MessagePort]] = [:]
+    var ports: [String: [WKWebExtension.MessagePort]] = [:]
     let debug = DebuggerSessions()
+    let panels = PanelStates()
+    let notifications = NotificationCenterBridge()
+    let system = SystemStates()
+    weak var manager: ExtensionManager?
     let debuggerControllers = NSHashTable<WKUserContentController>.weakObjects()
 
     struct Failure: Error { let message: String }
+
+    init() {
+        notifications.emit = { [weak self] id, event, data in self?.send(toContext: id, event: event, data) }
+        system.emit = { [weak self] id, event, data in self?.send(toContext: id, event: event, data) }
+    }
 
     /// Une méthode du pont : la permission du manifeste qu'elle exige (les extensions n'ont que ce qu'elles ont demandé à l'installation) et ce que l'app fait.
     struct Method {
@@ -27,7 +36,7 @@ final class ExtensionBridge {
     /// Toutes les méthodes. Chaque famille d'API est dans son fichier (ExtensionBridge+….swift).
     private func methods() -> [String: Method] {
         var all: [String: Method] = ["ping": Method(permission: nil) { _, _ in ["pong": true] }]
-        for family in [dataMethods(), debuggerMethods()] { all.merge(family) { first, _ in first } }
+        for family in [dataMethods(), debuggerMethods(), panelMethods(), notificationMethods(), systemMethods()] { all.merge(family) { first, _ in first } }
         return all
     }
 
@@ -45,6 +54,7 @@ final class ExtensionBridge {
     func attach(_ port: WKWebExtension.MessagePort, context: WKWebExtensionContext) {
         let id = context.uniqueIdentifier
         ports[id, default: []].append(port)
+        startIdleWatch()
         port.messageHandler = { [weak self, weak port] message, _ in
             guard let message else { return }
             nonisolated(unsafe) let request = message

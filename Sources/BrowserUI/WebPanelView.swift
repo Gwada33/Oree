@@ -11,6 +11,8 @@ final class WebPanelView: SurfaceView, WKNavigationDelegate, WKUIDelegate {
     private let content = NSView()
     private var pages: [String: WKWebView] = [:]
     private var configurationFor: ((WebPanelEntry) -> WKWebViewConfiguration)?
+    /// Pages d'extension : elles ne se chargent que dans la configuration que leur donne leur extension (adresse → configuration).
+    var overrides: [String: WKWebViewConfiguration] = [:]
     /// A link that leaves the app (a click on a page of another site): opened in a normal tab.
     var onOpenInTab: ((URL) -> Void)?
     private(set) var current: WebPanelEntry?
@@ -65,7 +67,7 @@ final class WebPanelView: SurfaceView, WKNavigationDelegate, WKUIDelegate {
         if let shown = currentPage { shown.isHidden = true }
         let page: WKWebView
         if let existing = pages[entry.url] { page = existing } else {
-            page = WKWebView(frame: .zero, configuration: configurationFor?(entry) ?? WKWebViewConfiguration())
+            page = WKWebView(frame: .zero, configuration: overrides[entry.url] ?? configurationFor?(entry) ?? WKWebViewConfiguration())
             page.translatesAutoresizingMaskIntoConstraints = false
             page.navigationDelegate = self
             page.uiDelegate = self

@@ -1,6 +1,7 @@
 /* Petits manques dans les espaces que WebKit a déjà (runtime, tabs, storage, windows…) et espaces de types. */
 (function () {
   /* chrome.runtime */
+  shared.contextProviders = [];
   extend('runtime', {
     onSuspend: makeEvent(), onSuspendCanceled: makeEvent(), onUpdateAvailable: makeEvent(), onBrowserUpdateAvailable: makeEvent(), onUserScriptConnect: makeEvent(), onUserScriptMessage: makeEvent(),
     requestUpdateCheck: api(async () => ({ status: 'no_update' })),
@@ -9,7 +10,9 @@
     getContexts: api(async (filter = {}) => {
       const ctx = { contextId: 'oree-' + (C.runtime.id || ''), contextType: (typeof window === 'undefined') ? 'BACKGROUND' : 'TAB', documentUrl: (G.location && G.location.href) || '', frameId: 0, incognito: false, tabId: -1, windowId: -1 };
       const ok = (!filter.contextTypes || filter.contextTypes.includes(ctx.contextType)) && (!filter.documentUrls || filter.documentUrls.includes(ctx.documentUrl));
-      return ok ? [ctx] : [];
+      const list = ok ? [ctx] : [];
+      for (const provider of shared.contextProviders) { try { list.push(...await provider(filter)); } catch (e) {} }     // le panneau latéral, la page cachée…
+      return list;
     }),
     ContextType: { TAB: 'TAB', POPUP: 'POPUP', BACKGROUND: 'BACKGROUND', OFFSCREEN_DOCUMENT: 'OFFSCREEN_DOCUMENT', SIDE_PANEL: 'SIDE_PANEL', DEVELOPER_TOOLS: 'DEVELOPER_TOOLS' },
     OnInstalledReason: { INSTALL: 'install', UPDATE: 'update', CHROME_UPDATE: 'chrome_update', SHARED_MODULE_UPDATE: 'shared_module_update' },

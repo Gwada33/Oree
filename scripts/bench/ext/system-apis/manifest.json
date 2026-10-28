@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"Test API système","version":"1.0","description":"management, idle, power, system, tts, identity…","permissions":["storage","tabs","management","idle","power","system.cpu","system.memory","system.storage","system.display","browsingData","search","tts","sessions","identity"],"host_permissions":["<all_urls>"],"action":{"default_popup":"popup.html"}}

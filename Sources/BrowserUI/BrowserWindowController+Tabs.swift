@@ -292,6 +292,7 @@ extension BrowserWindowController {
         }
         journalTabClosed(tab)
         extensionManager.bridge.detach(tab, reason: "target_closed")
+        extensionManager.bridge.authTabClosed(tab)
         extensionManager.tabClosed(tab)
         if remember, !tab.isPrivate, let url = tab.currentURL {
             closedTabs.append((url, tab.currentInteractionState, tab.displayTitle, tab.spaceIndex))

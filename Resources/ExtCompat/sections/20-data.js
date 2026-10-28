@@ -30,7 +30,7 @@
   extend('topSites', { get: api(() => N('topSites.get')) });
   extend('sessions', {
     MAX_SESSION_RESULTS: 25,
-    getRecentlyClosed: api(() => N('sessions.getRecentlyClosed')),
+    getRecentlyClosed: api((f = {}) => N('sessions.getRecentlyClosed', f)),
     getDevices: api(() => N('sessions.getDevices')),
     restore: unsupported('sessions.restore()'),
     onChanged: makeEvent(),

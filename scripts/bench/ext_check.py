@@ -23,7 +23,7 @@ if __name__ == "__main__":
     def check(name, ok, detail=""): results.append(bool(ok)); print(("  ok     " if ok else "  ÉCHEC  ") + name + (f"   [{detail}]" if detail and not ok else ""))
     try:
         time.sleep(8); print("   page :", ui("load", "https://example.com")); time.sleep(4)
-        names = ["popup-mv3", "popup-mv2", "content-badge", "messaging", "options-ui", "api-compat", "debugger-test"]
+        names = ["popup-mv3", "popup-mv2", "content-badge", "messaging", "options-ui", "api-compat", "debugger-test", "native-apis", "system-apis"]
         for n in names:
             r = ui("install", os.path.join(ROOT, "scripts/bench/ext", n)); time.sleep(1); check(f"installe {n}", r == "installed", r)
         time.sleep(3)
@@ -51,6 +51,17 @@ if __name__ == "__main__":
         except Exception: pass
         for name, v in res.items(): check(f"chrome.debugger : {name}", v is True, str(v))
         check("chrome.debugger : le test s'est exécuté", len(res) >= 15, str(r)[:300])
+        r = jo(ui("extop", "popup:7")); res = {}
+        try: res = json.loads(r.get("title") or "{}")
+        except Exception: pass
+        for name, v in res.items(): check(f"API natives : {name}", v is True, str(v))
+        check("API natives : le test s'est exécuté", len(res) >= 14, str(r)[:300])
+        ui("load", "https://example.com"); time.sleep(3)
+        ui("extop", "popupstart:8"); r = jo(ui("extop", "popupread:8")); res = {}
+        try: res = json.loads(r.get("title") or "{}")
+        except Exception: pass
+        for name, v in res.items(): check(f"API système : {name}", v is True, str(v))
+        check("API système : le test s'est exécuté", len(res) >= 14, str(r)[:300])
         for i, (n, title) in enumerate([("popup-mv3", "OPTIONS-A"), ("popup-mv2", "OPTIONS-B"), ("content-badge", None), ("messaging", None), ("options-ui", "OPTIONS-E")]):
             r = jo(ui("extop", f"options:{i}")); print("   options", n, r)
             if title is None: check(f"{n} : sans réglages, rien ne s'ouvre", r.get("opened") is False, str(r)); continue

@@ -14,8 +14,10 @@ extension ExtensionBridge {
     private static func historyItem(_ e: HistoryEntry) -> [String: Any] {
         ["id": String(e.id ?? 0), "url": e.url, "title": e.title, "lastVisitTime": ms(e.lastVisitedAt), "visitCount": e.visitCount, "typedCount": 0]
     }
+    /// Les identifiants « 0 », « 1 » et « 2 » sont ceux des dossiers : les favoris commencent à 100.
+    private static func bookmarkID(_ b: Bookmark) -> String { String((b.id ?? 0) + 100) }
     private static func bookmarkNode(_ b: Bookmark) -> [String: Any] {
-        ["id": String(b.id ?? 0), "parentId": "1", "index": 0, "url": b.url, "title": b.title, "dateAdded": ms(b.createdAt)]
+        ["id": bookmarkID(b), "parentId": "1", "index": 0, "url": b.url, "title": b.title, "dateAdded": ms(b.createdAt)]
     }
     /// Orée a une liste plate de favoris : on la présente comme la barre de favoris (« 1 ») d'une racine (« 0 ») qui a aussi « Autres favoris » (« 2 », vide).
     private func bookmarkTree() throws -> [String: Any] {
@@ -77,7 +79,7 @@ extension ExtensionBridge {
                 let all = try bookmarks().all()
                 return try ids.map { id -> [String: Any] in
                     if id == "0" || id == "1" || id == "2" { return ["id": id, "title": id == "2" ? "Autres favoris" : (id == "1" ? "Favoris" : ""), "dateAdded": 0] }
-                    guard let b = all.first(where: { String($0.id ?? 0) == id }) else { throw Failure(message: "Can't find bookmark for id.") }
+                    guard let b = all.first(where: { Self.bookmarkID($0) == id }) else { throw Failure(message: "Can't find bookmark for id.") }
                     return Self.bookmarkNode(b)
                 }
             },
@@ -98,19 +100,19 @@ extension ExtensionBridge {
                 let title = (a["title"] as? String) ?? url
                 try bookmarks().add(url: url, title: title)
                 guard let made = try bookmarks().all().first(where: { $0.url == url }) else { throw Failure(message: "favori non créé") }
-                let node = Self.bookmarkNode(made); self.broadcast("bookmarks.onCreated", [String(made.id ?? 0), node]); return node
+                let node = Self.bookmarkNode(made); self.broadcast("bookmarks.onCreated", [Self.bookmarkID(made), node]); return node
             },
             "bookmarks.update": Method(permission: "bookmarks") { a, _ in
                 let id = try Self.string(a, "id"); let changes = (a["changes"] as? [String: Any]) ?? [:]
-                guard let old = try bookmarks().all().first(where: { String($0.id ?? 0) == id }) else { throw Failure(message: "Can't find bookmark for id.") }
+                guard let old = try bookmarks().all().first(where: { Self.bookmarkID($0) == id }) else { throw Failure(message: "Can't find bookmark for id.") }
                 let url = (changes["url"] as? String) ?? old.url, title = (changes["title"] as? String) ?? old.title
                 try bookmarks().remove(url: old.url); try bookmarks().add(url: url, title: title, spaceIndex: old.spaceIndex)
                 guard let now = try bookmarks().all().first(where: { $0.url == url }) else { throw Failure(message: "favori non mis à jour") }
-                self.broadcast("bookmarks.onChanged", [String(now.id ?? 0), ["title": title, "url": url]]); return Self.bookmarkNode(now)
+                self.broadcast("bookmarks.onChanged", [Self.bookmarkID(now), ["title": title, "url": url]]); return Self.bookmarkNode(now)
             },
             "bookmarks.remove": Method(permission: "bookmarks") { a, _ in
                 let id = try Self.string(a, "id")
-                guard let b = try bookmarks().all().first(where: { String($0.id ?? 0) == id }) else { throw Failure(message: "Can't find bookmark for id.") }
+                guard let b = try bookmarks().all().first(where: { Self.bookmarkID($0) == id }) else { throw Failure(message: "Can't find bookmark for id.") }
                 try bookmarks().remove(url: b.url); self.broadcast("bookmarks.onRemoved", [id, ["parentId": "1", "index": 0, "node": Self.bookmarkNode(b)]]); return NSNull()
             },
             // MARK: readingList
@@ -123,8 +125,7 @@ extension ExtensionBridge {
                 try reading().add(url: try Self.string(a, "url"), title: (a["title"] as? String) ?? (a["url"] as? String) ?? ""); return NSNull()
             },
             "readingList.removeEntry": Method(permission: "readingList") { a, _ in try reading().remove(url: try Self.string(a, "url")); return NSNull() },
-            // MARK: sessions : Orée ne garde pas les onglets fermés ni d'autres appareils
-            "sessions.getRecentlyClosed": Method(permission: "sessions") { _, _ in [Any]() },
+            // MARK: sessions : les onglets récemment fermés sont dans ExtensionBridge+System ; Orée n'a pas d'autres appareils
             "sessions.getDevices": Method(permission: "sessions") { _, _ in [Any]() },
         ]
     }

@@ -313,6 +313,7 @@ extension BrowserWindowController {
             handleHomeAction(url)
             return .cancel
         }
+        if let tab = tab(for: webView), extensionManager.bridge.interceptAuthRedirect(tab, url: navigationAction.request.url) { return .cancel }
         if navigationAction.shouldPerformDownload { return .download }
         // A link for another app (mail, phone, a video-call app…): the web view cannot show it, so the system opens it.
         let linkType = navigationAction.navigationType
