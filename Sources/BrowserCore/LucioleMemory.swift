@@ -120,7 +120,10 @@ public struct LucioleMemory: Codable, Equatable, Sendable {
         guard let data = try? encoder.encode(self) else { return false }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try data.write(to: directory.appendingPathComponent("memoire.json"), options: [.atomic, .completeFileProtection])
+            // Pas de .completeFileProtection : macOS 27.2 refuse ("Operation not permitted") et rien n'était plus écrit. Droits 0600 à la place (FileVault protège le reste).
+            let file = directory.appendingPathComponent("memoire.json")
+            try data.write(to: file, options: [.atomic])
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
             return true
         } catch { return false }
     }

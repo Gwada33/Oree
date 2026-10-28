@@ -42,7 +42,7 @@ public struct SnapshotVault: Sendable {
     public func put(_ picture: Data, for address: String) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let sealed = try ChaChaPoly.seal(picture, using: cache.get(keys))
-        try sealed.combined.write(to: file(for: address), options: [.atomic, .completeFileProtection])
+        try sealed.combined.write(to: file(for: address), options: [.atomic])      // déjà chiffré ; .completeFileProtection est refusé par macOS 27.2
     }
 
     /// nil when there is none, or when it cannot be read (wrong key, damaged file): never an error for the caller.
