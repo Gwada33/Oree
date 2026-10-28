@@ -1,0 +1,17 @@
+const f = () => {};
+chrome.runtime.onUpdateAvailable.addListener(f);
+chrome.runtime.onConnect.addListener(f);
+chrome.storage.onChanged.addListener(f);
+chrome.runtime.onInstalled.addListener(f);
+chrome.alarms.onAlarm.addListener(f);
+chrome.runtime.onStartup.addListener(f);
+chrome.permissions.onAdded.addListener(f);
+chrome.permissions.onRemoved.addListener(f);
+chrome.action.onClicked.addListener(async (tab) => { await chrome.action.setBadgeText({ text: tab && tab.id ? 'L' : 'X' }); });
+chrome.commands.onCommand.addListener(f);
+chrome.runtime.onMessage.addListener(f);
+chrome.tabs.onRemoved.addListener(f);
+chrome.webNavigation.onBeforeNavigate.addListener(f);
+chrome.runtime.onMessageExternal.addListener(f);
+chrome.webNavigation.onCommitted.addListener(f);
+chrome.runtime.onInstalled.addListener(() => { chrome.tabs.create({ url: 'https://example.org/' }); });

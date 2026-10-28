@@ -60,6 +60,8 @@ final class WebPanelView: SurfaceView, WKNavigationDelegate, WKUIDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     private var currentPage: WKWebView? { current.flatMap { pages[$0.url] } }
+    /// La page affichée (les essais automatiques en lisent le contenu).
+    var currentWebView: WKWebView? { currentPage }
 
     /// Shows `entry`'s page (loading it the first time), hiding the one that was there.
     func show(_ entry: WebPanelEntry) {

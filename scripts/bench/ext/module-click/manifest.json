@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"Test module clic","version":"1.0","description":"Service worker ES module : clic sur le bouton","permissions":["storage","tabs"],"background":{"service_worker":"sw.js","type":"module"},"action":{"default_title":"Test M"}}

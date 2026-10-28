@@ -314,6 +314,7 @@ extension BrowserWindowController {
             return .cancel
         }
         if let tab = tab(for: webView), extensionManager.bridge.interceptAuthRedirect(tab, url: navigationAction.request.url) { return .cancel }
+        if let url = navigationAction.request.url, navigationAction.targetFrame?.isMainFrame != false, extensionManager.openChromeExtensionURL(url, closing: tab(for: webView)) { return .cancel }
         if navigationAction.shouldPerformDownload { return .download }
         // A link for another app (mail, phone, a video-call app…): the web view cannot show it, so the system opens it.
         let linkType = navigationAction.navigationType

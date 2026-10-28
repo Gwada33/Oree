@@ -10,12 +10,17 @@ final class ExtensionBridge {
     weak var window: BrowserWindowController?
     /// Les connexions ouvertes par les extensions (pour leur envoyer des événements : `{ "ev": "downloads.onChanged", "d": … }`).
     var ports: [String: [WKWebExtension.MessagePort]] = [:]
+    /// Les derniers appels (pour les essais automatiques et le diagnostic) : « méthode → ok / erreur ».
+    private(set) var callLog: [String] = []
     let debug = DebuggerSessions()
     let panels = PanelStates()
     let notifications = NotificationCenterBridge()
     let system = SystemStates()
     weak var manager: ExtensionManager?
     let debuggerControllers = NSHashTable<WKUserContentController>.weakObjects()
+
+    /// L'identifiant sous lequel le script de compatibilité parle à l'app (`sendNativeMessage('oree', …)`). Les autres identifiants sont des applications natives de l'extension.
+    static let applicationID = "oree"
 
     struct Failure: Error { let message: String }
 
@@ -36,11 +41,24 @@ final class ExtensionBridge {
     /// Toutes les méthodes. Chaque famille d'API est dans son fichier (ExtensionBridge+….swift).
     private func methods() -> [String: Method] {
         var all: [String: Method] = ["ping": Method(permission: nil) { _, _ in ["pong": true] }]
+        all["log"] = Method(permission: nil) { [self] a, context in
+            callLog.append("\(context.webExtension.displayName ?? "?") · \(a["kind"] ?? "journal") : \(a["message"] ?? "") \(a["where"] ?? "")"); return NSNull()
+        }
         for family in [dataMethods(), debuggerMethods(), panelMethods(), notificationMethods(), systemMethods()] { all.merge(family) { first, _ in first } }
         return all
     }
 
+    func note(_ text: String) { callLog.append(text); if callLog.count > 600 { callLog.removeFirst(callLog.count - 600) } }
+
     func handle(_ message: Any, context: WKWebExtensionContext) async -> [String: Any] {
+        let reply = await run(message, context: context)
+        let name = ((message as? [String: Any])?["m"] as? String) ?? "?"
+        callLog.append("\(context.webExtension.displayName ?? "?") · \(name) → " + ((reply["ok"] as? Bool) == true ? "ok" : "ERREUR \(reply["e"] ?? "")"))
+        if callLog.count > 600 { callLog.removeFirst(callLog.count - 600) }
+        return reply
+    }
+
+    private func run(_ message: Any, context: WKWebExtensionContext) async -> [String: Any] {
         guard let request = message as? [String: Any], let name = request["m"] as? String else { return ["ok": false, "e": "requête illisible"] }
         guard let method = methods()[name] else { return ["ok": false, "e": "méthode inconnue : \(name)"] }
         if let needed = method.permission, !permissions(context).contains(needed) {

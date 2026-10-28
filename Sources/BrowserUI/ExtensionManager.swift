@@ -36,7 +36,9 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         root = base
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         // A fixed identifier makes the engine keep each extension's storage between launches.
-        let configuration = WKWebExtensionController.Configuration(identifier: UUID(uuidString: "6E7A9C52-4B1D-4F3A-9D0E-48A5B6C7D8E9")!)
+        // Un identifiant fixe fait garder à WebKit le stockage de chaque extension entre deux lancements. Les essais en prennent un à eux (HB_EXT_CONTROLLER_ID) pour ne pas écrire dans celui de l'app.
+        let controllerID = ProcessInfo.processInfo.environment["HB_EXT_CONTROLLER_ID"].flatMap(UUID.init(uuidString:)) ?? UUID(uuidString: "6E7A9C52-4B1D-4F3A-9D0E-48A5B6C7D8E9")!
+        let configuration = WKWebExtensionController.Configuration(identifier: controllerID)
         controller = WKWebExtensionController(configuration: configuration)
         super.init()
         controller.delegate = self
@@ -87,8 +89,20 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     func loadAll() async {
         registerWindowIfNeeded()
         installCommandMonitor()
-        for record in records where record.enabled { await load(record) }
+        for index in records.indices where records[index].enabled { await load(adoptingChromeID(at: index)) }
         onChange?()
+    }
+
+    /// Une extension qui a une `key` reçoit l'identifiant que Chrome lui donne (chrome.runtime.id, adresse de ses pages…) : les services externes (connexion OAuth)
+    /// la reconnaissent ainsi. Un enregistrement plus ancien, qui avait un identifiant au hasard, est renommé une fois pour toutes.
+    private func adoptingChromeID(at index: Int) -> Record {
+        let record = records[index]
+        let directory = root.appendingPathComponent(record.directory, isDirectory: true)
+        Self.applyCompat(to: directory)
+        guard let chromeID = ExtensionCompat.chromeID(at: directory), chromeID != record.id, !records.contains(where: { $0.id == chromeID }) else { return record }
+        records[index].id = chromeID
+        save()
+        return records[index]
     }
 
     private func load(_ record: Record) async {
@@ -104,6 +118,16 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
             originalPermissions[record.id] = Self.manifestPermissions(at: directory)
             try controller.load(context)
             contexts[record.id] = context
+            // Le fond (service worker) ne se charge qu'à la demande ; on le démarre tout de suite pour que le premier clic sur le bouton ait une page qui l'écoute.
+            // (la version `async` de loadBackgroundContent plante quand WebKit appelle deux fois son rappel : on utilise le rappel directement)
+            if webExtension.hasBackgroundContent {
+                let name = webExtension.displayName ?? "?"
+                bridge.note("fond : chargement demandé (\(name))")
+                context.loadBackgroundContent { [weak self] error in
+                    nonisolated(unsafe) let message = error?.localizedDescription
+                    mainActorNow { self?.bridge.note(message.map { "fond : ERREUR \($0)" } ?? "fond : chargé") }
+                }
+            }
         } catch {
             Log.tabs.error("Could not load extension \(record.id, privacy: .public): \(String(describing: error), privacy: .public)")
         }
@@ -113,9 +137,9 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     private static func applyCompat(to directory: URL) {
         guard let folder = Bundle.main.resourceURL?.appendingPathComponent("ExtCompat", isDirectory: true),
               let core = try? String(contentsOf: folder.appendingPathComponent("core.js"), encoding: .utf8) else { return }
-        let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder.appendingPathComponent("sections").path)) ?? []).filter { $0.hasSuffix(".js") }.sorted()
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder.appendingPathComponent("sections").path)) ?? []).filter { $0.hasSuffix(".js") }.sorted().filter { name in !(ProcessInfo.processInfo.environment["HB_COMPAT_SKIP"] ?? "").split(separator: ",").contains { name.hasPrefix($0) } }
         let sections = names.compactMap { try? String(contentsOf: folder.appendingPathComponent("sections/\($0)"), encoding: .utf8) }
-        do { try ExtensionCompat.apply(to: directory, shim: Data(ExtensionCompat.assemble(core: core, sections: sections).utf8)) }
+        do { try ExtensionCompat.apply(to: directory, shim: Data(ExtensionCompat.assemble(core: core, sections: sections).utf8), backgroundAsPage: ProcessInfo.processInfo.environment["HB_BACKGROUND_SW"] == nil) }
         catch { Log.tabs.error("Compatibilité des extensions : \(String(describing: error), privacy: .public)") }
     }
 
@@ -176,8 +200,8 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     func install(from url: URL) async throws {
         registerWindowIfNeeded()
-        let id = UUID().uuidString
-        let destination = root.appendingPathComponent(id, isDirectory: true)
+        let folderName = UUID().uuidString
+        let destination = root.appendingPathComponent(folderName, isDirectory: true)
         let unpacked: URL
         do {
             unpacked = try ExtensionPackage.unpack(url, to: destination)
@@ -188,6 +212,9 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
             throw error
         }
         let relative = String(unpacked.path.dropFirst(root.path.count + 1))
+        Self.applyCompat(to: unpacked)
+        let id = ExtensionCompat.chromeID(at: unpacked) ?? folderName
+        if records.contains(where: { $0.id == id }) { remove(id: id) }         // réinstaller remplace
         let record = Record(id: id, directory: relative, enabled: true)
         records.append(record)
         save()
@@ -313,7 +340,22 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         return true
     }
 
+    /// Une adresse chrome-extension://<id>/… (la redirection d'une connexion OAuth vers l'extension) devient la page de l'extension, dans un onglet à part.
+    func openChromeExtensionURL(_ url: URL, closing tab: Tab?) -> Bool {
+        guard ["chrome-extension", "moz-extension"].contains(url.scheme?.lowercased() ?? ""), let host = url.host?.lowercased(),
+              let context = contexts.values.first(where: { $0.uniqueIdentifier.lowercased() == host }), let windowController else { return false }
+        var path = url.path.isEmpty ? "/" : url.path
+        if let query = url.query { path += "?" + query }
+        if let fragment = url.fragment { path += "#" + fragment }
+        guard let target = URL(string: path, relativeTo: context.baseURL)?.absoluteURL else { return false }
+        windowController.newTab(extensionPage: target, context: context)
+        if let tab { Task { @MainActor [weak windowController] in windowController?.closeTab(tab, remember: false) } }
+        return true
+    }
+
     func performAction(id: String, for tab: Tab?) {
+        let state = contexts[id]?.action(for: tab)
+        bridge.note("clic sur le bouton de \(contexts[id]?.webExtension.displayName ?? id) : actif=\(state?.isEnabled ?? false) popup=\(state?.presentsPopup ?? false) titre=\(state?.label ?? "-") pastille=\(state?.badgeText ?? "-") onglet=\(tab?.currentURL?.absoluteString ?? "nil")")
         // setPanelBehavior({ openPanelOnActionClick: true }) : le bouton ouvre le panneau latéral au lieu de lancer l'action.
         if let context = contexts[id], let path = bridge.opensPanelOnActionClick(context) {
             do { try bridge.openSidePanel(for: context, path: path); return } catch { windowController?.noticePill.show(message: "Panneau latéral : \(error.localizedDescription)", button: "OK", seconds: 6) { } }
@@ -327,7 +369,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         let tab = windowController?.activeExtensionTab
         return contexts.values.map { context in
             let action = context.action(for: tab)
-            return "\(context.webExtension.displayName ?? "?") v\(context.webExtension.displayVersion ?? "?") loaded=\(context.isLoaded) errors=\(context.errors.map { $0.localizedDescription }) label=\(action?.label ?? "-") badge=\(action?.badgeText ?? "-") popup=\(action?.presentsPopup ?? false)"
+            return "\(context.webExtension.displayName ?? "?") v\(context.webExtension.displayVersion ?? "?") loaded=\(context.isLoaded) errors=\(context.errors.map { $0.localizedDescription }) label=\(action?.label ?? "-") badge=\(action?.badgeText ?? "-") popup=\(action?.presentsPopup ?? false) enabled=\(action?.isEnabled ?? false) title=\(action?.label ?? "-")"
         }.sorted().joined(separator: " | ")
     }
 
@@ -335,16 +377,19 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     @objc(webExtensionController:focusedWindowForExtensionContext:)
     func webExtensionController(_ controller: WKWebExtensionController, focusedWindowFor extensionContext: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {
-        windowController
+        bridge.note("délégué : fenêtre active demandée")
+        return windowController
     }
 
     @objc(webExtensionController:openWindowsForExtensionContext:)
     func webExtensionController(_ controller: WKWebExtensionController, openWindowsFor extensionContext: WKWebExtensionContext) -> [any WKWebExtensionWindow] {
-        windowController.map { [$0] } ?? []
+        bridge.note("délégué : fenêtres ouvertes demandées")
+        return windowController.map { [$0] } ?? []
     }
 
     @objc(webExtensionController:openNewTabUsingConfiguration:forExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, openNewTabUsing configuration: WKWebExtension.TabConfiguration, for extensionContext: WKWebExtensionContext, completionHandler: @escaping ((any WKWebExtensionTab)?, (any Error)?) -> Void) {
+        bridge.note("délégué : nouvel onglet demandé")
         guard let windowController else { completionHandler(nil, CancellationError()); return }
         let tab: Tab
         if let url = configuration.url, url.scheme != "http", url.scheme != "https" { tab = windowController.newTab(extensionPage: url, context: extensionContext) }      // une page de l'extension elle-même
@@ -354,12 +399,14 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     @objc(webExtensionController:sendMessage:toApplicationWithIdentifier:forExtensionContext:replyHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?, for extensionContext: WKWebExtensionContext, replyHandler: @escaping (Any?, (any Error)?) -> Void) {
+        guard applicationIdentifier == ExtensionBridge.applicationID else { replyHandler(nil, NSError(domain: "Orée", code: 1, userInfo: [NSLocalizedDescriptionKey: "Specified native messaging host not found."])); return }
         nonisolated(unsafe) let request = message, reply = replyHandler
         Task { @MainActor in reply(await self.bridge.handle(request, context: extensionContext), nil) }
     }
 
     @objc(webExtensionController:connectUsingMessagePort:forExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort, for extensionContext: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
+        guard port.applicationIdentifier == ExtensionBridge.applicationID else { completionHandler(NSError(domain: "Orée", code: 1, userInfo: [NSLocalizedDescriptionKey: "Specified native messaging host not found."])); return }
         bridge.attach(port, context: extensionContext)
         completionHandler(nil)
     }
@@ -372,6 +419,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     @objc(webExtensionController:promptForPermissions:inTab:forExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>, in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext, completionHandler: @escaping (Set<WKWebExtension.Permission>, Date?) -> Void) {
+        bridge.note("délégué : permissions demandées")
         let names = permissions.map { Self.permissionNames[$0.rawValue] ?? $0.rawValue }.sorted().joined(separator: "\n• ")
         ask("« \(extensionContext.webExtension.displayName ?? "Une extension") » demande une autorisation", detail: "• \(names)") { granted in
             completionHandler(granted ? permissions : [], nil)
@@ -380,6 +428,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     @objc(webExtensionController:promptForPermissionToAccessURLs:inTab:forExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionToAccess urls: Set<URL>, in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext, completionHandler: @escaping (Set<URL>, Date?) -> Void) {
+        bridge.note("délégué : accès aux adresses demandé")
         let hosts = Set(urls.compactMap(\.host)).sorted().prefix(5).joined(separator: ", ")
         ask("« \(extensionContext.webExtension.displayName ?? "Une extension") » veut accéder à des sites", detail: hosts) { granted in
             completionHandler(granted ? urls : [], nil)
@@ -388,6 +437,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     @objc(webExtensionController:promptForPermissionMatchPatterns:inTab:forExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionMatchPatterns matchPatterns: Set<WKWebExtension.MatchPattern>, in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext, completionHandler: @escaping (Set<WKWebExtension.MatchPattern>, Date?) -> Void) {
+        bridge.note("délégué : accès aux motifs demandé")
         let list = matchPatterns.map(\.string).sorted().prefix(5).joined(separator: ", ")
         ask("« \(extensionContext.webExtension.displayName ?? "Une extension") » veut accéder à des sites", detail: list) { granted in
             completionHandler(granted ? matchPatterns : [], nil)
@@ -396,6 +446,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     @objc(webExtensionController:didUpdateAction:forExtensionContext:)
     func webExtensionController(_ controller: WKWebExtensionController, didUpdate action: WKWebExtension.Action, forExtensionContext context: WKWebExtensionContext) {
+        bridge.note("délégué : bouton mis à jour (titre=\(action.label) pastille=\(action.badgeText) actif=\(action.isEnabled) popup=\(action.presentsPopup))")
         onChange?()
     }
 
@@ -413,6 +464,7 @@ extension ExtensionManager {
     func automationOperation(_ op: String) async -> String {
         let parts = op.split(separator: ":").map(String.init)
         if parts.first == "report" { return report() }
+        if parts.first == "calls" { return bridge.callLog.suffix(400).joined(separator: "\n") }
         if parts.first == "trace" { return (windowController?.extensionPopupTrace ?? []).joined(separator: " | ") }
         let list = installedExtensions()
         guard parts.count == 2, let n = Int(parts[1]), list.indices.contains(n) else { return "no extension" }
@@ -422,6 +474,10 @@ extension ExtensionManager {
         case "enable": setEnabled(true, id: item.id)
         case "remove": remove(id: item.id)
         case "popup": return await popupProbe(id: item.id)
+        case "sidepanel": return await sidePanelProbe()
+        case "loadbg":
+            return "retiré"
+        case "actionnil": contexts[item.id]?.performAction(for: nil); return "ok"
         case "popupstart": return await popupProbe(id: item.id, readResult: false)
         case "popupread": return await popupRead(id: item.id)
         case "options": return await optionsProbe(id: item.id)
@@ -465,6 +521,14 @@ extension ExtensionManager {
         let title = (try? await web.evaluateJavaScript("(document.getElementById('t')||{}).textContent || ''")) as? String ?? ""
         windowController.shownExtensionPopover?.close(); context.action(for: windowController.activeExtensionTab)?.closePopup()
         return probeJSON(["title": title])
+    }
+
+    /// Le panneau latéral affiché : son adresse, son titre et le début de son texte.
+    private func sidePanelProbe() async -> String {
+        guard let panel = windowController?.webPanel, panel.isShown, let web = panel.currentWebView else { return probeJSON(["shown": false]) }
+        try? await Task.sleep(for: .milliseconds(1500))
+        let text = (try? await web.evaluateJavaScript("document.body ? document.body.innerText.slice(0, 200) : ''")) as? String ?? ""
+        return probeJSON(["shown": true, "url": web.url?.absoluteString ?? "", "title": web.title ?? "", "text": text, "width": Int(web.bounds.width), "height": Int(web.bounds.height)])
     }
 
     private func optionsProbe(id: String) async -> String {

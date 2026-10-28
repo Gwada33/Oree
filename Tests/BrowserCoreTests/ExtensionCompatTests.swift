@@ -72,9 +72,31 @@ import Foundation
     }
 }
 
+@Suite struct ExtensionIDTests {
+    /// La clé publique de « Claude dans Chrome » et son identifiant réel dans le Chrome Web Store.
+    private let key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjU1XnLPoasGVmZU42K3h6S+sQhkogfcoLPbIcrWH5Oo8QoInBIugkew/7cWaEFySyQrkaEBe1fjeS/rlAqd3r778dKcTvDZcXmj0VVX0Fi1i8tnkarurceGKGdVxfkL7e30nwfgwoPxj3H8OQbsbxFcBWGVtcFekmdpiyaxwz6o4yXIWColfAxh9K2yToOZkoAS5GvgGvTexiCh1gYy++eFdk6C61mcFsyDdoGQtduhGEaX0zZ9uAW1jX4JTPmHV3kEFrZu/WVBl7Obw+Jk/osoHMdmghVNy6SCB8/6mcgmxkP9buPrNUZgYP6n0x5dqEJ2Ecww/lb1Zd4nQf4XGOwIDAQAB"
+    @Test func idFollowsChromesRule() { #expect(ExtensionCompat.chromeID(forKey: key) == "fcoeoabgfenejglbffodgkkbkcdhcgfn") }
+    @Test func garbageGivesNoID() { #expect(ExtensionCompat.chromeID(forKey: "pas du base64 !!") == nil); #expect(ExtensionCompat.chromeID(forKey: "") == nil) }
+}
+
 @Suite struct ExtensionCompatAssemblyTests {
     @Test func sectionsReplaceTheMarkerInOrder() {
         let out = ExtensionCompat.assemble(core: "A\n  //@@SECTIONS@@ (note)\nB", sections: ["one", "two"])
         #expect(out.hasPrefix("A\n  one\ntwo (note)"))
+    }
+}
+
+@Suite struct ExtensionCompatPageTests {
+    @Test func serviceWorkerBecomesAPersistentBackgroundPage() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("compat-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: ["manifest_version": 3, "name": "x", "version": "1", "background": ["service_worker": "sw/main.js", "type": "module"]]).write(to: root.appendingPathComponent("manifest.json"))
+        try ExtensionCompat.apply(to: root, shim: Data("/* shim */".utf8), backgroundAsPage: true)
+        let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("manifest.json"))) as! [String: Any]
+        let background = manifest["background"] as! [String: Any]
+        #expect(background["page"] as? String == "__oree/background.html" && background["persistent"] as? Bool == true && background["service_worker"] == nil)
+        let html = try String(contentsOf: root.appendingPathComponent("__oree/background.html"), encoding: .utf8)
+        #expect(html.range(of: "compat.js")!.lowerBound < html.range(of: "sw/main.js")!.lowerBound)
+        #expect(html.contains("type=\"module\""))
     }
 }

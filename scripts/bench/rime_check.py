@@ -16,7 +16,7 @@ var d=__rime.loadBuffer(b);return JSON.stringify({bpm:d.bpm,offset:d.offset,conf
 
 if __name__ == "__main__":
     tmp = tempfile.mkdtemp(prefix="rime-"); auto = os.path.join(tmp, "auto"); os.makedirs(auto); os.makedirs(os.path.join(tmp, "ext")); os.environ["HB_AUTOMATION_DIR"] = auto
-    env = dict(os.environ, HB_FRESH_SESSION="1", HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AI_NO_AGENT="1", HB_TEST_KEYS_DIR=os.path.join(tmp, "keys"))
+    env = dict(os.environ, HB_FRESH_SESSION="1", HB_EXT_CONTROLLER_ID=str(__import__("uuid").uuid4()).upper(), HB_DB_PATH=os.path.join(tmp, "t.db"), HB_EXT_DIR=os.path.join(tmp, "ext"), HB_AI_NO_AGENT="1", HB_TEST_KEYS_DIR=os.path.join(tmp, "keys"))
     p = subprocess.Popen([os.path.join(APP, "Contents/MacOS/Oree"), "--automation"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     results = []
     def check(name, ok): results.append(bool(ok)); print(("  ok     " if ok else "  ÉCHEC  ") + name)

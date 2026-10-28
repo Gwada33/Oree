@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Rend une extension Chrome utilisable dans WebKit : WebKit n'a que 16 des ~70 API `chrome.*`. On copie l'extension déjà décompressée,
 /// puis on y fait charger `__oree/compat.js` AVANT tout autre script (service worker, page de fond, popup, réglages, panneau…) ;
@@ -7,9 +8,25 @@ import Foundation
 public enum ExtensionCompat {
     public static let folder = "__oree"
     static let marker = "<!--oree-compat-->"
-    static let tag = marker + "<script src=\"/__oree/compat.js\"></script>"
+    static let tag = marker + "<script charset=\"utf-8\" src=\"/__oree/compat.js\"></script>"
 
     public enum CompatError: Error { case noManifest }
+
+    /// L'identifiant que Chrome donne à une extension qui a une clé (`key` du manifeste) : SHA-256 de la clé publique, 16 premiers octets, chaque demi-octet écrit a…p.
+    /// Les services (connexion OAuth, pages externes) reconnaissent l'extension à cet identifiant ; Orée le lui donne pour qu'ils la reconnaissent aussi.
+    public static func chromeID(forKey base64Key: String) -> String? {
+        guard let der = Data(base64Encoded: base64Key.filter { !$0.isWhitespace }), !der.isEmpty else { return nil }
+        let digest = SHA256.hash(data: der)
+        return String(digest.prefix(16).flatMap { byte in [byte >> 4, byte & 0xF] }.map { Character(UnicodeScalar(UInt8(ascii: "a") + $0)) })
+    }
+
+    /// L'identifiant Chrome de l'extension décompressée dans `root` (nil si son manifeste n'a pas de `key`).
+    public static func chromeID(at root: URL) -> String? {
+        let original = root.appendingPathComponent("\(folder)/manifest.orig.json")
+        let file = FileManager.default.fileExists(atPath: original.path) ? original : root.appendingPathComponent("manifest.json")
+        guard let data = try? Data(contentsOf: file), let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let key = json["key"] as? String else { return nil }
+        return chromeID(forKey: key)
+    }
 
     /// Le script complet : le noyau (`core.js`) avec les sections (`sections/NN-nom.js`, dans l'ordre des noms) à la place de son repère.
     public static func assemble(core: String, sections: [String]) -> String {
@@ -17,7 +34,8 @@ public enum ExtensionCompat {
     }
 
     /// `root` : le dossier qui contient `manifest.json`. `shim` : le contenu de `oree-compat.js`.
-    public static func apply(to root: URL, shim: Data) throws {
+    /// `backgroundAsPage` : un service worker devient une page de fond persistante (voir `patched`).
+    public static func apply(to root: URL, shim: Data, backgroundAsPage: Bool = false) throws {
         let fm = FileManager.default
         let dir = root.appendingPathComponent(folder, isDirectory: true)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -28,13 +46,13 @@ public enum ExtensionCompat {
         }
         guard var manifest = (try JSONSerialization.jsonObject(with: Data(contentsOf: originalURL))) as? [String: Any] else { throw CompatError.noManifest }
         try write(shim, to: dir.appendingPathComponent("compat.js"))
-        manifest = patched(manifest, root: root, folderURL: dir)
+        manifest = patched(manifest, root: root, folderURL: dir, backgroundAsPage: backgroundAsPage)
         try write(JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys, .withoutEscapingSlashes]), to: manifestURL)
         try patchHTMLFiles(under: root)
     }
 
     /// Le manifeste modifié : le script de compatibilité passe en premier dans le fond, et `nativeMessaging` (le pont vers l'app) est demandé.
-    static func patched(_ original: [String: Any], root: URL, folderURL: URL) -> [String: Any] {
+    static func patched(_ original: [String: Any], root: URL, folderURL: URL, backgroundAsPage: Bool = false) -> [String: Any] {
         var m = original
         var permissions = (m["permissions"] as? [String]) ?? []
         if !permissions.contains("nativeMessaging") { permissions.append("nativeMessaging") }
@@ -42,12 +60,20 @@ public enum ExtensionCompat {
         guard var background = m["background"] as? [String: Any] else { return m }
         let shimPath = "\(folder)/compat.js"
         if let worker = background["service_worker"] as? String {
-            // Le service worker d'origine est chargé par un petit fichier qui charge d'abord le script de compatibilité (ES module ou script classique).
             let isModule = (background["type"] as? String) == "module"
             let target = worker.hasPrefix("/") ? worker : "/" + worker
-            let source = isModule ? "import \"/\(shimPath)\";\nimport \"\(target)\";\n" : "importScripts(\"/\(shimPath)\", \"\(target)\");\n"
-            try? write(Data(source.utf8), to: folderURL.appendingPathComponent("sw.js"))
-            background["service_worker"] = "\(folder)/sw.js"
+            if backgroundAsPage {
+                // WebKit arrête le service worker quelques secondes après son démarrage et ne le réveille pas pour un clic sur le bouton (Claude) : on le charge dans une page
+                // de fond persistante, qui reste en vie (comme une page de fond Manifest V2). Le script de compatibilité passe en premier.
+                let html = "<!doctype html><meta charset=\"utf-8\">\(marker)<script charset=\"utf-8\" src=\"/\(shimPath)\"></script><script \(isModule ? "type=\"module\" " : "")charset=\"utf-8\" src=\"\(target)\"></script>\n"
+                try? write(Data(html.utf8), to: folderURL.appendingPathComponent("background.html"))
+                background = ["page": "\(folder)/background.html", "persistent": true]
+            } else {
+                // Le service worker d'origine est chargé par un petit fichier qui charge d'abord le script de compatibilité (ES module ou script classique).
+                let source = isModule ? "import \"/\(shimPath)\";\nimport \"\(target)\";\n" : "importScripts(\"/\(shimPath)\", \"\(target)\");\n"
+                try? write(Data(source.utf8), to: folderURL.appendingPathComponent("sw.js"))
+                background["service_worker"] = "\(folder)/sw.js"
+            }
         }
         if var scripts = background["scripts"] as? [String] {
             scripts.removeAll { $0 == shimPath }

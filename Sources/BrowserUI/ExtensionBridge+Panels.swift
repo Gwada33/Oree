@@ -10,6 +10,8 @@ final class PanelStates {
     var sidePanels: [String: SidePanel] = [:]
     var openContext: String?
     var offscreen: [String: WKWebView] = [:]
+    /// La fenêtre invisible qui porte la page cachée : sans fenêtre, WebKit suspend son processus après quelques secondes et les événements de l'extension se perdent.
+    var offscreenWindows: [String: NSWindow] = [:]
 }
 
 extension ExtensionBridge {
@@ -40,6 +42,7 @@ extension ExtensionBridge {
     /// L'extension est déchargée ou retirée : ses pages cachées et son panneau partent avec elle.
     func unload(_ contextID: String) {
         panels.offscreen.removeValue(forKey: contextID)?.stopLoading()
+        panels.offscreenWindows.removeValue(forKey: contextID)?.close()
         panels.sidePanels[contextID] = nil
         if panels.openContext == contextID { window?.webPanel.hide(); panels.openContext = nil }
         ports[contextID] = nil
@@ -66,16 +69,20 @@ extension ExtensionBridge {
             "sidePanel.isOpen": Method(permission: nil) { [self] _, context in panels.openContext == context.uniqueIdentifier && window?.webPanel.isShown == true },
             // MARK: offscreen : une page de l'extension chargée sans fenêtre visible
             "offscreen.create": Method(permission: "offscreen") { [self] a, context in
+                if ProcessInfo.processInfo.environment["HB_NO_OFFSCREEN"] != nil { throw Failure(message: "essai : offscreen coupé") }
                 let id = context.uniqueIdentifier
                 if panels.offscreen[id] != nil { throw Failure(message: "Only a single offscreen document may be created.") }
                 let url = try pageURL((a["url"] as? String) ?? "", in: context)
                 let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: context.webViewConfiguration ?? WKWebViewConfiguration())
+                let host = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 800, height: 600), styleMask: [.borderless], backing: .buffered, defer: false)
+                host.isReleasedWhenClosed = false; host.alphaValue = 0.01; host.ignoresMouseEvents = true; host.level = .normal; host.collectionBehavior = [.stationary, .ignoresCycle, .transient]
+                host.contentView = web; host.orderBack(nil)
                 web.load(URLRequest(url: url))
-                panels.offscreen[id] = web; return NSNull()
+                panels.offscreen[id] = web; panels.offscreenWindows[id] = host; return NSNull()
             },
             "offscreen.close": Method(permission: "offscreen") { [self] _, context in
                 guard let web = panels.offscreen.removeValue(forKey: context.uniqueIdentifier) else { throw Failure(message: "No current offscreen document.") }
-                web.stopLoading(); return NSNull()
+                web.stopLoading(); panels.offscreenWindows.removeValue(forKey: context.uniqueIdentifier)?.close(); return NSNull()
             },
             "offscreen.has": Method(permission: nil) { [self] _, context in panels.offscreen[context.uniqueIdentifier] != nil },
         ]

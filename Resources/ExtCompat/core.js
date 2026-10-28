@@ -26,7 +26,10 @@
     return function (...args) {
       let cb = null;
       if (args.length && typeof args[args.length - 1] === 'function') cb = args.pop();
-      const p = new Promise((resolve, reject) => { try { Promise.resolve(impl.apply(this, args)).then(resolve, reject); } catch (e) { reject(e); } });
+      // Un tour de boucle d'événements avant de répondre, comme le ferait un vrai appel au navigateur : sans cela, une extension qui attend un état en rappelant l'API
+      // dans une boucle (await …) ne laisse jamais la main aux minuteurs ni aux événements, et son service worker semble mort.
+      const self = this;
+      const p = new Promise((resolve, reject) => { setTimeout(() => { try { Promise.resolve(impl.apply(self, args)).then(resolve, reject); } catch (e) { reject(e); } }, 0); });
       if (!cb) return p;
       p.then((v) => { setLastError(null); cb(v); }, (e) => { setLastError(e && e.message || e); try { cb(); } finally { setLastError(null); } });
     };
@@ -84,8 +87,30 @@
     } catch (e) { port = null; }
   }
   connect();
+  /* Une application native que l'extension demande (connectNative('com.exemple.hote')) : s'il n'y en a pas, Chrome rend un port qui se déconnecte aussitôt avec une erreur
+     (runtime.lastError) ; il ne lance pas d'exception. WebKit, lui, en lance une : l'extension planterait au démarrage. */
+  if (typeof C.runtime.connectNative === 'function') {
+    const real = C.runtime.connectNative.bind(C.runtime);
+    const wrapped = function (name) {
+      if (name === NATIVE) return real(name);
+      try { return real(name); } catch (e) {
+        const onMessage = makeEvent(), onDisconnect = makeEvent();
+        const port = { name, onMessage, onDisconnect, postMessage() { throw new Error('Attempting to use a disconnected port object'); }, disconnect() {}, sender: undefined };
+        setTimeout(() => { setLastError('Specified native messaging host not found.'); try { onDisconnect.dispatch(port); } finally { setLastError(null); } }, 0);
+        return port;
+      }
+    };
+    try { C.runtime.connectNative = wrapped; if (B && B.runtime) B.runtime.connectNative = wrapped; } catch (e) { diag.failed.push('runtime.connectNative'); }
+  }
 
   /* ====== les API ajoutées : voir les sections ci-dessous ====== */
+  /* Les erreurs non attrapées de l'extension sont notées côté app (journal des appels du pont : utile pour comprendre pourquoi une extension ne marche pas). */
+  try {
+    const report = (kind, message, where) => { native('log', { kind, message: String(message).slice(0, 400), where: String(where || '').slice(0, 200) }).catch(() => {}); };
+    G.addEventListener('error', (e) => report('erreur', e.message, (e.filename || '') + ':' + (e.lineno || 0)));
+    G.addEventListener('unhandledrejection', (e) => report('promesse rejetée', (e.reason && (e.reason.message || e.reason)) || 'inconnue', e.reason && e.reason.stack && e.reason.stack.split('\n')[0]));
+  } catch (e) {}
+  native('log', { kind: 'démarrage', message: (typeof window === 'undefined' ? 'service worker' : 'page') + ' ' + ((G.location && G.location.pathname) || '') }).catch(() => {});
   // Les sections (sections/NN-nom.js) prennent la place du repère ci-dessous : voir ExtensionCompat.assemble.
   //@@SECTIONS@@
 })();
