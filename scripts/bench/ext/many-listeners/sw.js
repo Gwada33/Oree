@@ -8,7 +8,7 @@ chrome.runtime.onStartup.addListener(f);
 chrome.permissions.onAdded.addListener(f);
 chrome.permissions.onRemoved.addListener(f);
 chrome.action.onClicked.addListener(async (tab) => { await chrome.action.setBadgeText({ text: tab && tab.id ? 'L' : 'X' }); });
-chrome.commands.onCommand.addListener(f);
+chrome.commands.onCommand.addListener((name) => { chrome.action.setBadgeText({ text: 'C:' + name }); });
 chrome.runtime.onMessage.addListener(f);
 chrome.tabs.onRemoved.addListener(f);
 chrome.webNavigation.onBeforeNavigate.addListener(f);

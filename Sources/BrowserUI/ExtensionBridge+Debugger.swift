@@ -11,6 +11,9 @@ import BrowserCore
 final class DebuggerSessions {
     struct Attachment { let tabId: Int; let contextID: String; let name: String }
     var attachments: [ObjectIdentifier: Attachment] = [:]
+    /// L'onglet que chaque (extension, tabId) a attaché : retrouvé par son identifiant, pas par sa place ni son adresse (qui changent).
+    final class Weak { weak var tab: Tab?; init(_ tab: Tab) { self.tab = tab } }
+    var tabsByID: [String: Weak] = [:]
     var scripts: [String: WKUserScript] = [:]
     var lastStatus: [ObjectIdentifier: Int] = [:]
     var requestCounter = 0
@@ -51,6 +54,12 @@ extension ExtensionBridge {
         return tabs.first { $0.currentURL?.absoluteString == url && !url.isEmpty } ?? ((target["index"] as? Int).flatMap { tabs.indices.contains($0) ? tabs[$0] : nil })
     }
 
+    /// L'onglet attaché désigné par `target` : d'abord par l'identifiant donné à l'attache, sinon par sa place et son adresse.
+    private func attachedTab(_ target: [String: Any], _ context: WKWebExtensionContext) -> Tab? {
+        if let id = target["tabId"] as? Int, let tab = debug.tabsByID["\(context.uniqueIdentifier):\(id)"]?.tab { return tab }
+        return tab(from: target)
+    }
+
     func debuggerMethods() -> [String: Method] {
         [
             "debugger.attach": Method(permission: "debugger") { [self] a, context in
@@ -61,16 +70,17 @@ extension ExtensionBridge {
                 if debug.attachments[key] != nil { throw Failure(message: "Another debugger is already attached to the tab with id: \(tabId).") }
                 let name = context.webExtension.displayName ?? "Une extension"
                 debug.attachments[key] = .init(tabId: tabId, contextID: context.uniqueIdentifier, name: name)
+                debug.tabsByID["\(context.uniqueIdentifier):\(tabId)"] = .init(tab)
                 installConsoleHook(on: tab)
                 window?.noticePill.show(message: "« \(name) » contrôle cet onglet.", button: "Arrêter", seconds: 8) { [weak self, weak tab] in if let tab { self?.detach(tab, reason: "canceled_by_user") } }
                 return NSNull()
             },
-            "debugger.detach": Method(permission: "debugger") { [self] a, _ in
-                guard let target = a["target"] as? [String: Any], let tab = tab(from: target), debug.attachments[ObjectIdentifier(tab)] != nil else { throw Failure(message: "Debugger is not attached to the tab.") }
+            "debugger.detach": Method(permission: "debugger") { [self] a, context in
+                guard let target = a["target"] as? [String: Any], let tab = attachedTab(target, context), debug.attachments[ObjectIdentifier(tab)] != nil else { throw Failure(message: "Debugger is not attached to the tab.") }
                 debug.attachments[ObjectIdentifier(tab)] = nil; return NSNull()
             },
             "debugger.sendCommand": Method(permission: "debugger") { [self] a, context in
-                guard let target = a["target"] as? [String: Any], let tab = tab(from: target), let at = debug.attachments[ObjectIdentifier(tab)], at.contextID == context.uniqueIdentifier,
+                guard let target = a["target"] as? [String: Any], let tab = attachedTab(target, context), let at = debug.attachments[ObjectIdentifier(tab)], at.contextID == context.uniqueIdentifier,
                       let method = a["method"] as? String else { throw Failure(message: "Debugger is not attached to the tab.") }
                 return try await cdp(tab, method, (a["params"] as? [String: Any]) ?? [:])
             },

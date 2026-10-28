@@ -10,6 +10,11 @@
   const G = globalThis;
   const C = G.chrome || G.browser;
   if (!C || !C.runtime || C.__oreeCompat) return;
+  /* requestIdleCallback n'existe pas dans WebKit (ni Safari) et des extensions s'en servent dans leur page de fond. */
+  if (typeof G.requestIdleCallback !== 'function' && typeof G.setTimeout === 'function') {
+    G.requestIdleCallback = (callback, options) => G.setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 40 }), 1);
+    G.cancelIdleCallback = (id) => G.clearTimeout(id);
+  }
   const diag = { version: 1, failed: [], defined: [] };
   try { Object.defineProperty(C, '__oreeCompat', { value: diag }); } catch (e) { return; }
   const B = (G.browser && G.browser !== C) ? G.browser : null;

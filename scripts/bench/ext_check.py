@@ -26,7 +26,7 @@ if __name__ == "__main__":
     def check(name, ok, detail=""): results.append(bool(ok)); print(("  ok     " if ok else "  ÉCHEC  ") + name + (f"   [{detail}]" if detail and not ok else ""))
     try:
         time.sleep(8); print("   page :", ui("load", "https://example.com")); time.sleep(4)
-        names = ["popup-mv3", "popup-mv2", "content-badge", "messaging", "options-ui", "api-compat", "debugger-test", "native-apis", "system-apis", "native-host"]
+        names = ["popup-mv3", "popup-mv2", "content-badge", "messaging", "options-ui", "api-compat", "debugger-test", "native-apis", "system-apis", "native-host", "many-listeners"]
         for n in names:
             r = ui("install", os.path.join(ROOT, "scripts/bench/ext", n)); time.sleep(1); check(f"installe {n}", r == "installed", r)
         time.sleep(3)
@@ -54,6 +54,7 @@ if __name__ == "__main__":
         except Exception: pass
         for name, v in res.items(): check(f"chrome.debugger : {name}", v is True, str(v))
         check("chrome.debugger : le test s'est exécuté", len(res) >= 15, str(r)[:300])
+        if "ERREUR" in res: print("   détail debugger :", {k: v for k, v in res.items() if v is not True}); print("   journal :", [l for l in ui("extop", "calls:0").split("\n") if "debugger" in l or "clic" in l][-12:])
         r = jo(ui("extop", "popup:7")); res = {}
         try: res = json.loads(r.get("title") or "{}")
         except Exception: pass
@@ -70,6 +71,10 @@ if __name__ == "__main__":
         except Exception: pass
         for name, v in res.items(): check(f"Messagerie native : {name}", v is True, str(v))
         check("Messagerie native : le test s'est exécuté", len(res) >= 3, str(r)[:300])
+        ui("key", "ctrl+shift+j"); time.sleep(1.5)
+        check("raccourci clavier d'une extension (commands) : onCommand reçu", "badge=C:toggle" in ui("extensions"), ui("extensions")[-200:])
+        ui("extop", "popup:10"); time.sleep(1.5)
+        check("clic sur le bouton d'une grosse extension (beaucoup d'écouteurs) : onClicked reçu", "badge=L" in ui("extensions"), ui("extensions")[-200:])
         for i, (n, title) in enumerate([("popup-mv3", "OPTIONS-A"), ("popup-mv2", "OPTIONS-B"), ("content-badge", None), ("messaging", None), ("options-ui", "OPTIONS-E")]):
             r = jo(ui("extop", f"options:{i}")); print("   options", n, r)
             if title is None: check(f"{n} : sans réglages, rien ne s'ouvre", r.get("opened") is False, str(r)); continue

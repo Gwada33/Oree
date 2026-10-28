@@ -61,8 +61,10 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             nonisolated(unsafe) let e = event
             return mainActorNow {
-                guard let self, !self.contexts.isEmpty, !Self.menuHandles(e) else { return e }
-                for context in self.contexts.values where context.performCommand(for: e) { return nil }
+                guard let self, !self.contexts.isEmpty else { return e }
+                if Self.menuHandles(e) { self.bridge.note("raccourci : pris par un menu d'Orée (\(e.charactersIgnoringModifiers ?? "?"))"); return e }
+                for context in self.contexts.values where context.performCommand(for: e) { self.bridge.note("raccourci : exécuté pour \(context.webExtension.displayName ?? "?")"); return nil }
+                self.bridge.note("raccourci : aucune extension (\(e.charactersIgnoringModifiers ?? "?") \(e.modifierFlags.rawValue))")
                 return e
             }
         }
@@ -80,6 +82,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     private func registerWindowIfNeeded() {
         guard !windowRegistered, let windowController else { return }
         windowRegistered = true
+        installCommandMonitor()
         controller.didOpenWindow(windowController)
         controller.didFocusWindow(windowController)
         for tab in windowController.extensionTabs { controller.didOpenTab(tab) }
@@ -492,6 +495,11 @@ extension ExtensionManager {
         case "sidepanel": return await sidePanelProbe()
         case "loadbg":
             return "retiré"
+        case "commands":
+            guard let context = contexts[item.id] else { return "?" }
+            var lines = context.commands.map { "\($0.id) clé=\($0.activationKey ?? "-") modifs=\($0.modifierFlags.rawValue)" }
+            if let first = context.commands.first { context.performCommand(first); lines.append("exécuté : \(first.id)") }
+            return lines.joined(separator: " | ")
         case "actionnil": contexts[item.id]?.performAction(for: nil); return "ok"
         case "popupstart": return await popupProbe(id: item.id, readResult: false)
         case "popupread": return await popupRead(id: item.id)

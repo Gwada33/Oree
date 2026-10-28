@@ -1,5 +1,11 @@
 /* Petits manques dans les espaces que WebKit a déjà (runtime, tabs, storage, windows…) et espaces de types. */
 (function () {
+  /* chrome.runtime.getURL('') : WebKit ne rend rien pour un chemin vide (uBlock Origin en dépend) ; Chrome rend l'adresse de base de l'extension. */
+  if (typeof C.runtime.getURL === 'function') {
+    const real = C.runtime.getURL.bind(C.runtime);
+    const getURL = (path) => { const r = real(path); return typeof r === 'string' ? r : ((G.location && G.location.origin) || '') + '/' + String(path || '').replace(/^\//, ''); };
+    try { C.runtime.getURL = getURL; if (B && B.runtime) B.runtime.getURL = getURL; } catch (e) { diag.failed.push('runtime.getURL'); }
+  }
   /* chrome.runtime */
   shared.contextProviders = [];
   extend('runtime', {
@@ -50,6 +56,9 @@
     });
     try { C.windows.create = replacement; if (B && B.windows) B.windows.create = replacement; } catch (e) { diag.failed.push('windows.create'); }
   }
+  /* événements de navigation que WebKit n'a pas (ils ne se déclencheront pas : l'extension démarre, c'est l'essentiel) */
+  extend('webNavigation', { onCreatedNavigationTarget: makeEvent(), onHistoryStateUpdated: makeEvent(), onReferenceFragmentUpdated: makeEvent(), onTabReplaced: makeEvent() });
+  extend('webRequest', { handlerBehaviorChanged: api(async () => {}), onActionIgnored: makeEvent() });
   /* chrome.windows */
   extend('windows', { WindowState: { NORMAL: 'normal', MINIMIZED: 'minimized', MAXIMIZED: 'maximized', FULLSCREEN: 'fullscreen', LOCKED_FULLSCREEN: 'locked-fullscreen' }, onBoundsChanged: makeEvent() });
   /* chrome.storage.managed : les règles d'entreprise (il n'y en a pas) */
