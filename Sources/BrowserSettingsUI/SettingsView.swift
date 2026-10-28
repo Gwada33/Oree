@@ -311,6 +311,10 @@ final class SettingsViewModel: ObservableObject {
         reloadExtensions()
     }
 
+    func openExtensionOptions(_ id: String) {
+        if extensionsProvider?.openOptions(id: id) != true { extensionMessage = "Cette extension n'a pas de page de réglages." }
+    }
+
     func removeExtension(_ id: String) {
         extensionsProvider?.remove(id: id)
         reloadExtensions()
@@ -1036,6 +1040,7 @@ public struct SettingsView: View {
                         }
                     }
                     Spacer()
+                    if item.hasOptions && item.isEnabled { Button("Réglages") { model.openExtensionOptions(item.id) } }
                     Toggle("", isOn: Binding(get: { item.isEnabled }, set: { model.setExtension(item.id, enabled: $0) }))
                         .labelsHidden()
                     Button("Supprimer", role: .destructive) { model.removeExtension(item.id) }

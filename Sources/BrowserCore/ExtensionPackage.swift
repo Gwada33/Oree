@@ -101,9 +101,11 @@ public struct ExtensionInfo: Identifiable, Equatable, Sendable {
     public let version: String
     public let summary: String
     public var isEnabled: Bool
+    /// L'extension a une page de réglages.
+    public var hasOptions: Bool
 
-    public init(id: String, name: String, version: String, summary: String, isEnabled: Bool) {
-        self.id = id; self.name = name; self.version = version; self.summary = summary; self.isEnabled = isEnabled
+    public init(id: String, name: String, version: String, summary: String, isEnabled: Bool, hasOptions: Bool = false) {
+        self.id = id; self.name = name; self.version = version; self.summary = summary; self.isEnabled = isEnabled; self.hasOptions = hasOptions
     }
 }
 
@@ -114,4 +116,6 @@ public protocol ExtensionsProviding: AnyObject {
     func install(from url: URL) async throws
     func setEnabled(_ enabled: Bool, id: String)
     func remove(id: String)
+    /// Ouvre la page de réglages de l'extension ; faux si elle n'en a pas.
+    @discardableResult func openOptions(id: String) -> Bool
 }

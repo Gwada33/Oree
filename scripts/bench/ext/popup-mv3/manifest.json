@@ -1,0 +1,1 @@
+{"manifest_version": 3, "name": "Test A popup MV3", "version": "1.0", "permissions": ["storage"], "action": {"default_popup": "popup.html", "default_title": "Test A"}, "options_page": "options.html", "description": "Extension d'essai pour Orée"}

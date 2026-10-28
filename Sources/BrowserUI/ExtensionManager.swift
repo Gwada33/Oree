@@ -46,7 +46,19 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     // MARK: Loading
 
+    private var windowRegistered = false
+    /// Le moteur doit connaître la fenêtre (et ses onglets) : sans cela, « clic sur le bouton d'une extension » pour un onglet ne fait rien.
+    private func registerWindowIfNeeded() {
+        guard !windowRegistered, let windowController else { return }
+        windowRegistered = true
+        controller.didOpenWindow(windowController)
+        controller.didFocusWindow(windowController)
+        for tab in windowController.extensionTabs { controller.didOpenTab(tab) }
+        if let active = windowController.activeExtensionTab { controller.didActivateTab(active, previousActiveTab: nil); controller.didSelectTabs([active]) }
+    }
+
     func loadAll() async {
+        registerWindowIfNeeded()
         for record in records where record.enabled { await load(record) }
         onChange?()
     }
@@ -82,7 +94,8 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
                 name: webExtension?.displayName ?? Self.manifestName(at: root.appendingPathComponent(record.directory)) ?? "Extension",
                 version: webExtension?.displayVersion ?? "",
                 summary: webExtension?.displayDescription ?? "",
-                isEnabled: record.enabled
+                isEnabled: record.enabled,
+                hasOptions: context?.optionsPageURL != nil
             )
         }
     }
@@ -94,6 +107,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     }
 
     func install(from url: URL) async throws {
+        registerWindowIfNeeded()
         let id = UUID().uuidString
         let destination = root.appendingPathComponent(id, isDirectory: true)
         let unpacked: URL
@@ -111,7 +125,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         save()
         await load(record)
         onChange?()
-        if let windowController { for tab in windowController.extensionTabs { controller.didOpenTab(tab) } }
+        if let windowController { for tab in windowController.extensionTabs { controller.didOpenTab(tab) } }      // le nouveau contexte doit connaître les onglets déjà ouverts
     }
 
     func setEnabled(_ enabled: Bool, id: String) {
@@ -187,15 +201,15 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     // MARK: Events from our tabs
 
-    func tabOpened(_ tab: Tab) { if !tab.isPrivate { controller.didOpenTab(tab) } }
-    func tabClosed(_ tab: Tab) { if !tab.isPrivate { controller.didCloseTab(tab, windowIsClosing: false) } }
+    func tabOpened(_ tab: Tab) { if windowRegistered, !tab.isPrivate { controller.didOpenTab(tab) } }
+    func tabClosed(_ tab: Tab) { if windowRegistered, !tab.isPrivate { controller.didCloseTab(tab, windowIsClosing: false) } }
     func tabActivated(_ tab: Tab, previous: Tab?) {
-        guard !tab.isPrivate else { return }
+        guard windowRegistered, !tab.isPrivate else { return }
         controller.didActivateTab(tab, previousActiveTab: (previous?.isPrivate == false) ? previous : nil)
         controller.didSelectTabs([tab])
     }
     func tabChanged(_ tab: Tab, _ properties: WKWebExtension.TabChangedProperties) {
-        if !tab.isPrivate { controller.didChangeTabProperties(properties, for: tab) }
+        if windowRegistered, !tab.isPrivate { controller.didChangeTabProperties(properties, for: tab) }
     }
 
     // MARK: Toolbar
@@ -208,6 +222,14 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         }
     }
 
+    /// Ouvre la page de réglages de l'extension dans un onglet (ou dit qu'elle n'en a pas).
+    @discardableResult
+    func openOptions(id: String) -> Bool {
+        guard let context = contexts[id], let url = context.optionsPageURL, let windowController else { return false }
+        windowController.newTab(extensionPage: url, context: context)
+        return true
+    }
+
     func performAction(id: String, for tab: Tab?) {
         contexts[id]?.performAction(for: tab)
     }
@@ -218,7 +240,7 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
         let tab = windowController?.activeExtensionTab
         return contexts.values.map { context in
             let action = context.action(for: tab)
-            return "\(context.webExtension.displayName ?? "?") v\(context.webExtension.displayVersion ?? "?") loaded=\(context.isLoaded) errors=\(context.errors.count) label=\(action?.label ?? "-") badge=\(action?.badgeText ?? "-") popup=\(action?.presentsPopup ?? false) popupPage=\(action?.popupWebView?.url?.lastPathComponent ?? "-")"
+            return "\(context.webExtension.displayName ?? "?") v\(context.webExtension.displayVersion ?? "?") loaded=\(context.isLoaded) errors=\(context.errors.map { $0.localizedDescription }) label=\(action?.label ?? "-") badge=\(action?.badgeText ?? "-") popup=\(action?.presentsPopup ?? false)"
         }.sorted().joined(separator: " | ")
     }
 
@@ -237,13 +259,15 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     @objc(webExtensionController:openNewTabUsingConfiguration:forExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, openNewTabUsing configuration: WKWebExtension.TabConfiguration, for extensionContext: WKWebExtensionContext, completionHandler: @escaping ((any WKWebExtensionTab)?, (any Error)?) -> Void) {
         guard let windowController else { completionHandler(nil, CancellationError()); return }
-        let tab = windowController.newTab(urlString: configuration.url?.absoluteString, isPrivate: false)
+        let tab: Tab
+        if let url = configuration.url, url.scheme != "http", url.scheme != "https" { tab = windowController.newTab(extensionPage: url, context: extensionContext) }      // une page de l'extension elle-même
+        else { tab = windowController.newTab(urlString: configuration.url?.absoluteString, isPrivate: false) }
         completionHandler(tab, nil)
     }
 
     @objc(webExtensionController:openOptionsPageForExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, openOptionsPageFor extensionContext: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
-        if let url = extensionContext.optionsPageURL { windowController?.newTab(urlString: url.absoluteString, isPrivate: false) }
+        if let url = extensionContext.optionsPageURL { windowController?.newTab(extensionPage: url, context: extensionContext) }
         completionHandler(nil)
     }
 
@@ -278,7 +302,63 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
 
     @objc(webExtensionController:presentPopupForAction:forExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, presentActionPopup action: WKWebExtension.Action, for context: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
-        windowController?.presentExtensionPopup(action, for: context)
-        completionHandler(nil)
+        guard let windowController else { completionHandler(nil); return }
+        windowController.presentExtensionPopup(action, for: context, completion: completionHandler)
+    }
+}
+
+// MARK: - Essais automatiques (instance de développement lancée avec --automation)
+
+extension ExtensionManager {
+    /// `disable:N`, `enable:N`, `remove:N`, `report`, `popup:N` (clique le bouton, attend le popup et en lit le contenu), `options:N` (ouvre les réglages et en lit le titre).
+    func automationOperation(_ op: String) async -> String {
+        let parts = op.split(separator: ":").map(String.init)
+        if parts.first == "report" { return report() }
+        let list = installedExtensions()
+        guard parts.count == 2, let n = Int(parts[1]), list.indices.contains(n) else { return "no extension" }
+        let item = list[n]
+        switch parts[0] {
+        case "disable": setEnabled(false, id: item.id)
+        case "enable": setEnabled(true, id: item.id)
+        case "remove": remove(id: item.id)
+        case "popup": return await popupProbe(id: item.id)
+        case "options": return await optionsProbe(id: item.id)
+        default: return "unknown op"
+        }
+        return "\(parts[0]) done; installed now: \(installedExtensions().map { "\($0.name)(enabled=\($0.isEnabled))" })"
+    }
+
+    private func probeJSON(_ object: [String: Any]) -> String {
+        (try? JSONSerialization.data(withJSONObject: object)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    }
+
+    /// Clique le bouton de l'extension, attend que l'app ait posé le popover, puis lit ce que la page du popup affiche.
+    /// (`isShown` n'est vrai que si la fenêtre est visible à l'écran ; l'instance d'essai peut être cachée, on lit donc aussi le contenu.)
+    private func popupProbe(id: String) async -> String {
+        guard let windowController, let context = contexts[id] else { return probeJSON(["error": "no context"]) }
+        windowController.shownExtensionPopover?.close(); windowController.shownExtensionPopover = nil; windowController.extensionPopupTrace = []
+        let tab = windowController.activeExtensionTab
+        performAction(id: id, for: tab)
+        for _ in 0..<40 { if windowController.shownExtensionPopover != nil { break }; try? await Task.sleep(for: .milliseconds(100)) }
+        guard let popover = windowController.shownExtensionPopover else {
+            return probeJSON(["shown": false, "presentsPopup": context.action(for: tab)?.presentsPopup ?? false, "trace": windowController.extensionPopupTrace])
+        }
+        try? await Task.sleep(for: .milliseconds(800))
+        var out: [String: Any] = ["shown": true, "onScreen": popover.isShown, "trace": windowController.extensionPopupTrace, "size": "\(Int(popover.contentSize.width))x\(Int(popover.contentSize.height))", "wanted": "\(Int(popover.contentViewController?.preferredContentSize.width ?? 0))x\(Int(popover.contentViewController?.preferredContentSize.height ?? 0))"]
+        if let web = context.action(for: tab)?.popupWebView {
+            out["title"] = (try? await web.evaluateJavaScript("(document.getElementById('t')||{}).textContent || ''")) as? String ?? ""
+            out["body"] = (try? await web.evaluateJavaScript("document.body ? document.body.innerText.slice(0, 80) : ''")) as? String ?? ""
+        }
+        popover.close(); context.action(for: tab)?.closePopup()
+        return probeJSON(out)
+    }
+
+    private func optionsProbe(id: String) async -> String {
+        guard let windowController else { return probeJSON(["error": "no window"]) }
+        guard openOptions(id: id) else { return probeJSON(["opened": false]) }
+        for _ in 0..<50 { try? await Task.sleep(for: .milliseconds(100)); if windowController.activeTab?.webView?.isLoading == false, windowController.activeTab?.webView?.url?.scheme?.contains("extension") == true { break } }
+        let web = windowController.activeTab?.webView
+        let title = (try? await web?.evaluateJavaScript("(document.getElementById('t')||{}).textContent || document.title || ''")) as? String ?? ""
+        return probeJSON(["opened": true, "url": web?.url?.absoluteString ?? "", "title": title, "tabs": windowController.tabs.count, "loading": web?.isLoading ?? false, "optionsURL": contexts[id]?.optionsPageURL?.absoluteString ?? "nil", "tabURLs": windowController.tabs.map { $0.webView?.url?.absoluteString ?? "-" }])
     }
 }

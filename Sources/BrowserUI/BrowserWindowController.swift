@@ -109,6 +109,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     let extensionManager = ExtensionManager()
     let extensionBar = NSStackView()
     var extensionButtons: [String: ExtensionButton] = [:]
+    /// Le popup d'extension affiché en ce moment (les essais automatiques en lisent le contenu).
+    var shownExtensionPopover: NSPopover?
+    var extensionPopupTrace: [String] = []
     let loadingBar = LoadingBarView()
     let noticePill = NoticePill()
     let nowPlaying = NowPlayingView()
@@ -432,18 +435,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard let window else { return }
         VaultUnlocker.automationBypass = true   // no fingerprint sensor in scripted tests
         defer {
-            automation?.extensionOperation = { [weak self] op in
-                guard let manager = self?.extensionManager else { return "no manager" }
-                let parts = op.split(separator: ":").map(String.init)
-                guard parts.count == 2, let item = manager.installedExtensions().first else { return "no extension" }
-                switch parts[0] {
-                case "disable": manager.setEnabled(false, id: item.id)
-                case "enable": manager.setEnabled(true, id: item.id)
-                case "remove": manager.remove(id: item.id)
-                default: return "unknown op"
-                }
-                return "\(parts[0]) done; installed now: \(manager.installedExtensions().map { "\($0.name)(enabled=\($0.isEnabled))" })"
-            }
+            automation?.extensionOperation = { [weak self] op in await self?.extensionManager.automationOperation(op) ?? "no manager" }
         }
         automation = AutomationServer(
             window: window,
@@ -949,6 +941,10 @@ extension BrowserWindowController {
                     guard let self else { return }
                     self.extensionManager.performAction(id: id, for: self.activeExtensionTab)
                 }
+                button.onOptions = { [weak self] in self?.extensionManager.openOptions(id: id) }
+                button.onDisable = { [weak self] in self?.extensionManager.setEnabled(false, id: id) }
+                button.onRemove = { [weak self] in self?.extensionManager.remove(id: id) }
+                button.installMenu(hasOptions: entry.context.optionsPageURL != nil)
                 extensionButtons[id] = button
                 extensionBar.addArrangedSubview(button)
             }
@@ -1007,19 +1003,30 @@ extension BrowserWindowController {
     }
 
     /// Shows an extension's popup next to its toolbar button.
-    func presentExtensionPopup(_ action: WKWebExtension.Action, for context: WKWebExtensionContext) {
-        // popupPopover est construit à partir de la vue web du popup : on la demande d'abord. Sans popup (ou sans popover), on le dit au lieu de ne rien faire.
-        guard action.presentsPopup else {
-            Log.tabs.notice("Extension \(context.webExtension.displayName ?? "?", privacy: .public) : l'action n'a pas de popup")
-            noticePill.show(message: "« \(context.webExtension.displayName ?? "Cette extension") » n'a pas de fenêtre à ouvrir ici.", button: "OK", seconds: 5) { }
-            return
+    func presentExtensionPopup(_ action: WKWebExtension.Action, for context: WKWebExtensionContext, completion: @escaping ((any Error)?) -> Void) {
+        let name = context.webExtension.displayName ?? "l'extension"
+        extensionPopupTrace = ["delegate appelé"]
+        guard action.presentsPopup, let web = action.popupWebView, let popover = action.popupPopover else {
+            Log.tabs.notice("Extension \(name, privacy: .public) : pas de popup à ouvrir")
+            noticePill.show(message: "« \(name) » n'a pas de fenêtre à ouvrir ici.", button: "OK", seconds: 5) { }
+            completion(nil); return
         }
-        _ = action.popupWebView
-        guard let popover = action.popupPopover else {
-            Log.tabs.notice("Extension \(context.webExtension.displayName ?? "?", privacy: .public) : popup sans popover")
-            noticePill.show(message: "Le popup de « \(context.webExtension.displayName ?? "l'extension") » n'a pas pu s'ouvrir.", button: "OK", seconds: 6) { }
-            return
+        // La page du popup se charge d'abord ; le popover est dimensionné d'après son contenu une fois la page peinte. L'ouvrir avant donnait une fenêtre vide.
+        Task { @MainActor [weak self] in
+            var waited = 0
+            while waited < 60, web.url == nil || web.isLoading { try? await Task.sleep(for: .milliseconds(50)); waited += 1 }      // 3 s au plus
+            self?.extensionPopupTrace.append("chargé après \(waited * 50) ms, url=\(web.url?.absoluteString ?? "nil")")
+            var sized = 0
+            while sized < 20, popover.contentViewController?.preferredContentSize == .zero { try? await Task.sleep(for: .milliseconds(50)); sized += 1 }      // 1 s au plus
+            guard let self else { completion(nil); return }
+            self.extensionPopupTrace.append("taille voulue \(popover.contentViewController?.preferredContentSize ?? .zero) après \(sized * 50) ms")
+            if popover.contentViewController?.preferredContentSize == .zero { popover.contentSize = NSSize(width: 340, height: 420) }
+            self.showExtensionPopover(popover, for: context)
+            completion(nil)
         }
+    }
+
+    private func showExtensionPopover(_ popover: NSPopover, for context: WKWebExtensionContext) {
         // The button lives in the sidebar: when the sidebar is hidden (compact mode, collapsed, other tab layout) the button has no
         // place on screen and the popover would open in a corner of the window. Fall back on the address bar, then on the page's top.
         func usable(_ view: NSView?) -> NSView? {
@@ -1030,6 +1037,8 @@ extension BrowserWindowController {
         popover.behavior = .transient
         popover.show(relativeTo: anchor === contentContainer ? NSRect(x: anchor.bounds.midX - 1, y: anchor.bounds.maxY - 2, width: 2, height: 2) : anchor.bounds,
                      of: anchor, preferredEdge: anchor === contentContainer ? .minY : .maxY)
+        shownExtensionPopover = popover
+        extensionPopupTrace.append("affiché=\(popover.isShown) ancre=\(type(of: anchor)) fenêtre visible=\(window?.isVisible ?? false) occlusion=\(window?.occlusionState.rawValue ?? 0)")
     }
 }
 

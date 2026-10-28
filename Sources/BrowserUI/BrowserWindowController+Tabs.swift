@@ -139,9 +139,19 @@ extension BrowserWindowController {
         }
     }
 
+    /// Ouvre une page d'extension (webkit-extension://…) telle quelle : la barre d'adresse la prendrait pour une recherche.
     @discardableResult
-    func newTab(urlString: String?, isPrivate: Bool) -> Tab {
-        let config = makeConfiguration(isPrivate: isPrivate)
+    func newTab(extensionPage url: URL, context: WKWebExtensionContext) -> Tab {
+        // Une page d'extension ne se charge que dans une vue configurée par son contexte (sinon : erreur -1008, page introuvable).
+        let tab = newTab(urlString: nil, isPrivate: false, configuration: context.webViewConfiguration)
+        tab.lastRequestedURL = url
+        tab.webView?.load(URLRequest(url: url))
+        return tab
+    }
+
+    @discardableResult
+    func newTab(urlString: String?, isPrivate: Bool, configuration: WKWebViewConfiguration? = nil) -> Tab {
+        let config = configuration ?? makeConfiguration(isPrivate: isPrivate)
         LaunchTrace.mark("newTab: configuration made")
         let tab = Tab(configuration: config, isPrivate: isPrivate)
         LaunchTrace.mark("newTab: tab + web view created")

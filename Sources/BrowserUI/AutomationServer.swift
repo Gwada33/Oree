@@ -24,7 +24,7 @@ final class AutomationServer {
     private let tabOperation: (String, Int) -> String
     private let installExtension: (URL) async throws -> Void
     private let extensionsReport: () -> String
-    var extensionOperation: ((String) -> String)?
+    var extensionOperation: ((String) async -> String)?
     private var timer: Timer?
 
     init(window: NSWindow, activeWebView: @escaping () -> WKWebView?, overlays: @escaping () -> [NSView],
@@ -141,7 +141,7 @@ final class AutomationServer {
             do { try await installExtension(URL(fileURLWithPath: path)); return (true, "installed") }
             catch { return (false, "\(error)") }
         case "extop":
-            return (true, extensionOperation?(c["op"] as? String ?? "") ?? "unavailable")
+            return (true, await extensionOperation?(c["op"] as? String ?? "") ?? "unavailable")
         case "extensions":
             return (true, extensionsReport())
         case "tab":

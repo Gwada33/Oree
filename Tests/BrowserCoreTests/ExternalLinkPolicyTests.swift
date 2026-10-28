@@ -9,6 +9,8 @@ import Foundation
         #expect(decide("https://example.com") == .notExternal)
         #expect(decide("about:blank") == .notExternal)
         #expect(decide("oree://home") == .notExternal)
+        #expect(decide("webkit-extension://abc/options.html") == .notExternal)
+        #expect(decide("safari-web-extension://abc/options.html") == .notExternal)
         #expect(decide("data:text/html,hi") == .notExternal)
         #expect(ExternalLinkPolicy.decision(for: nil, userInitiated: true) == .notExternal)
     }

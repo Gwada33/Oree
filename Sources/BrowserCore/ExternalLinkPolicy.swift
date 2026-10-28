@@ -3,7 +3,7 @@ import Foundation
 /// What to do with a link whose scheme a web view cannot show (mailto:, tel:, zoommtg:…): it belongs to another app.
 public enum ExternalLinkPolicy {
     public enum Decision: Equatable, Sendable {
-        /// The page is ours to show (http, https, about, data, blob, oree…): not an external link.
+        /// The page is ours to show (http, https, about, data, blob, oree, pages d'extension…): not an external link.
         case notExternal
         /// Opens straight away: the schemes everyone expects to leave the browser (mail, phone, messages, FaceTime).
         case openDirectly
@@ -13,7 +13,7 @@ public enum ExternalLinkPolicy {
         case block
     }
 
-    static let webSchemes: Set<String> = ["http", "https", "about", "data", "blob", "oree", "ws", "wss", "javascript", "view-source", "applewebdata"]
+    static let webSchemes: Set<String> = ["http", "https", "about", "data", "blob", "oree", "ws", "wss", "javascript", "view-source", "applewebdata", "webkit-extension", "safari-web-extension"]      // pages des extensions (réglages, popups)
     static let direct: Set<String> = ["mailto", "tel", "sms", "facetime", "facetime-audio", "callto"]
     /// Local files and system plumbing: a web page has no business launching them.
     static let blocked: Set<String> = ["file", "x-apple.systempreferences", "applescript", "osascript", "x-man-page", "shortcuts", "ssh", "telnet", "vnc", "smb", "afp", "nfs", "ftp", "sftp"]

@@ -1,0 +1,1 @@
+{"manifest_version": 3, "name": "Test D messaging", "version": "1.0", "permissions": ["storage", "alarms"], "background": {"service_worker": "sw.js"}, "action": {"default_popup": "popup.html", "default_title": "Test D"}, "description": "Extension d'essai pour Orée"}

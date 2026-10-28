@@ -115,6 +115,18 @@ final class ExtensionButton: NSButton {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     private let handler: () -> Void
+    /// Clic droit : réglages, désactiver, retirer.
+    var onOptions: (() -> Void)?, onDisable: (() -> Void)?, onRemove: (() -> Void)?
+    func installMenu(hasOptions: Bool) {
+        let menu = NSMenu()
+        if hasOptions { menu.addItem(withTitle: "Réglages de l'extension", action: #selector(optionsClicked), keyEquivalent: "").target = self }
+        menu.addItem(withTitle: "Désactiver", action: #selector(disableClicked), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Supprimer l'extension", action: #selector(removeClicked), keyEquivalent: "").target = self
+        self.menu = menu
+    }
+    @objc private func optionsClicked() { onOptions?() }
+    @objc private func disableClicked() { onDisable?() }
+    @objc private func removeClicked() { onRemove?() }
     @objc private func clicked() { handler() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 

@@ -1,0 +1,1 @@
+{"manifest_version": 3, "name": "Test C content+badge", "version": "1.0", "permissions": ["storage"], "host_permissions": ["<all_urls>"], "background": {"service_worker": "sw.js"}, "action": {"default_title": "Test C"}, "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_idle"}], "description": "Extension d'essai pour Orée"}
