@@ -1008,7 +1008,18 @@ extension BrowserWindowController {
 
     /// Shows an extension's popup next to its toolbar button.
     func presentExtensionPopup(_ action: WKWebExtension.Action, for context: WKWebExtensionContext) {
-        guard let popover = action.popupPopover else { return }
+        // popupPopover est construit à partir de la vue web du popup : on la demande d'abord. Sans popup (ou sans popover), on le dit au lieu de ne rien faire.
+        guard action.presentsPopup else {
+            Log.tabs.notice("Extension \(context.webExtension.displayName ?? "?", privacy: .public) : l'action n'a pas de popup")
+            noticePill.show(message: "« \(context.webExtension.displayName ?? "Cette extension") » n'a pas de fenêtre à ouvrir ici.", button: "OK", seconds: 5) { }
+            return
+        }
+        _ = action.popupWebView
+        guard let popover = action.popupPopover else {
+            Log.tabs.notice("Extension \(context.webExtension.displayName ?? "?", privacy: .public) : popup sans popover")
+            noticePill.show(message: "Le popup de « \(context.webExtension.displayName ?? "l'extension") » n'a pas pu s'ouvrir.", button: "OK", seconds: 6) { }
+            return
+        }
         // The button lives in the sidebar: when the sidebar is hidden (compact mode, collapsed, other tab layout) the button has no
         // place on screen and the popover would open in a corner of the window. Fall back on the address bar, then on the page's top.
         func usable(_ view: NSView?) -> NSView? {
