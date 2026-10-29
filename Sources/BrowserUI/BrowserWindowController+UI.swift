@@ -135,7 +135,7 @@ extension BrowserWindowController {
             if self?.isMini == true { self?.moveMiniToMainWindow() } else { self?.toggleSidebar() }
         }
         customizeButton.onClick = { [weak self] in self?.openCustomize() }
-        moreButton.onClick = { [weak self] in self?.openPalette(initialText: "", selectAll: false, opensInNewTab: true) }
+        moreButton.onClick = { [weak self] in self?.showQuickMenu() }
         addressPill.onClick = { [weak self] in self?.focusAddressBar() }
         addressPill.onIconClick = { [weak self] in self?.showSiteInfo() }
         addressPill.onComplete = { [weak self] typed in self?.inlineCompletion(for: typed) }

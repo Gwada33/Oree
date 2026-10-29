@@ -281,7 +281,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     let reloadButton = ChromeIconButton(symbol: "arrow.clockwise", label: "Recharger  ⌘R")
     let toggleSidebarButton = ChromeIconButton(symbol: "sidebar.left", label: "Afficher la barre latérale  ⌥⌘S")
     let customizeButton = ChromeIconButton(symbol: "paintbrush", label: "Personnaliser  ⌘,")
-    let moreButton = ChromeIconButton(symbol: "ellipsis", label: "Palette de commandes  ⌘K")
+    let moreButton = ChromeIconButton(symbol: "ellipsis", label: "Menu  (toutes les commandes : ⌘K)")
     let assistantButton = ChromeIconButton(symbol: "sparkles", label: "Assistant (Luciole)  ⌘J")
     /// Luciole qui dort dans la barre d'outils (28 pt) : elle la quitte quand on l'appelle et y revient ensuite.
     let assistantMascot = LucioleView(size: 28)

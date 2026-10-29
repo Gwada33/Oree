@@ -383,6 +383,9 @@ extension BrowserWindowController {
         case "minitomain":
             guard let mini = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: \.isMini) else { return "no mini" }
             mini.moveMiniToMainWindow(); return "moved"
+        case "quickmenu":
+            func titles(_ menu: NSMenu) -> [String] { menu.items.map { $0.isSeparatorItem ? "—" : ($0.submenu.map { "\($0.title)[" + titles($0).joined(separator: "|") + "]" } ?? ($0.title + ($0.isEnabled ? "" : " (grisé)"))) } }
+            return titles(quickMenu()).joined(separator: " ; ")
         case "openapp":
             guard let app = webAppStore.all().first else { return "no app" }
             openExternal(WebAppShortcut.openURL(for: app)); return "opened \(app.name)"

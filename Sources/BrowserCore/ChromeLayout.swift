@@ -20,7 +20,7 @@ public enum ChromeItem: String, CaseIterable, Codable, Sendable {
         case .split: "Écran partagé"
         case .customize: "Personnaliser"
         case .downloads: "Téléchargements (barre d'outils)"
-        case .more: "Palette de commandes"
+        case .more: "Menu (trois petits points)"
         case .favorites: "Favoris"
         case .history: "Historique"
         case .downloadsPanel: "Téléchargements (liste)"
