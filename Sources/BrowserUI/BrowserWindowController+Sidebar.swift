@@ -14,13 +14,13 @@ extension BrowserWindowController {
 
     /// What is actually shown: the chosen mode, except that narrow windows fall back to compact.
     var effectiveSidebarMode: SidebarMode {
-        isMini ? .hidden : BrowserCore.effectiveSidebarMode(SettingsStore.shared.sidebarMode, windowWidth: Double(window?.frame.width ?? 1280))
+        (isMini || webApp != nil) ? .hidden : BrowserCore.effectiveSidebarMode(SettingsStore.shared.sidebarMode, windowWidth: Double(window?.frame.width ?? 1280))
     }
 
 
     func applySidebarMode(animated: Bool) {
         let store = SettingsStore.shared
-        let horizontal = store.tabLayout == .horizontal && !isMini
+        let horizontal = store.tabLayout == .horizontal && !isMini && webApp == nil
         let mode: SidebarMode = horizontal ? .hidden : effectiveSidebarMode
         let compact = mode == .compact
         let hover = mode == .floating                          // hidden until the pointer touches the left edge
@@ -55,7 +55,7 @@ extension BrowserWindowController {
         collapseButton.toolTip = "Réduire la barre latérale"
         resizeHandle.isHidden = compact || hidden
         // The toolbar's sidebar button: brings back a hidden / hover / compact sidebar.
-        let showToggle = isMini || (!horizontal && (hidden || hover || store.sidebarMode == .compact))
+        let showToggle = isMini || (webApp == nil && !horizontal && (hidden || hover || store.sidebarMode == .compact))
         setRelevant(.sidebarToggle, showToggle)
         if !isMini { toggleSidebarButton.toolTip = compact ? "Agrandir la barre latérale  ⌥⌘S" : "Afficher la barre latérale  ⌥⌘S" }
         let lightsClear: CGFloat = isFullScreen ? 12 : 92                            // room for the traffic lights when the toolbar starts at x = 0

@@ -151,6 +151,7 @@ extension BrowserWindowController {
 
     @discardableResult
     func newTab(urlString: String?, isPrivate: Bool, configuration: WKWebViewConfiguration? = nil) -> Tab {
+        if configuration == nil, let redirected = newTabForApp(urlString, isPrivate: isPrivate) { return redirected }
         let config = configuration ?? makeConfiguration(isPrivate: isPrivate)
         LaunchTrace.mark("newTab: configuration made")
         let tab = Tab(configuration: config, isPrivate: isPrivate)

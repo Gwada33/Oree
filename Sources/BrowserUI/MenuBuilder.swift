@@ -48,6 +48,8 @@ public final class MenuBuilder {
             fileMenu.addItem(item)
         }
         fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Installer ce site comme application…", action: #selector(BrowserWindowController.installWebAppAction), keyEquivalent: "")
+        fileMenu.addItem(.separator())
         addCommand("savePDF", to: fileMenu, selector: #selector(BrowserWindowController.savePageAsPDF))
         addCommand("print", to: fileMenu, selector: #selector(BrowserWindowController.printPage))
         addCommand("viewSource", to: fileMenu, selector: #selector(BrowserWindowController.viewPageSource))

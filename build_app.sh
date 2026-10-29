@@ -21,6 +21,7 @@ APP_DIR="${OREE_APP_DIR:-${APP_NAME}.app}"   # OREE_APP_DIR : construire ailleur
 echo "==> Building release binary..."
 swift build -c "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"} --product "$EXECUTABLE_NAME"
 swift build -c "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"} --product OreeDownloader
+swift build -c "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"} --product OreeAppLauncher
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
@@ -33,6 +34,7 @@ cp Resources/THIRD_PARTY_NOTICES.md "$APP_DIR/Contents/Resources/"   # licences 
 cp "$BUILD_DIR/$EXECUTABLE_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
 # The download engine runs as its own process (a launchd agent started on demand), so it ships beside the app.
 cp "$BUILD_DIR/OreeDownloader" "$APP_DIR/Contents/MacOS/OreeDownloader"
+mkdir -p "$APP_DIR/Contents/Resources/WebAppLauncher" && cp "$BUILD_DIR/OreeAppLauncher" "$APP_DIR/Contents/Resources/WebAppLauncher/OreeAppLauncher"   # copié dans chaque raccourci d'application
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -72,6 +74,14 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
             <array>
                 <string>http</string>
                 <string>https</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>Application Orée</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>oree-app</string>
             </array>
         </dict>
     </array>

@@ -42,6 +42,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     let isSecondary: Bool
     /// A small floating window for a quick look (a link, a video): no sidebar, always on top, one click to bring the page back to the main window.
     var isMini = false
+    /// Cette fenêtre est l'application d'un site installé (sans onglets ni barre latérale).
+    var webApp: WebApp?
+    /// Autorise la création du seul onglet de la fenêtre d'une application.
+    var allowAppTab = false
 
     public weak var menuBuilder: MenuBuilder?
     var settingsWindow: NSWindow?
@@ -391,6 +395,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     /// A window must never stay empty (e.g. a launch link that could not be opened).
     public func ensureTabExists() {
+        if tabs.isEmpty, webApp != nil { window?.close(); return }      // l'application n'a plus d'onglet : sa fenêtre se ferme
         if tabs.isEmpty { newTab(urlString: nil, isPrivate: SettingsStore.shared.privateByDefault) }
     }
 

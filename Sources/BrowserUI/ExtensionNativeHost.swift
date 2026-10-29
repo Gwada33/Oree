@@ -108,13 +108,7 @@ extension ExtensionBridge {
 
     /// `connectNative(hôte)` : une connexion qui reste ouverte tant que le programme tourne.
     /// Les messages que l'extension envoie avant que l'hôte soit lancé (et autorisé) sont gardés puis transmis dans l'ordre.
-    func nativeHostConnect(_ name: String, port: WKWebExtension.MessagePort, context: WKWebExtensionContext) async throws {
-        let queue = PendingMessages()
-        port.messageHandler = { message, _ in
-            guard let message else { return }
-            nonisolated(unsafe) let m = message
-            Task { @MainActor in queue.push(m) }
-        }
+    func nativeHostConnect(_ name: String, port: WKWebExtension.MessagePort, context: WKWebExtensionContext, queue: PendingMessages) async throws {
         let host = try await authorizedHost(name, context: context)
         let connection: NativeHostConnection
         do { connection = try NativeHostConnection(host: host, extensionID: context.uniqueIdentifier) } catch { throw Failure(message: "Failed to start native messaging host.") }
@@ -124,6 +118,19 @@ extension ExtensionBridge {
         connection.onMessage = { [weak port] reply in nonisolated(unsafe) let r = reply; port?.sendMessage(r, completionHandler: nil) }
         connection.onExit = { [weak self, weak port] in self?.nativeHosts.connections[key] = nil; port?.disconnect() }
         port.disconnectHandler = { [weak self] _ in Task { @MainActor in self?.nativeHosts.connections[key]?.stop(); self?.nativeHosts.connections[key] = nil } }
+    }
+}
+
+extension PendingMessages {
+    /// À appeler tout de suite, dans le rappel de WebKit (avant tout `await`) : les messages envoyés dès l'ouverture du port ne se perdent pas.
+    @MainActor static func capturing(_ port: WKWebExtension.MessagePort) -> PendingMessages {
+        let queue = PendingMessages()
+        port.messageHandler = { message, _ in
+            guard let message else { return }
+            nonisolated(unsafe) let m = message
+            mainActorNow { queue.push(m) }
+        }
+        return queue
     }
 }
 

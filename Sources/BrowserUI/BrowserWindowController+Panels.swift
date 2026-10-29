@@ -459,6 +459,7 @@ extension BrowserWindowController {
             for item in layout.visibleItems(in: zone, relevant: { chromeRelevant.contains($0) }) {
                 guard let button = chromeButton(item) else { continue }
                 if isMini && zone != .sidebarFooter && ![.sidebarToggle, .back, .forward, .reload].contains(item) { continue }   // a small window keeps the essentials
+                if webApp != nil && (zone == .sidebarFooter || ![.back, .forward, .reload].contains(item)) { continue }          // une application : précédent, suivant, recharger
                 button.isHidden = false
                 button.isEnabled = !item.isContextual || chromeRelevant.contains(item)
                 stack.addArrangedSubview(button)

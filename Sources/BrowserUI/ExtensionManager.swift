@@ -418,10 +418,13 @@ final class ExtensionManager: NSObject, ExtensionsProviding, WKWebExtensionContr
     @objc(webExtensionController:connectUsingMessagePort:forExtensionContext:completionHandler:)
     func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort, for extensionContext: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
         if let host = port.applicationIdentifier, host != ExtensionBridge.applicationID {
-            nonisolated(unsafe) let p = port, done = completionHandler
+            // Comme Chrome : la connexion est acceptée tout de suite (WebKit perd les messages envoyés avant) ; si l'hôte est introuvable ou refusé, le port se déconnecte avec l'erreur.
+            let queue = PendingMessages.capturing(port)
+            nonisolated(unsafe) let p = port
+            completionHandler(nil)
             Task { @MainActor in
-                do { try await self.bridge.nativeHostConnect(host, port: p, context: extensionContext); done(nil) }
-                catch { done(NSError(domain: "Orée", code: 1, userInfo: [NSLocalizedDescriptionKey: (error as? ExtensionBridge.Failure)?.message ?? error.localizedDescription])) }
+                do { try await self.bridge.nativeHostConnect(host, port: p, context: extensionContext, queue: queue) }
+                catch { p.disconnect(throwing: NSError(domain: "Orée", code: 1, userInfo: [NSLocalizedDescriptionKey: (error as? ExtensionBridge.Failure)?.message ?? error.localizedDescription])) }
             }
             return
         }
@@ -542,8 +545,9 @@ extension ExtensionManager {
         guard let windowController, let context = contexts[id], let web = context.action(for: windowController.activeExtensionTab)?.popupWebView else { return probeJSON(["error": "aucun popup ouvert"]) }
         for _ in 0..<80 { let text = (try? await web.evaluateJavaScript("(document.getElementById('t')||{}).textContent")) as? String; if let text, !text.isEmpty, text != "..." { break }; try? await Task.sleep(for: .milliseconds(100)) }
         let title = (try? await web.evaluateJavaScript("(document.getElementById('t')||{}).textContent || ''")) as? String ?? ""
+        let body = (try? await web.evaluateJavaScript("document.body ? (document.body.innerText.slice(0, 300) + ' | enfants=' + document.body.children.length + ' html=' + document.body.innerHTML.length) : 'pas de body'")) as? String ?? ""
         windowController.shownExtensionPopover?.close(); context.action(for: windowController.activeExtensionTab)?.closePopup()
-        return probeJSON(["title": title])
+        return probeJSON(["title": title, "body": body])
     }
 
     /// Le panneau latéral affiché : son adresse, son titre et le début de son texte.

@@ -383,9 +383,19 @@ extension BrowserWindowController {
         case "minitomain":
             guard let mini = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: \.isMini) else { return "no mini" }
             mini.moveMiniToMainWindow(); return "moved"
+        case "openapp":
+            guard let app = webAppStore.all().first else { return "no app" }
+            openExternal(WebAppShortcut.openURL(for: app)); return "opened \(app.name)"
+        case "removeapp":
+            guard let app = webAppStore.all().first else { return "no app" }
+            removeWebApp(app); return "removed \(app.name)"
+        case "appsend":
+            // Un lien du site (dans la fenêtre d'application) et un lien d'un autre site : le premier reste, le second sort.
+            guard let app = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).first(where: { $0.webApp != nil }) else { return "no app window" }
+            return "inScope=\(!app.webAppSendsOut(URL(string: app.webApp!.startURL))) outScope=\(app.webAppSendsOut(URL(string: "https://autre-site.test/")))"
         case "windows":
             let all = NSApp.windows.compactMap { $0.windowController as? BrowserWindowController }
-            return all.map { "\($0.isSecondary ? "secondary" : "primary") tabs=\($0.tabs.count) active=\($0.activeTab?.currentURL?.absoluteString ?? "-")" }.joined(separator: " ; ")
+            return all.map { "\($0.webApp != nil ? "app:\($0.webApp!.name)" : ($0.isSecondary ? "secondary" : "primary")) tabs=\($0.tabs.count) active=\($0.activeTab?.currentURL?.absoluteString ?? "-") title=\($0.window?.title ?? "")" }.joined(separator: " ; ")
         case "wload":
             // Loads the address of /tmp/oree-address.txt in the active tab of the last secondary window.
             guard let other = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).last(where: { $0.isSecondary }),

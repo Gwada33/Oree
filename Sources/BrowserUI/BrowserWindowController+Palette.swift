@@ -232,6 +232,7 @@ extension BrowserWindowController {
             actions.append(("Demander à l'IA", "sparkles", { $0.askAIAction() }))
             actions.append(("Jouer à La Rime (rimes en rythme)", "music.quarternote.3", { $0.openFromPalette("oree://rime/", inNewTab: true) }))
             actions.append(contentsOf: webPanelActions())
+            actions.append(contentsOf: webAppActions())
             actions.append(contentsOf: responsiveActions())
             actions.append(contentsOf: profileActions())
             if TranslationPolicy.canTranslate(url: activeTab?.webView?.url) {

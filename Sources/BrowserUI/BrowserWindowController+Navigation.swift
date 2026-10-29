@@ -49,6 +49,10 @@ extension BrowserWindowController {
     /// ⌘T: opens the palette; whatever you pick or type opens in a new tab.
     /// A URL handed to us by the system: a link clicked in another app, or an .html file.
     public func openExternal(_ url: URL) {
+        if url.scheme == WebAppShortcut.scheme, url.host == "open" {      // oree-app://open/<identifiant> : le raccourci d'une application
+            if let app = webAppStore.app(id: url.lastPathComponent) { openWebApp(app) }
+            return
+        }
         let isPrivate = SettingsStore.shared.privateByDefault
         if url.isFileURL {
             journalOpenHow = "external"
@@ -313,6 +317,7 @@ extension BrowserWindowController {
             handleHomeAction(url)
             return .cancel
         }
+        if navigationAction.navigationType == .linkActivated, navigationAction.targetFrame?.isMainFrame != false, webAppSendsOut(navigationAction.request.url) { return .cancel }
         if let tab = tab(for: webView), extensionManager.bridge.interceptAuthRedirect(tab, url: navigationAction.request.url) { return .cancel }
         if let url = navigationAction.request.url, navigationAction.targetFrame?.isMainFrame != false, extensionManager.openChromeExtensionURL(url, closing: tab(for: webView)) { return .cancel }
         if navigationAction.shouldPerformDownload { return .download }
@@ -582,6 +587,10 @@ extension BrowserWindowController {
     // MARK: - WKUIDelegate (popups open as tabs)
 
     public func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if webApp != nil {      // une application n'a pas d'onglets : un lien du site se charge ici, un autre site va dans le navigateur
+            if let url = navigationAction.request.url, !webAppSendsOut(url) { webView.load(URLRequest(url: url)) }
+            return nil
+        }
         let isPrivate = tab(for: webView)?.isPrivate ?? false
         let newTab = Tab(configuration: configuration, isPrivate: isPrivate)
         newTab.spaceIndex = tab(for: webView)?.spaceIndex ?? currentSpace
