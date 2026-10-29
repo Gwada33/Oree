@@ -594,6 +594,14 @@ public final class SettingsStore: @unchecked Sendable {
     public func aiEndpoint(for provider: AIProvider) -> URL { provider == .lmstudio ? LMStudio.chatURL(base: lmStudioBase) : provider.endpoint }
 
     /// Disposition des boutons de la barre d'outils et de la barre latérale (`ChromeLayout`, JSON). Une valeur illisible redonne la disposition d'origine.
+    /// Le menu des trois petits points est nouveau : une fois, on le remet dans la barre d'outils s'il avait été masqué (la disposition enregistrée date d'avant). Ensuite le choix de la personne est respecté.
+    public func showQuickMenuButtonOnce() {
+        guard !defaults.bool(forKey: "settings.quickMenuButtonShown") else { return }
+        defaults.set(true, forKey: "settings.quickMenuButtonShown")
+        var layout = chromeLayout
+        if layout.zone(of: .more) == .hidden { layout.move(.more, to: .toolbarTrailing); chromeLayout = layout }
+    }
+
     public var chromeLayout: ChromeLayout {
         get { layoutOverride ?? ChromeLayout.decode(defaults.string(forKey: Key.chromeLayout)) }
         set {

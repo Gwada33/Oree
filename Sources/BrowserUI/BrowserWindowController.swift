@@ -343,6 +343,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
         super.init(window: window)
 
+        if !isSecondary, ProcessInfo.processInfo.environment["HB_FRESH_SESSION"] != "1" { SettingsStore.shared.showQuickMenuButtonOnce() }      // jamais depuis une instance d'essai : elle écrirait dans les vrais réglages
         if !isSecondary { try? permissionRepo.purgeSessionScoped() }      // a second window must not forget what the first one was told this session
         currentSpace = isFreshSession ? 0 : min(max(UserDefaults.standard.integer(forKey: Self.activeSpaceKey), 0), spaces.count - 1)
         credentialHandler.onMessage = { [weak self] webView, origin, body in
