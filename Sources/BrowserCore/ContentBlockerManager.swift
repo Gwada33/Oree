@@ -71,6 +71,15 @@ public final class ContentBlockerManager {
     }
 
     /// Forces a download + rebuild now (Settings → "Update lists").
+    /// Ce qu'une application indépendante emporte : les règles de blocage au format WebKit (converties par le moteur Rust, découpées) et le CSS qui masque les emplacements
+    /// de pubs de son site. Calculé ici, une fois ; l'application, elle, n'embarque ni Rust ni listes : WebKit applique les règles dans son processus réseau.
+    public func exportForStandaloneApp(startURL: URL) async -> (rules: [String], cosmetic: String) {
+        let texts = await store.cachedListTexts(for: sources)
+        guard !texts.isEmpty else { return ([BaselineBlocklist.json], "") }
+        let chunks = (try? await Task.detached(priority: .utility) { try convertToContentBlocking(listTexts: texts, maxRulesPerChunk: ContentBlockerManager.maxRulesPerList) }.value) ?? []
+        return (chunks, cosmetic.css(for: startURL))
+    }
+
     public func updateNow() async {
         if await store.refresh(sources, force: true) {
             await rebuild()

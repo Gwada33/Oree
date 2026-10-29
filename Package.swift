@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "DownloadProtocol", targets: ["DownloadProtocol"]),
         .executable(name: "OreeDownloader", targets: ["OreeDownloader"]),
         .executable(name: "OreeAppLauncher", targets: ["OreeAppLauncher"]),
+        .executable(name: "OreeWebApp", targets: ["OreeWebApp"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", .upToNextMajor(from: "6.0.0")),
@@ -107,6 +108,12 @@ let package = Package(
         // Le raccourci d'une application d'Orée (copié dans chaque « Nom.app » rangé dans Applications).
         .executableTarget(
             name: "OreeAppLauncher",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+
+        // L'application autonome d'un site (copiée dans chaque « Nom.app » en mode indépendant).
+        .executableTarget(
+            name: "OreeWebApp",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
 

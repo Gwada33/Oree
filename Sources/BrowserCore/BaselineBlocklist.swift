@@ -34,6 +34,12 @@ enum BaselineBlocklist {
         "casalemedia\\.com",
     ]
 
+    /// Les mêmes règles en JSON WebKit (pour une application indépendante quand les vraies listes ne sont pas encore téléchargées).
+    static var json: String {
+        let rules = blockedPatterns.map { ["trigger": ["url-filter": $0], "action": ["type": "block"]] }
+        return (try? JSONSerialization.data(withJSONObject: rules)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+    }
+
     /// Compiles the baseline list. Used only until the real filter lists
     /// have been downloaded (first launch, offline), so there is never a
     /// window with no protection at all.

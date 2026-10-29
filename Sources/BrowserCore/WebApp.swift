@@ -6,9 +6,17 @@ public struct WebApp: Codable, Identifiable, Equatable, Sendable {
     public var name: String
     public var startURL: String
     public var createdAt: Date
+    /// Application indépendante (son propre processus, sans Orée) ou fenêtre d'Orée.
+    public var standalone: Bool
 
-    public init(id: String = UUID().uuidString, name: String, startURL: String, createdAt: Date = Date()) {
-        self.id = id; self.name = name; self.startURL = startURL; self.createdAt = createdAt
+    public init(id: String = UUID().uuidString, name: String, startURL: String, createdAt: Date = Date(), standalone: Bool = false) {
+        self.id = id; self.name = name; self.startURL = startURL; self.createdAt = createdAt; self.standalone = standalone
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id); name = try c.decode(String.self, forKey: .name); startURL = try c.decode(String.self, forKey: .startURL)
+        createdAt = try c.decode(Date.self, forKey: .createdAt); standalone = try c.decodeIfPresent(Bool.self, forKey: .standalone) ?? false
     }
 
     /// Le nom d'hôte qui définit le site de l'application (sans « www. »).
@@ -87,12 +95,18 @@ public enum WebAppShortcut {
 
     /// Le `Info.plist` du raccourci.
     public static func infoPlist(for app: WebApp, oreePath: String) throws -> Data {
-        let plist: [String: Any] = [
-            "CFBundleExecutable": "OreeAppLauncher", "CFBundleIdentifier": "com.nolhan.hyperbrowser.webapp." + app.id.lowercased(), "CFBundleName": app.name, "CFBundleDisplayName": app.name,
+        var plist: [String: Any] = [
+            "CFBundleExecutable": app.standalone ? "OreeWebApp" : "OreeAppLauncher", "CFBundleIdentifier": "com.nolhan.hyperbrowser.webapp." + app.id.lowercased(), "CFBundleName": app.name, "CFBundleDisplayName": app.name,
             "CFBundleIconFile": "AppIcon", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "1.0", "CFBundleVersion": "1", "LSMinimumSystemVersion": "15.0",
             "NSHighResolutionCapable": true, "LSApplicationCategoryType": "public.app-category.productivity",
             "OreeAppID": app.id, "OreeAppURL": app.startURL, "OreePath": oreePath, "OreeBundleID": "com.nolhan.hyperbrowser",
         ]
+        if app.standalone {      // une vraie application : le système demande l'accord pour la caméra, le micro et la position
+            plist["NSCameraUsageDescription"] = "\(app.name) peut utiliser la caméra."
+            plist["NSMicrophoneUsageDescription"] = "\(app.name) peut utiliser le micro."
+            plist["NSLocationWhenInUseUsageDescription"] = "\(app.name) peut utiliser votre position."
+            plist["NSAppTransportSecurity"] = ["NSAllowsArbitraryLoads": true]
+        }
         return try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
     }
 }

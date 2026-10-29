@@ -19,6 +19,10 @@ extension BrowserWindowController {
 
     /// Ouvre la fenêtre de l'application (ou ramène celle qui est ouverte).
     func openWebApp(_ app: WebApp) {
+        if app.standalone {      // une application indépendante est un programme à elle : on la lance
+            let bundle = shortcutURL(for: app)
+            if FileManager.default.fileExists(atPath: bundle.path) { NSWorkspace.shared.openApplication(at: bundle, configuration: NSWorkspace.OpenConfiguration()); return }
+        }
         if let open = NSApp.windows.compactMap({ $0.windowController as? BrowserWindowController }).first(where: { $0.webApp?.id == app.id }) {
             open.window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return
         }
@@ -111,23 +115,27 @@ extension BrowserWindowController {
         var suggested = identity.name.trimmingCharacters(in: .whitespacesAndNewlines)
         if suggested.count > 40 || suggested.isEmpty { suggested = WebAppScope.suggestedName(host: host) }
         var name = ProcessInfo.processInfo.environment["HB_WEBAPPS_AUTOCONFIRM_NAME"] ?? suggested, makeShortcut = true
+        var standalone = ProcessInfo.processInfo.environment["HB_WEBAPPS_MODE"] != "oree"
         if ProcessInfo.processInfo.environment["HB_WEBAPPS_AUTOCONFIRM"] == nil {
             guard let window else { return }
             let alert = NSAlert()
             alert.messageText = "Installer « \(host) » comme application ?"
             alert.informativeText = "Le site s'ouvrira dans sa propre fenêtre, sans onglets, avec son icône. Les liens vers d'autres sites s'ouvriront dans Orée."
             let field = NSTextField(string: suggested); field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
+            let mode = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
+            mode.addItems(withTitles: ["Application indépendante (n'a pas besoin d'Orée, ses propres données)", "Fenêtre d'Orée (tes extensions, ta session)"])
             let box = NSButton(checkboxWithTitle: "Ajouter un raccourci dans Applications (Dock, Spotlight)", target: nil, action: nil); box.state = .on
-            let stack = NSStackView(views: [field, box]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 8; stack.frame = NSRect(x: 0, y: 0, width: 320, height: 56)
+            let stack = NSStackView(views: [field, mode, box]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 8; stack.frame = NSRect(x: 0, y: 0, width: 340, height: 92)
             alert.accessoryView = stack
             alert.addButton(withTitle: "Installer"); alert.addButton(withTitle: "Annuler")
             let agreed = await withCheckedContinuation { c in alert.beginSheetModal(for: window) { c.resume(returning: $0 == .alertFirstButtonReturn) } }
             guard agreed else { return }
-            name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines); makeShortcut = box.state == .on
+            name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines); makeShortcut = box.state == .on; standalone = mode.indexOfSelectedItem == 0
         }
         if name.isEmpty { name = suggested }
         let source = await downloadIcon(from: identity.icons)
-        let app = WebApp(name: name, startURL: url.absoluteString)
+        let app = WebApp(name: name, startURL: url.absoluteString, standalone: standalone)
+        if standalone { makeShortcut = true }      // une application indépendante, c'est son raccourci
         let icon = WebAppIcon.render(source: source, name: name)
         do {
             try webAppStore.add(app)
@@ -135,7 +143,7 @@ extension BrowserWindowController {
         } catch { presentNotice("Installation impossible : \(error.localizedDescription)"); return }
         var message = "« \(app.name) » est installée."
         if makeShortcut {
-            if let created = createShortcut(for: app, icon: icon) { message += " Raccourci : \(created.deletingLastPathComponent().lastPathComponent)/\(created.lastPathComponent)." }
+            if let created = await createShortcut(for: app, icon: icon) { message += " Raccourci : \(created.deletingLastPathComponent().lastPathComponent)/\(created.lastPathComponent)." }
             else { message += " (Le raccourci n'a pas pu être créé.)" }
         }
         presentNotice(message)
@@ -145,16 +153,20 @@ extension BrowserWindowController {
     // MARK: Raccourci macOS (Nom.app)
 
     @discardableResult
-    func createShortcut(for app: WebApp, icon: NSImage) -> URL? {
+    func createShortcut(for app: WebApp, icon: NSImage) async -> URL? {
         let fm = FileManager.default
-        guard let launcher = Bundle.main.resourceURL?.appendingPathComponent("WebAppLauncher/OreeAppLauncher"), fm.fileExists(atPath: launcher.path) else { return nil }
+        let executable = app.standalone ? "OreeWebApp" : "OreeAppLauncher"
+        guard let launcher = Bundle.main.resourceURL?.appendingPathComponent("WebAppLauncher/\(executable)"), fm.fileExists(atPath: launcher.path) else { return nil }
+        let exported = app.standalone ? await contentBlocker.exportForStandaloneApp(startURL: URL(string: app.startURL)!) : (rules: [String](), cosmetic: "")
         let bundle = shortcutURL(for: app)
         do {
             try? fm.removeItem(at: bundle)
             try fm.createDirectory(at: bundle.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
             try fm.createDirectory(at: bundle.appendingPathComponent("Contents/Resources"), withIntermediateDirectories: true)
-            try fm.copyItem(at: launcher, to: bundle.appendingPathComponent("Contents/MacOS/OreeAppLauncher"))
-            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bundle.appendingPathComponent("Contents/MacOS/OreeAppLauncher").path)
+            try fm.copyItem(at: launcher, to: bundle.appendingPathComponent("Contents/MacOS/\(executable)"))
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bundle.appendingPathComponent("Contents/MacOS/\(executable)").path)
+            for (index, json) in exported.rules.enumerated() { try json.write(to: bundle.appendingPathComponent("Contents/Resources/rules-\(index).json"), atomically: true, encoding: .utf8) }
+            try exported.cosmetic.write(to: bundle.appendingPathComponent("Contents/Resources/cosmetic.css"), atomically: true, encoding: .utf8)
             try WebAppShortcut.infoPlist(for: app, oreePath: Bundle.main.bundleURL.path).write(to: bundle.appendingPathComponent("Contents/Info.plist"))
             _ = WebAppIcon.writeICNS(from: icon, to: bundle.appendingPathComponent("Contents/Resources/AppIcon.icns"))
             let sign = Process(); sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign"); sign.arguments = ["--force", "--sign", "-", bundle.path]
