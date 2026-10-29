@@ -1,3 +1,58 @@
+## 1.1.2 — 2026-10-29
+
+- Trois petits points : remis une fois dans la barre d'outils s'ils avaient été masqués (disposition enregistrée avant le menu)
+- Menu des trois petits points (à la Chrome) : onglets, favoris, outils de la page, zoom, applications, Luciole, réglages ; ⌘K reste la palette
+- Applications indépendantes : programme à elles (OreeWebApp), dernière image et session restaurées, reste en mémoire, blocage natif WebKit (règles converties par Rust à l'installation), notifications, pastille, téléchargements natifs
+- Applications : un site devient une application (fenêtre sans onglets, raccourci Nom.app avec icône dans le Dock, oree-app://) ; messagerie native : port accepté tout de suite
+- Luciole et instantanés : plus d'écriture avec .completeFileProtection (refusée par macOS 27.2 : la mémoire de Luciole n'était plus enregistrée)
+- Extensions : raccourcis clavier, grosses extensions (clic), débogueur retrouvé par identifiant, polyfills (getURL, requestIdleCallback, webRequest), documentation
+- Extensions : downloads, messagerie native (hôtes des navigateurs Chrome, avec accord de l'utilisateur), windows.create, essais
+- Extensions : identifiant Chrome (clé du manifeste), redirection OAuth chrome-extension://, service worker chargé dans une page de fond persistante, énumérations, en-têtes DNR émulés, journal de diagnostic
+- Extensions : notifications, panneau latéral, page cachée, management, idle, power, system, browsingData, search, tts, identity (redirection), raccourcis
+- Extensions : history, bookmarks, topSites, sessions, readingList et chrome.debugger (protocole de débogage traduit en actions sur l'onglet) par le pont natif
+- Extensions : script de compatibilité (privacy, tabGroups, declarativeContent, identity, réglages, API honnêtes), pont natif vers l'app, banc
+- Extensions : fenêtre déclarée au moteur, popup attendu puis dimensionné, réglages (pages d'extension débloquées, clic droit, Réglages), banc de 5 extensions
+- Extensions : le popup demande d'abord sa vue web, et dit pourquoi il ne s'ouvre pas au lieu de rester muet
+- Barre d'adresse : Entrée ouvre l'adresse complétée en ligne, pas la 1re suggestion de ce qui était tapé
+- Préconnexion au survol des liens (délais par genre de lien tirés du journal) ; veille : un onglet doit être inactif 60 s avant d'être endormi par le budget
+- Plantages macOS 27.2 : hitTest constants et survol de SurfaceView sans contrôle d'exécuteur
+- Plantages : isFlipped sans contrôle d'exécuteur ; les réglages ne rechargent plus que l'accueil (pas La Rime)
+- La Rime : histoires qui se suivent, rimes à plusieurs syllabes, structure de la prod (mesures sans beat posées plus lentement)
+- La Rime : jeu de freestyle (4 cases par mesure, la rime dans la 4e, balle Luciole), beat d'Orée ou prod de l'utilisateur avec tempo détecté ou réglé à la main, accessible depuis l'accueil et ⌘K
+- Ouverture : mesure avec un vrai site contre Safari, Brave et Firefox (0,70 s contre 1,11 à 1,73 s), écoute audio reportée après l'affichage de la fenêtre
+- Sécurité et licences : photo de l'accueil réservée aux pages d'Orée, liens web seulement, mentions de licences embarquées et bouton À propos, état documenté
+- Plantages macOS 27 bêta : assumeIsolated remplacé par une vérification Dispatch (80 usages), relevé des 13 rapports
+- Widgets : création par le modèle local (structure seulement, aperçu obligatoire), retrait par clic droit, documentation
+- Widgets de la barre latérale : pastilles lues sur les onglets ouverts (titre, nombre d'éléments, texte), Gmail fourni, règles de sécurité testées
+- Interface : accueil avec état vide des favoris et accent unifié, tiroir Personnaliser aligné, raccourci ⌘L au survol, dates de la palette en français, boutons Modifier lisibles
+- WebKit : image dans l'image pour les vidéos, code QR dans le menu des images, adresse du lien et texte tronqué dans les infobulles
+- Banc : réglages numériques de configuration WebKit (délai de rendu), mesuré au premier affichage de contenu, rien de retenu
+- WebKitTuning : liste de propriétés vide, sans condition inutile
+- Banc A/B des réglages privés du pool WebKit et des préférences (aucun retenu : ils coûtent de la mémoire ou ne gagnent rien)
+- WebKit : réglages internes de vitesse et de confort activés (préchargement, animations hors fil principal, API récentes), coupables dans Réglages
+- Agrandissement des vidéos : s'arrête sur une image protégée (noire) au lieu de la cacher, bancs sur flux HLS réel
+- Agrandissement des vidéos : plus d'écran vert au démarrage, la vue suit la page en plein écran
+- Agrandissement des vidéos : moteur Apple (apprentissage) affiché par-dessus la vidéo, iframes prises en compte, mesures de bout en bout
+- Agrandissement : mesure de l'upscaler d'Apple (VideoToolbox) dans le banc de qualité
+- Agrandissement des vidéos : bicubique + netteté (WebGL), clic droit, réglage, garde-fous, bancs de mesure
+- Luciole peut répondre par Claude Code (claude -p) : fournisseur sans clé, outils décrits et gardes-fous inchangés
+- Fantôme : l'échange n'attend plus que 1,5 s une fois la page prête (interactive ou complète) ; banc de réveil mesuré directement
+- Journal : le banc de rejeu peut tester sur des sites jamais vus (--sites)
+- Journal : banc de rejeu du préchargement des liens (règle contre petit modèle)
+- Trousseau : savoir si une clé existe sans la lire (plus de gel de 6 à 8 s à la première ouverture de Luciole)
+- Luciole : mémoire ambiante et outil recall, contexte gardé entre les messages, liens cliquables, cartes qui évitent le contenu, vol d'arrivée visible, champs centrés, sous-titre retiré
+- Luciole : une seule mascotte qui vole (départ animé, ⌘J animé dès la première ouverture), gestes de sélection au clic droit, barre d'outils réduite à Luciole
+- Luciole dans la page (fin) : états du modèle, repos dans la barre d'outils avec bulle de fin, pages protégées, doc et fiche marketing
+- Luciole dans la page (étape 3) : validation avec voile, trou et anneau, carte dense, question, chemin d'actions et pastille « Arrêter » ; affichage dans la page par défaut
+- Luciole dans la page (étape 2) : sélection, éventail Expliquer/Traduire/Garder, réponse ancrée avec surlignage et fil de lumière
+- Luciole dans la page (étape 1) : couche de verre au-dessus de la page, capsule d'appel, suggestions, bulle de réponse, et repli vers le panneau pour les validations
+- Luciole : cinq nouveaux outils (retour, historique, calcul, note, attente) et réponses en Markdown, avec « Ouvrir en page »
+- Agent : adresses inconnues soumises à accord, valeurs personnelles inventées refusées, suppressions confirmées, banc de 20 scénarios
+- LM Studio sur le réseau : message d'erreur précis, délai plus long et autorisation « Réseau local » demandée
+- Petits modèles : références tolérantes aux parasites et adresses à ouvrir limitées à celles de la demande
+- Inspecteur web : s'ouvre enfin, dans sa propre fenêtre
+- Clic droit : copier tous les médias, copier la page entière, inspecter l'élément
+
 ## 1.1.1 — 2026-10-23
 
 - Site : refonte complète du site vitrine (direction « la lisière »)
